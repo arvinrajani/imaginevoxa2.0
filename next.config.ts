@@ -9,6 +9,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Avoid lockfile creation failures on restricted filesystems (e.g. OneDrive/EDR).
+    lockDistDir: false,
+  },
   images: {
     remotePatterns: [
       // LinkedIn CDN
