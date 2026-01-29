@@ -1,0 +1,18 @@
+
+> linkedin-posting@0.1.0 dev
+> next dev
+
+⚠ IPC spawn blocked (EPERM); running dev server in-process.
+▲ Next.js 16.1.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.18.84:3000
+- Environments: .env.local
+
+✓ Starting...
+Error: An IO error occurred while attempting to create and acquire the lockfile
+    at ignore-listed frames {
+  [cause]: Error: Access is denied. (os error 5)
+      at ignore-listed frames {
+    code: 'GenericFailure'
+  }
+}
