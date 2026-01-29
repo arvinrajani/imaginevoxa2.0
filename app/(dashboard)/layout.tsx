@@ -96,7 +96,7 @@ export default function AppLayout({
         .limit(1);
       const profile = profileRows?.[0] ?? null;
 
-      const plan = (profile?.plan as 'starter' | 'pro' | 'business') || 'pro';
+      const plan: 'starter' | 'pro' | 'business' = 'pro';
       setUserPlan(plan);
 
       setUser({
@@ -116,7 +116,6 @@ export default function AppLayout({
       
       const postsThisMonth = posts?.length || 0;
       const planCredits = PLAN_LIMITS[plan].credits;
-      
       setCredits({ used: postsThisMonth, total: planCredits });
       setIsLoading(false);
     };

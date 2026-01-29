@@ -294,7 +294,6 @@ export default function DashboardPage() {
         { drafts: 0, scheduled: 0, posted: 0, failed: 0 }
       );
 
-      // Determine user plan (for now, default to pro - you can add a plans table later)
       const plan: 'starter' | 'pro' | 'business' = 'pro';
       const creditsTotal = PLAN_LIMITS[plan].credits;
       const creditsUsed = postsThisMonth;

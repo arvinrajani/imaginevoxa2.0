@@ -77,7 +77,7 @@ function GuestGenerator() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-200 mb-2">
-                What's your topic?
+                What&apos;s your topic?
               </label>
               <input
                 type="text"

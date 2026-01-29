@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -18,6 +18,7 @@ import {
   Crown,
   Loader2
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 
@@ -448,7 +449,7 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-red-600 font-medium">
-                Type "DELETE" to confirm:
+                Type &quot;DELETE&quot; to confirm:
               </p>
               <input
                 type="text"
@@ -500,55 +501,66 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<UserData | null>(null);
 
-  const fetchUserData = async () => {
-    const supabase = createClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  const userQuery = useQuery({
+    queryKey: ['settings-user'],
+    queryFn: async (): Promise<UserData> => {
+      const supabase = createClient();
+      
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Unauthorized');
+      }
 
-    // Get profile
-    const { data: profileRows } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .limit(1);
-    const profile = profileRows?.[0] ?? null;
+      // Get profile
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .limit(1);
+      const profile = profileRows?.[0] ?? null;
 
-    // Get posts this month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    const { data: posts } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('user_id', user.id)
-      .gte('created_at', startOfMonth.toISOString());
+      // Get posts this month
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth.toISOString());
 
-    const postsThisMonth = posts?.length || 0;
+      const postsThisMonth = posts?.length || 0;
 
-    setUserData({
-      id: user.id,
-      name: profile?.full_name || user.email?.split('@')[0] || 'User',
-      email: user.email || '',
-      plan: 'pro', // Default to pro plan for testing
-      creditsUsed: postsThisMonth,
-      creditsTotal: PLANS.pro.credits,
-      memberSince: profile?.created_at || user.created_at || new Date().toISOString(),
-    });
-    setLoading(false);
-  };
+      const plan: 'starter' | 'pro' | 'business' = 'pro';
+      const creditsTotal = PLANS[plan].credits;
 
-  useEffect(() => {
-    fetchUserData();
-  }, []);
+      return {
+        id: user.id,
+        name: profile?.full_name || user.email?.split('@')[0] || 'User',
+        email: user.email || '',
+        plan,
+        creditsUsed: postsThisMonth,
+        creditsTotal,
+        memberSince: profile?.created_at || user.created_at || new Date().toISOString(),
+      };
+    },
+  });
 
-  if (loading || !userData) {
+  const userData = userQuery.data ?? null;
+
+  if (userQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+      </div>
+    );
+  }
+
+  if (userQuery.isError || !userData) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] text-gray-500">
+        Unable to load settings right now.
       </div>
     );
   }
@@ -589,11 +601,11 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === 'profile' && <ProfileSettings userData={userData} onUpdate={fetchUserData} />}
+            {activeTab === 'profile' && <ProfileSettings userData={userData} onUpdate={() => userQuery.refetch()} />}
             {activeTab === 'billing' && <BillingSettings userData={userData} />}
             {activeTab === 'notifications' && <NotificationSettings />}
             {activeTab === 'security' && <SecuritySettings userData={userData} />}
-            {activeTab === 'data' && <DataSettings userData={userData} onDeleteData={fetchUserData} />}
+            {activeTab === 'data' && <DataSettings userData={userData} onDeleteData={() => userQuery.refetch()} />}
           </motion.div>
         </div>
       </div>

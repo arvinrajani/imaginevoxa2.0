@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import * as pdfParseModule from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 
 export async function POST(request: Request) {
   try {
@@ -24,8 +24,9 @@ export async function POST(request: Request) {
 
     try {
       // Use pdf-parse to extract text
-      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
-      const pdfData = await pdfParse(buffer);
+      const parser = new PDFParse({ data: buffer });
+      const pdfData = await parser.getText();
+      await parser.destroy();
       
       let text = pdfData.text || "";
       
@@ -41,17 +42,17 @@ export async function POST(request: Request) {
           text: `[PDF: ${pdfFile.name}]\n\nThe PDF appears to be image-based or has no extractable text. Please describe the main points from your document in the prompt.`,
           filename: pdfFile.name,
           size: pdfFile.size,
-          pages: pdfData.numpages || 0
+          pages: pdfData.total || 0
         });
       }
 
-      console.log(`PDF extracted: ${pdfFile.name}, ${pdfData.numpages} pages, ${text.length} chars`);
+      console.log(`PDF extracted: ${pdfFile.name}, ${pdfData.total} pages, ${text.length} chars`);
 
       return NextResponse.json({ 
         text,
         filename: pdfFile.name,
         size: pdfFile.size,
-        pages: pdfData.numpages || 0
+        pages: pdfData.total || 0
       });
     } catch (parseError) {
       console.error("PDF parse error:", parseError);

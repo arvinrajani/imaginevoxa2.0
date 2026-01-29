@@ -354,7 +354,7 @@ export async function GET(request: Request) {
   );
 
   const writeWithRetry = async () => {
-    let currentPayload = { ...payload };
+    const currentPayload = { ...payload };
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const result = existing
         ? await db.from("linkedin_connections").update(currentPayload).eq("id", existing.id)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -16,6 +16,7 @@ import {
   Loader2,
   Sparkles
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
@@ -123,99 +124,96 @@ function StatsCard({ icon: Icon, label, value, color }: {
 }
 
 export default function ActivityPage() {
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ActivityType | 'all'>('all');
 
-  const fetchActivity = async () => {
-    setLoading(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    // Fetch posts and convert to activity
-    const { data: posts } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    // Fetch linkedin connections
-    const { data: connections } = await supabase
-      .from('linkedin_connections')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    const activityLogs: ActivityLog[] = [];
-
-    // Convert posts to activity
-    posts?.forEach((post) => {
-      const contentPreview = post.post_content?.substring(0, 60) + (post.post_content?.length > 60 ? '...' : '') || 'No content';
+  const activityQuery = useQuery({
+    queryKey: ['activity'],
+    queryFn: async (): Promise<ActivityLog[]> => {
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      if (post.status === 'posted') {
-        activityLogs.push({
-          id: `post-pub-${post.id}`,
-          type: 'post_published',
-          status: 'success',
-          title: 'Post Published to LinkedIn',
-          description: contentPreview,
-          metadata: { postId: post.id, linkedinUrl: post.linkedin_post_id },
-          createdAt: post.posted_at || post.created_at,
-        });
-      } else if (post.status === 'failed') {
-        activityLogs.push({
-          id: `post-fail-${post.id}`,
-          type: 'post_failed',
-          status: 'error',
-          title: 'Post Failed to Publish',
-          description: post.error_message || 'Publishing failed',
-          metadata: { postId: post.id },
-          createdAt: post.updated_at || post.created_at,
-        });
+      if (userError || !user) {
+        return [];
       }
 
-      // Also add creation activity
-      activityLogs.push({
-        id: `post-create-${post.id}`,
-        type: 'post_created',
-        status: 'info',
-        title: 'Post Generated with AI',
-        description: contentPreview,
-        metadata: { postId: post.id },
-        createdAt: post.created_at,
+      // Fetch posts and convert to activity
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // Fetch linkedin connections
+      const { data: connections } = await supabase
+        .from('linkedin_connections')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const activityLogs: ActivityLog[] = [];
+
+      // Convert posts to activity
+      posts?.forEach((post) => {
+        const contentPreview = post.post_content?.substring(0, 60) + (post.post_content?.length > 60 ? '...' : '') || 'No content';
+        
+        if (post.status === 'posted') {
+          activityLogs.push({
+            id: `post-pub-${post.id}`,
+            type: 'post_published',
+            status: 'success',
+            title: 'Post Published to LinkedIn',
+            description: contentPreview,
+            metadata: { postId: post.id, linkedinUrl: post.linkedin_post_id },
+            createdAt: post.posted_at || post.created_at,
+          });
+        } else if (post.status === 'failed') {
+          activityLogs.push({
+            id: `post-fail-${post.id}`,
+            type: 'post_failed',
+            status: 'error',
+            title: 'Post Failed to Publish',
+            description: post.error_message || 'Publishing failed',
+            metadata: { postId: post.id },
+            createdAt: post.updated_at || post.created_at,
+          });
+        }
+
+        // Also add creation activity
+        activityLogs.push({
+          id: `post-create-${post.id}`,
+          type: 'post_created',
+          status: 'info',
+          title: 'Post Generated with AI',
+          description: contentPreview,
+          metadata: { postId: post.id },
+          createdAt: post.created_at,
+        });
       });
-    });
 
-    // Convert linkedin connections to activity
-    connections?.forEach((conn) => {
-      activityLogs.push({
-        id: `linkedin-${conn.id}`,
-        type: 'linkedin_connected',
-        status: 'success',
-        title: 'LinkedIn Account Connected',
-        description: `Connected as ${conn.linkedin_name || 'LinkedIn User'}`,
-        createdAt: conn.created_at,
+      // Convert linkedin connections to activity
+      connections?.forEach((conn) => {
+        activityLogs.push({
+          id: `linkedin-${conn.id}`,
+          type: 'linkedin_connected',
+          status: 'success',
+          title: 'LinkedIn Account Connected',
+          description: `Connected as ${conn.linkedin_name || 'LinkedIn User'}`,
+          createdAt: conn.created_at,
+        });
       });
-    });
 
-    // Sort by date
-    activityLogs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      // Sort by date
+      activityLogs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    setActivities(activityLogs);
-    setLoading(false);
-  };
+      return activityLogs;
+    },
+  });
 
-  useEffect(() => {
-    fetchActivity();
-  }, []);
+  const activities = activityQuery.data ?? [];
+  const loading = activityQuery.isLoading;
 
   const filteredActivities = activities.filter((activity) => {
     const matchesSearch = 
@@ -250,11 +248,14 @@ export default function ActivityPage() {
 
   const formatGroupDate = (dateString: string) => {
     const date = new Date(dateString);
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const todayString = today.toDateString();
+    const yesterdayString = yesterday.toDateString();
 
-    if (dateString === today) return 'Today';
-    if (dateString === yesterday) return 'Yesterday';
+    if (dateString === todayString) return 'Today';
+    if (dateString === yesterdayString) return 'Yesterday';
     return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
@@ -329,7 +330,7 @@ export default function ActivityPage() {
           <option value="post_created">Generated</option>
           <option value="linkedin_connected">LinkedIn</option>
         </select>
-        <Button variant="outline" className="h-11" onClick={fetchActivity}>
+        <Button variant="outline" className="h-11" onClick={() => activityQuery.refetch()}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>

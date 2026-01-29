@@ -58,37 +58,86 @@ export async function POST(request: Request) {
     const webhookUrl = rawWebhookUrl;
     console.log("Calling n8n webhook:", webhookUrl, "with tone:", tone, "source:", contentSource);
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const headers: Record<string, string> = {};
     if (apiKey) {
       headers["x-api-key"] = apiKey;
     }
 
-    // Build the request payload based on content source
-    const payload: Record<string, any> = { 
-      prompt, 
-      tone, 
-      wantImage,
-      contentSource 
-    };
+    const hasBinary = Array.from(formData.values()).some((value) => {
+      if (typeof value === "string") return false;
+      if (typeof File !== "undefined" && value instanceof File) return true;
+      if (typeof Blob !== "undefined" && value instanceof Blob) return true;
+      return false;
+    });
+
+    const n8nFormData = new FormData();
+    const n8nJsonPayload: Record<string, unknown> = {};
+    for (const [key, value] of formData.entries()) {
+      if (typeof value === "string") {
+        n8nJsonPayload[key] = value;
+        n8nFormData.append(key, value);
+      } else {
+        n8nFormData.append(key, value);
+      }
+    }
+    n8nJsonPayload.userId = userId;
+    n8nJsonPayload.tone = tone;
+    n8nJsonPayload.contentSource = contentSource;
+    n8nJsonPayload.wantImage = wantImage;
+    n8nJsonPayload.approvalRequired = approvalRequired;
+
+    n8nFormData.set("userId", userId);
+    n8nFormData.set("tone", tone);
+    n8nFormData.set("contentSource", contentSource);
+    n8nFormData.set("wantImage", wantImage ? "true" : "false");
+    n8nFormData.set("approvalRequired", approvalRequired ? "true" : "false");
 
     // Add additional context based on source
     if (contentSource === 'pdf' && pdfText) {
-      payload.pdfContent = pdfText.substring(0, 5000); // Limit PDF text
-      payload.prompt = `Create a LinkedIn post based on this PDF document content. Make it engaging and summarize the key points:\n\n${pdfText.substring(0, 3000)}`;
+      n8nFormData.set("pdfText", pdfText.substring(0, 5000));
+      n8nJsonPayload.pdfText = pdfText.substring(0, 5000);
+      const promptText =
+        `Create a LinkedIn post based on this PDF document content. Make it engaging and summarize the key points:\n\n${pdfText.substring(0, 3000)}`;
+      n8nFormData.set(
+        "prompt",
+        promptText
+      );
+      n8nJsonPayload.prompt = promptText;
     } else if (contentSource === 'image' && imageContext) {
-      payload.imageContext = imageContext;
-      payload.prompt = `Create a LinkedIn post about personal images/photos. The user describes the images as: "${imageContext}". Write an engaging post that would accompany these personal photos.`;
+      n8nFormData.set("imageContext", imageContext);
+      n8nJsonPayload.imageContext = imageContext;
+      const promptText =
+        `Create a LinkedIn post about personal images/photos. The user describes the images as: "${imageContext}". Write an engaging post that would accompany these personal photos.`;
+      n8nFormData.set(
+        "prompt",
+        promptText
+      );
+      n8nJsonPayload.prompt = promptText;
     } else if (contentSource === 'video' && videoContext) {
-      payload.videoContext = videoContext;
-      payload.prompt = `Create a LinkedIn post about a personal video. The user describes the video as: "${videoContext}". Write an engaging post that would accompany this video.`;
+      n8nFormData.set("videoContext", videoContext);
+      n8nJsonPayload.videoContext = videoContext;
+      const promptText =
+        `Create a LinkedIn post about a personal video. The user describes the video as: "${videoContext}". Write an engaging post that would accompany this video.`;
+      n8nFormData.set(
+        "prompt",
+        promptText
+      );
+      n8nJsonPayload.prompt = promptText;
+    }
+
+    if (typeof n8nJsonPayload.prompt !== "string" && typeof prompt === "string") {
+      n8nJsonPayload.prompt = prompt;
     }
 
     const n8nResponse = await fetch(webhookUrl, {
       method: "POST",
-      headers,
-      body: JSON.stringify(payload),
+      headers: hasBinary
+        ? headers
+        : {
+            ...headers,
+            "Content-Type": "application/json",
+          },
+      body: hasBinary ? n8nFormData : JSON.stringify(n8nJsonPayload),
     });
 
     if (!n8nResponse.ok) {
@@ -104,7 +153,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const generatedData = (await n8nResponse.json()) as GenerateResponse;
+    const responseText = await n8nResponse.text();
+    if (!responseText.trim()) {
+      return NextResponse.json(
+        {
+          error:
+            "n8n returned an empty response. Add a 'Respond to Webhook' node (or set the Webhook node to respond with JSON) and return { post_content }.",
+        },
+        { status: 502 }
+      );
+    }
+
+    let generatedData: GenerateResponse;
+    try {
+      generatedData = JSON.parse(responseText) as GenerateResponse;
+    } catch (parseError) {
+      console.error("n8n response parse error:", parseError);
+      console.error("n8n response body:", responseText.substring(0, 200));
+      return NextResponse.json(
+        {
+          error:
+            "n8n returned a non-JSON response. Add a 'Respond to Webhook' node (or set the Webhook node to respond with JSON) and return { post_content }.",
+        },
+        { status: 502 }
+      );
+    }
 
     if (!generatedData.post_content) {
       return NextResponse.json(

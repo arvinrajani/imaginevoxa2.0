@@ -11,6 +11,53 @@ type ApproveRequest = {
   content?: string;
 };
 
+type LinkedInSharePayload = {
+  owner: string;
+  text: { text: string };
+  distribution: { linkedInDistributionTarget: Record<string, never> };
+};
+
+type LinkedInPostsPayload = {
+  author: string;
+  commentary: string;
+  visibility: "PUBLIC";
+  distribution: {
+    feedDistribution: "MAIN_FEED";
+    targetEntities: string[];
+    thirdPartyDistributionChannels: string[];
+  };
+  lifecycleState: "PUBLISHED";
+  isReshareDisabledByAuthor: boolean;
+  content?: {
+    media: {
+      title: string;
+      id?: string;
+    };
+  };
+};
+
+type LinkedInUgcMediaItem = {
+  status: "READY";
+  description: { text: string };
+  media?: string | null;
+  title: { text: string };
+};
+
+type LinkedInUgcPayload = {
+  author: string;
+  lifecycleState: "PUBLISHED";
+  specificContent: {
+    "com.linkedin.ugc.ShareContent": {
+      shareCommentary: { text: string };
+      shareMediaCategory: "VIDEO" | "IMAGE" | "NONE";
+      media?: LinkedInUgcMediaItem[];
+    };
+  };
+  visibility: {
+    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC";
+  };
+};
+
 // Helper function to upload image to LinkedIn using the v2 Assets API
 async function uploadImageToLinkedIn(
   imageUrl: string,
@@ -87,13 +134,15 @@ async function uploadImageToLinkedIn(
 
     // Step 3: Upload the actual image binary
     console.log("🖼️ Step 3: Uploading image binary to:", uploadUrl.substring(0, 80) + "...");
+    const uploadBody =
+      imageBody instanceof ArrayBuffer ? new Uint8Array(imageBody) : new Uint8Array(imageBody);
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
         "Content-Type": contentType,
       },
-      body: imageBody,
+      body: uploadBody,
     });
 
     if (!uploadResponse.ok) {
@@ -217,7 +266,7 @@ async function postToLinkedIn(
       console.log("🏢 Posting as organization - trying Community Management approach");
       
       // Try the Share API (sometimes works for organizations)
-      const sharePayload: any = {
+      const sharePayload: LinkedInSharePayload = {
         owner: authorUrn,
         text: {
           text: text
@@ -258,7 +307,7 @@ async function postToLinkedIn(
     }
 
     // Try the versioned Posts API first
-    const postPayload: any = {
+    const postPayload: LinkedInPostsPayload = {
       author: authorUrn,
       commentary: text,
       visibility: "PUBLIC",
@@ -319,7 +368,7 @@ async function postToLinkedIn(
     }
     
     // Build media array if we have an image
-    const media = hasVideo
+    const media: LinkedInUgcMediaItem[] | undefined = hasVideo
       ? [
           {
             status: "READY",
@@ -333,20 +382,22 @@ async function postToLinkedIn(
           },
         ]
       : hasImages
-      ? imageAssetUrns?.map((assetUrn) => ({
-          status: "READY",
-          description: {
-            text: "Image",
-          },
-          media: assetUrn,
-          title: {
-            text: "Image",
-          },
-        }))
+      ? imageAssetUrns?.map(
+          (assetUrn): LinkedInUgcMediaItem => ({
+            status: "READY",
+            description: {
+              text: "Image",
+            },
+            media: assetUrn,
+            title: {
+              text: "Image",
+            },
+          })
+        )
       : undefined;
 
     // Build the UGC post payload
-    const ugcPayload: any = {
+    const ugcPayload: LinkedInUgcPayload = {
       author: authorUrn,
       lifecycleState: "PUBLISHED",
       specificContent: {

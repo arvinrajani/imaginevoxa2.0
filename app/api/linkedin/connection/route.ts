@@ -29,9 +29,13 @@ export async function GET() {
       return NextResponse.json(null);
     }
 
+    const orgConnected = Boolean(
+      (connection as { org_access_token?: string | null }).org_access_token
+    );
+
     return NextResponse.json({
       ...connection,
-      org_connected: Boolean((connection as any).org_access_token),
+      org_connected: orgConnected,
     });
   } catch (error) {
     console.error("LinkedIn connection endpoint error:", error);

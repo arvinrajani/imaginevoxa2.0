@@ -250,7 +250,8 @@ export default function GeneratePage() {
       setUserName(profile?.full_name || user.email?.split('@')[0] || 'User');
       
       // Get user plan from database
-      const userPlanFromDb: UserPlan = (profile?.plan as UserPlan) || 'pro';
+      const userPlanFromDb: UserPlan = 'pro';
+      const effectivePlan: UserPlan = userPlanFromDb;
 
       const { data: linkedinRows } = await supabase
         .from('linkedin_connections')
@@ -283,9 +284,9 @@ export default function GeneratePage() {
         .gte('created_at', startOfMonth.toISOString());
 
       const postsThisMonth = posts?.length || 0;
-      const total = PLAN_LIMITS[userPlanFromDb].credits;
+      const total = PLAN_LIMITS[effectivePlan].credits;
       
-      setUserPlan(userPlanFromDb);
+      setUserPlan(effectivePlan);
       setCreditsTotal(total);
       setCreditsRemaining(Math.max(0, total - postsThisMonth));
       setLoading(false);

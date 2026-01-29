@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 
+type LinkedInOrg = {
+  id: string;
+  urn: string;
+  name: string;
+  logo?: string;
+};
+
 // DEV: Endpoint to manually add organization pages
 export async function POST(request: Request) {
   try {
@@ -11,7 +18,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as { orgId?: string | number; orgName?: string };
     const { orgId, orgName } = body;
 
     if (!orgId || !orgName) {
@@ -30,7 +37,9 @@ export async function POST(request: Request) {
     }
 
     // Add the new org - orgId can be numeric ID or URL slug
-    const currentOrgs = (connection.orgs as any[]) || [];
+    const currentOrgs = Array.isArray(connection.orgs)
+      ? (connection.orgs as LinkedInOrg[])
+      : [];
     
     // Clean the orgId - extract just the ID part
     let cleanOrgId = orgId.toString().trim();
@@ -50,7 +59,7 @@ export async function POST(request: Request) {
     };
 
     // Check if org already exists
-    if (currentOrgs.some(o => o.id === orgId || o.urn === newOrg.urn)) {
+    if (currentOrgs.some(o => o.id === cleanOrgId || o.urn === newOrg.urn)) {
       return NextResponse.json({ error: "Organization already added" }, { status: 400 });
     }
 
@@ -93,7 +102,7 @@ export async function GET(request: Request) {
       .eq("user_id", user.id)
       .single();
 
-    return NextResponse.json({ orgs: connection?.orgs || [] });
+    return NextResponse.json({ orgs: Array.isArray(connection?.orgs) ? connection.orgs : [] });
   } catch (error) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
@@ -126,7 +135,9 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "LinkedIn not connected" }, { status: 400 });
     }
 
-    const currentOrgs = (connection.orgs as any[]) || [];
+    const currentOrgs = Array.isArray(connection.orgs)
+      ? (connection.orgs as LinkedInOrg[])
+      : [];
     const updatedOrgs = currentOrgs.filter(o => o.id !== orgId);
 
     const { error: updateError } = await supabase

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -22,6 +22,7 @@ import {
   Loader2,
   Check
 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
@@ -268,32 +269,36 @@ function PostCard({
 }
 
 export default function PostsPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | PostStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
+  const queryClient = useQueryClient();
 
-  const fetchPosts = async () => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  const postsQuery = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        return [] as Post[];
+      }
 
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setPosts(data);
-    }
-    setLoading(false);
-  };
+      if (error) {
+        throw error;
+      }
 
-  useEffect(() => {
-    fetchPosts();
-  }, []);
+      return (data ?? []) as Post[];
+    },
+  });
+
+  const posts = postsQuery.data ?? [];
+  const loading = postsQuery.isLoading;
 
   const handleDelete = async (postId: string) => {
     const supabase = createClient();
@@ -303,7 +308,9 @@ export default function PostsPage() {
       .eq('id', postId);
 
     if (!error) {
-      setPosts(posts.filter(p => p.id !== postId));
+      queryClient.setQueryData<Post[]>(['posts'], (current) =>
+        (current ?? []).filter(p => p.id !== postId)
+      );
     }
   };
 

@@ -61,6 +61,17 @@ interface LinkedInConnection {
   organizations: Organization[];
 }
 
+type LinkedInConnectionRow = {
+  orgs?: Organization[] | null;
+  org_access_token?: string | null;
+  org_expires_at?: string | null;
+  org_scopes?: string[] | null;
+  member_urn?: string | null;
+  linkedin_member_urn?: string | null;
+  expires_at?: string | null;
+  scopes?: string[] | null;
+};
+
 function ConnectionStatus({ connection }: { connection: LinkedInConnection }) {
   if (!connection.connected) {
     return (
@@ -190,7 +201,7 @@ export default function LinkedInPage() {
         .select('*')
         .eq('user_id', user.id)
         .limit(1);
-      const linkedinConn = linkedinRows?.[0] ?? null;
+      const linkedinConn = (linkedinRows?.[0] ?? null) as LinkedInConnectionRow | null;
 
       if (!linkedinConn) {
         setConnection({ connected: false, organizations: [] });
@@ -219,27 +230,27 @@ export default function LinkedInPage() {
       )[0];
 
       // Parse organizations from the connection
-      const orgs = ((linkedinConn as any).orgs as Organization[]) || [];
+      const orgs = linkedinConn?.orgs ?? [];
 
       const orgToken = {
-        connected: !!(linkedinConn as any).org_access_token,
-        expiresAt: (linkedinConn as any).org_expires_at || null,
-        scopes: ((linkedinConn as any).org_scopes as string[]) || [],
+        connected: Boolean(linkedinConn?.org_access_token),
+        expiresAt: linkedinConn?.org_expires_at || null,
+        scopes: linkedinConn?.org_scopes ?? [],
       };
 
       setConnection({
         connected: true,
         profile: {
-          id: ((linkedinConn as any).member_urn || (linkedinConn as any).linkedin_member_urn || '').split(':').pop() || '',
+          id: (linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '').split(':').pop() || '',
           name: profile?.full_name || user.email?.split('@')[0] || 'User',
           headline: 'Connected via Imaginevoxa',
           pictureUrl: profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'U')}&background=0077B5&color=fff`,
-          vanityName: ((linkedinConn as any).member_urn || (linkedinConn as any).linkedin_member_urn || '').split(':').pop() || '',
-          memberUrn: (linkedinConn as any).member_urn || (linkedinConn as any).linkedin_member_urn || '',
+          vanityName: (linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '').split(':').pop() || '',
+          memberUrn: linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '',
         },
         token: {
-          expiresAt: (linkedinConn as any).expires_at || new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-          scopes: ((linkedinConn as any).scopes as string[]) || ['w_member_social', 'r_liteprofile'],
+          expiresAt: linkedinConn?.expires_at || new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+          scopes: linkedinConn?.scopes ?? ['w_member_social', 'r_liteprofile'],
         },
         orgToken,
         stats: {
@@ -642,7 +653,7 @@ export default function LinkedInPage() {
                 {orgTokenConnected && connection.organizations.length === 0 && !showAddOrg && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mt-2">
                     <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
-                      💡 <strong>No company pages found.</strong> LinkedIn's API requires special permissions to auto-detect pages.
+                      💡 <strong>No company pages found.</strong> LinkedIn&apos;s API requires special permissions to auto-detect pages.
                     </p>
                     <button
                       onClick={() => setShowAddOrg(true)}
@@ -798,11 +809,11 @@ export default function LinkedInPage() {
                 {!connection.token?.scopes.includes('w_organization_social') && (
                   <div className="mt-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      ⚠️ <strong>Organization posting limited.</strong> Your LinkedIn app doesn't have 
+                      ⚠️ <strong>Organization posting limited.</strong> Your LinkedIn app doesn&apos;t have 
                       organization posting permissions yet. You can still add organizations manually and 
                       the app will try to post, but LinkedIn may reject posts to organization pages.
                       <br /><br />
-                      <strong>To enable full organization posting:</strong> Apply for LinkedIn's 
+                      <strong>To enable full organization posting:</strong> Apply for LinkedIn&apos;s 
                       Marketing Developer Platform to get <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">w_organization_social</code> scope.
                     </p>
                   </div>

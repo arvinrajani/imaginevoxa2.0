@@ -1,0 +1,118 @@
+
+> linkedin-posting@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.18.71:3000
+- Environments: .env.local
+- Experiments (use with caution):
+  ⨯ lockDistDir
+
+✓ Starting...
+✓ Ready in 1814ms
+ GET /app/generate 200 in 1362ms (compile: 642ms, render: 720ms)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 500 in 10.3s (compile: 230ms, render: 10.1s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 9.7s (compile: 135ms, render: 9.5s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 9.1s (compile: 6ms, render: 9.1s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 8.8s (compile: 5ms, render: 8.8s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 8.0s (compile: 8ms, render: 8.0s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 8.9s (compile: 8ms, render: 8.9s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 8.5s (compile: 5ms, render: 8.5s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+Post saved: 08d518b7-0bec-48d9-bbf8-7a69e18bb33b
+ POST /api/generate 200 in 9.0s (compile: 77ms, render: 8.9s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 7.9s (compile: 86ms, render: 7.8s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 9.4s (compile: 74ms, render: 9.4s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 9.0s (compile: 94ms, render: 8.9s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 15.6s (compile: 8ms, render: 15.6s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 20.3s (compile: 4ms, render: 20.3s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 18.9s (compile: 8ms, render: 18.9s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 16.0s (compile: 6ms, render: 16.0s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 18.6s (compile: 5ms, render: 18.5s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 13.6s (compile: 6ms, render: 13.5s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 13.6s (compile: 5ms, render: 13.6s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 16.2s (compile: 4ms, render: 16.2s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 61s (compile: 5ms, render: 61s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 65s (compile: 5ms, render: 65s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 75s (compile: 4ms, render: 75s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 74s (compile: 4ms, render: 74s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+ POST /api/generate 502 in 69s (compile: 3ms, render: 69s)
+Calling n8n webhook: https://ringvoxa.app.n8n.cloud/webhook/generate with tone: casual source: text
+Post saved: b3410aa4-35d4-4f75-908d-4e196d1e55d3
+ POST /api/generate 200 in 72s (compile: 3ms, render: 72s)
+🔵 Starting auto-post to LinkedIn...
+LinkedIn connection check: {
+  hasConnection: true,
+  hasToken: true,
+  hasOrgToken: false,
+  memberUrn: 'urn:li:person:Tm87_ewj8D',
+  error: null
+}
+📤 Posting to LinkedIn as: person urn:li:person:Tm87_ewj8D
+🖼️ Step 1: Downloading image from: https://res.cloudinary.com/dyorfbude/image/upload/v1769696486/cyz38ts2ke7jqqbsvvxb.png
+
+✅ Image downloaded, size: 1727381 bytes, type: image/png
+🖼️ Step 2: Registering upload with LinkedIn...
+✅ Upload registered: {"value":{"mediaArtifact":"urn:li:digitalmediaMediaArtifact:(urn:li:digitalmediaAsset:D4D22AQFX9A3_ysVDgw,urn:li:digitalmediaMediaArtifactClass:uploaded-image)","uploadMechanism":{"com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest":{"uploadUrl":"https://www.linkedin.com/dms-uploads/sp/v2/D4
+🖼️ Step 3: Uploading image binary to: https://www.linkedin.com/dms-uploads/sp/v2/D4D22AQFX9A3_ysVDgw/uploaded-image/B4...
+✅ Image uploaded successfully! Asset URN: urn:li:digitalmediaAsset:D4D22AQFX9A3_ysVDgw
+⏳ Waiting 3 seconds for LinkedIn to process...
+📤 Creating LinkedIn post...
+Author URN: urn:li:person:Tm87_ewj8D
+Image count: 1
+Has video: false
+📋 Post payload (Posts API): {
+  "author": "urn:li:person:Tm87_ewj8D",
+  "commentary": "Get ready for the coolest games of 2026! 🎮✨\n\nThe world of gaming is evolving rapidly, bringing exciting new experiences for kids. With advancements in technology and creativity, 2026 promises to be a year filled with thrilling adventures and innovative gameplay that sparks imagination.\n\nIn this vibrant gaming landscape, let’s explore what’s on the horizon and how these games foster creativity, teamwork, and problem-solving skills.\n\nTAKEAWAYS:\n• 🚀 Look forward to immersive virtual reality experiences transporting players to fantastical worlds.\n• 💡 Expect engaging storylines that encourage critical thinking and collaboration
+LinkedIn Posts API response status: 426
+Posts API failed, trying UGC Posts API...
+📋 UGC Post payload: {
+  "author": "urn:li:person:Tm87_ewj8D",
+  "lifecycleState": "PUBLISHED",
+  "specificContent": {
+    "com.linkedin.ugc.ShareContent": {
+      "shareCommentary": {
+        "text": "Get ready for the coolest games of 2026! 🎮✨\n\nThe world of gaming is evolving rapidly, bringing exciting new experiences for kids. With advancements in technology and creativity, 2026 promises to be a year filled with thrilling adventures and innovative gameplay that sparks imagination.\n\nIn this vibrant gaming landscape, let’s explore what’s on the horizon and how these games foster creativity, teamwork, and problem-solving skills.\n\nTAKEAWAYS:\n• 🚀 Look forward to immersive virtual reality experiences trans
+LinkedIn UGC API response status: 201
+✅ Post created successfully via UGC API! URN: urn:li:share:7422645170904424448
+ POST /api/approve 200 in 14.3s (compile: 107ms, render: 14.2s)
+ GET /app/posts?published=true 200 in 554ms (compile: 373ms, render: 181ms)
+✓ Compiled in 768ms
+ GET /app/posts?published=true 200 in 1710ms (compile: 631ms, render: 1078ms)
+ GET /app/generate 200 in 364ms (compile: 277ms, render: 86ms)
+ GET /app 200 in 286ms (compile: 131ms, render: 155ms)
+ GET /app 200 in 67ms (compile: 14ms, render: 53ms)
+ GET /login 200 in 105ms (compile: 66ms, render: 39ms)
+ GET / 200 in 88ms (compile: 53ms, render: 34ms)
+✓ Compiled in 473ms
+✓ Compiled in 180ms
+✓ Compiled in 811ms
+✓ Compiled in 161ms
+ GET / 200 in 1225ms (compile: 15ms, render: 1210ms)
+ GET / 200 in 1305ms (compile: 8ms, render: 1298ms)
+ GET / 200 in 1374ms (compile: 7ms, render: 1367ms)
+ GET / 200 in 1291ms (compile: 91ms, render: 1200ms)

@@ -39,6 +39,7 @@ type Post = {
   engagement_likes?: number | null;
   engagement_comments?: number | null;
   engagement_shares?: number | null;
+  linkedin_post_urn?: string | null;
 };
 
 type Profile = {

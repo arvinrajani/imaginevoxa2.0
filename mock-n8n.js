@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const express = require('express');
 const app = express();
 const port = 5678; // n8n default port

@@ -10,20 +10,21 @@ export function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>('dark');
 
   useEffect(() => {
-    const stored = (localStorage.getItem('voxa-theme') as ThemeMode | null) ?? 'dark';
-    setMode(stored);
-    document.documentElement.setAttribute('data-theme', stored);
-    document.documentElement.classList.toggle('dark', stored === 'dark');
-    document.documentElement.style.colorScheme = stored;
+    const stored = localStorage.getItem('voxa-theme') as ThemeMode | null;
+    if (stored) {
+      setMode(stored);
+    }
   }, []);
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', mode);
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+    document.documentElement.style.colorScheme = mode;
+    localStorage.setItem('voxa-theme', mode);
+  }, [mode]);
+
   const handleToggle = () => {
-    const next = mode === 'dark' ? 'light' : 'dark';
-    setMode(next);
-    localStorage.setItem('voxa-theme', next);
-    document.documentElement.setAttribute('data-theme', next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
-    document.documentElement.style.colorScheme = next;
+    setMode((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   return (
