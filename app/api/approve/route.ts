@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ApproveRequest = {
   postId: string;
@@ -462,10 +463,15 @@ async function postToLinkedIn(
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createServerSupabase();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const cronHeader = request.headers.get("x-cron-secret")?.trim();
+    const isCron = Boolean(cronSecret && cronHeader && cronHeader === cronSecret);
 
-    if (userError || !user) {
+    const supabase = isCron ? createAdminClient() : await createServerSupabase();
+    const userResult = isCron ? { data: { user: null }, error: null } : await supabase.auth.getUser();
+    const user = userResult.data.user;
+
+    if (!isCron && !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -492,15 +498,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing post id." }, { status: 400 });
     }
 
-    const { data: post, error: postError } = await supabase
+    const postQuery = supabase
       .from("posts")
       .select("*")
-      .eq("id", body.postId)
-      .eq("user_id", user.id)
-      .single();
+      .eq("id", body.postId);
+    if (!isCron && user?.id) {
+      postQuery.eq("user_id", user.id);
+    }
+
+    const { data: post, error: postError } = await postQuery.single();
 
     if (postError || !post) {
       return NextResponse.json({ error: "Post not found." }, { status: 404 });
+    }
+
+    const effectiveUserId = user?.id || post.user_id;
+    if (!effectiveUserId) {
+      return NextResponse.json({ error: "Missing post owner." }, { status: 400 });
     }
 
     const updatedContent = body.content?.trim();
@@ -534,7 +548,7 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             postId: post.id,
-            userId: user.id,
+            userId: effectiveUserId,
             title: post.title,
             post_content: postContent,
             image_url: post.image_url,
@@ -552,7 +566,7 @@ export async function POST(request: Request) {
       const { data: connection, error: connectionError } = await supabase
         .from("linkedin_connections")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", effectiveUserId)
         .maybeSingle();
 
       console.log("LinkedIn connection check:", {

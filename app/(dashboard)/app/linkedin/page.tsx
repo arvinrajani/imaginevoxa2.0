@@ -48,6 +48,8 @@ interface LinkedInConnection {
     pictureUrl: string;
     vanityName: string;
     memberUrn: string;
+    email?: string;
+    source?: string;
   };
   token?: {
     expiresAt: string;
@@ -61,8 +63,18 @@ interface LinkedInConnection {
   organizations: Organization[];
 }
 
+type LinkedInConnectedProfile = {
+  name?: string | null;
+  email?: string | null;
+  picture_url?: string | null;
+  vanity_name?: string | null;
+  member_urn?: string | null;
+  source?: string | null;
+};
+
 type LinkedInConnectionRow = {
   orgs?: Organization[] | null;
+  access_token?: string | null;
   org_access_token?: string | null;
   org_expires_at?: string | null;
   org_scopes?: string[] | null;
@@ -70,6 +82,7 @@ type LinkedInConnectionRow = {
   linkedin_member_urn?: string | null;
   expires_at?: string | null;
   scopes?: string[] | null;
+  connected_profile?: LinkedInConnectedProfile | null;
 };
 
 function ConnectionStatus({ connection }: { connection: LinkedInConnection }) {
@@ -133,6 +146,7 @@ export default function LinkedInPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isConnectingOrg, setIsConnectingOrg] = useState(false);
+  const [signedInEmail, setSignedInEmail] = useState('');
   
   // Posting target selection
   const [defaultPostingTarget, setDefaultPostingTarget] = useState<'person' | 'organization'>('person');
@@ -194,14 +208,16 @@ export default function LinkedInPage() {
         setIsLoading(false);
         return;
       }
+      setSignedInEmail(user.email || '');
 
-      // Get LinkedIn connection
-      const { data: linkedinRows } = await supabase
-        .from('linkedin_connections')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(1);
-      const linkedinConn = (linkedinRows?.[0] ?? null) as LinkedInConnectionRow | null;
+      // Get LinkedIn connection (includes enriched LinkedIn profile details)
+      const connectionRes = await fetch('/api/linkedin/connection', { cache: 'no-store' });
+      if (!connectionRes.ok) {
+        setConnection({ connected: false, organizations: [] });
+        setIsLoading(false);
+        return;
+      }
+      const linkedinConn = (await connectionRes.json()) as LinkedInConnectionRow | null;
 
       if (!linkedinConn) {
         setConnection({ connected: false, organizations: [] });
@@ -231,6 +247,28 @@ export default function LinkedInPage() {
 
       // Parse organizations from the connection
       const orgs = linkedinConn?.orgs ?? [];
+      const connectedProfile = linkedinConn?.connected_profile || null;
+      const memberUrn =
+        connectedProfile?.member_urn ||
+        linkedinConn?.member_urn ||
+        linkedinConn?.linkedin_member_urn ||
+        '';
+      const memberId = memberUrn.split(':').pop() || '';
+      const linkedInDisplayName =
+        connectedProfile?.name ||
+        profile?.full_name ||
+        user.email?.split('@')[0] ||
+        'LinkedIn User';
+      const linkedInHeadline = [
+        connectedProfile?.email || null,
+        memberUrn || null,
+      ]
+        .filter(Boolean)
+        .join(' • ') || 'Connected via LinkedIn OAuth';
+      const linkedInAvatar =
+        connectedProfile?.picture_url ||
+        profile?.avatar_url ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(linkedInDisplayName)}&background=0077B5&color=fff`;
 
       const orgToken = {
         connected: Boolean(linkedinConn?.org_access_token),
@@ -239,14 +277,16 @@ export default function LinkedInPage() {
       };
 
       setConnection({
-        connected: true,
+        connected: Boolean(linkedinConn?.access_token),
         profile: {
-          id: (linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '').split(':').pop() || '',
-          name: profile?.full_name || user.email?.split('@')[0] || 'User',
-          headline: 'Connected via Imaginevoxa',
-          pictureUrl: profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'U')}&background=0077B5&color=fff`,
-          vanityName: (linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '').split(':').pop() || '',
-          memberUrn: linkedinConn?.member_urn || linkedinConn?.linkedin_member_urn || '',
+          id: memberId,
+          name: linkedInDisplayName,
+          headline: linkedInHeadline,
+          pictureUrl: linkedInAvatar,
+          vanityName: connectedProfile?.vanity_name || '',
+          memberUrn,
+          email: connectedProfile?.email || undefined,
+          source: connectedProfile?.source || undefined,
         },
         token: {
           expiresAt: linkedinConn?.expires_at || new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
@@ -480,17 +520,44 @@ export default function LinkedInPage() {
                       {connection.profile.name}
                     </h3>
                     <p className="text-sm text-gray-500">{connection.profile.headline}</p>
-                    <a
-                      href={`https://linkedin.com/in/${connection.profile.vanityName}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-1"
-                    >
-                      View Profile <ExternalLink className="h-3 w-3" />
-                    </a>
+                    {connection.profile.memberUrn ? (
+                      <p className="text-xs text-gray-500 mt-1">
+                        LinkedIn Member: <span className="font-mono">{connection.profile.memberUrn}</span>
+                      </p>
+                    ) : null}
+                    {signedInEmail ? (
+                      <p className="text-xs text-gray-500">
+                        App account: {signedInEmail}
+                      </p>
+                    ) : null}
+                    {connection.profile.vanityName ? (
+                      <a
+                        href={`https://linkedin.com/in/${connection.profile.vanityName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-1"
+                      >
+                        View LinkedIn Profile <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
                   </div>
                 </div>
-                <ConnectionStatus connection={connection} />
+                <div className="flex items-center gap-3">
+                  <ConnectionStatus connection={connection} />
+                  <Button
+                    variant="outline"
+                    onClick={handleDisconnect}
+                    disabled={isDisconnecting}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  >
+                    {isDisconnecting ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4 mr-2" />
+                    )}
+                    Disconnect
+                  </Button>
+                </div>
               </div>
 
               {/* Token Health */}
@@ -846,19 +913,6 @@ export default function LinkedInPage() {
                     <Link2 className="h-4 w-4 mr-2" />
                   )}
                   {orgTokenConnected ? "Reconnect Org App" : "Connect Org App"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleDisconnect}
-                  disabled={isDisconnecting}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                >
-                  {isDisconnecting ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Unlink className="h-4 w-4 mr-2" />
-                  )}
-                  Disconnect
                 </Button>
               </div>
             </div>

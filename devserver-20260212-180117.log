@@ -1,0 +1,83 @@
+
+> linkedin-posting@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.1.3 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.18.71:3000
+- Environments: .env.local
+- Experiments (use with caution):
+  ⨯ lockDistDir
+
+✓ Starting...
+✓ Ready in 5.6s
+○ Compiling /app/studio ...
+ GET /app/studio 200 in 79s (compile: 77s, render: 1278ms)
+ GET /app/studio 200 in 300ms (compile: 160ms, render: 140ms)
+ GET /api/pro/brand-kit/status?brandId=d2f28737-235d-404f-afc7-528f35aa2afa 200 in 4.6s (compile: 2.8s, render: 1839ms)
+ GET /api/pro/brand-kit/status?brandId=3c8c3a13-7039-4cea-952e-95aaa78788bc 200 in 900ms (compile: 5ms, render: 895ms)
+○ Compiling /api/pro/marketing-dna ...
+ POST /api/pro/marketing-dna 201 in 53s (compile: 42s, render: 11.1s)
+ POST /api/pro/brand-kit/style 200 in 4.1s (compile: 2.6s, render: 1494ms)
+ GET /app/studio 200 in 1248ms (compile: 226ms, render: 1022ms)
+ GET /app/studio 200 in 650ms (compile: 129ms, render: 521ms)
+ GET /app/studio 200 in 200ms (compile: 45ms, render: 155ms)
+ GET /api/pro/brand-kit/status?brandId=d2f28737-235d-404f-afc7-528f35aa2afa 200 in 4.1s (compile: 2.2s, render: 1893ms)
+ GET /app/studio 200 in 835ms (compile: 358ms, render: 477ms)
+ GET /app/studio 200 in 133ms (compile: 26ms, render: 107ms)
+ GET /app/studio 200 in 265ms (compile: 158ms, render: 107ms)
+ GET /app/studio 200 in 220ms (compile: 140ms, render: 81ms)
+ GET /app/studio 200 in 144ms (compile: 82ms, render: 62ms)
+ GET /app/studio 200 in 1287ms (compile: 93ms, render: 1194ms)
+ GET /app/studio 200 in 114ms (compile: 16ms, render: 98ms)
+ GET /app/studio 200 in 96ms (compile: 19ms, render: 77ms)
+ GET /app/studio 200 in 216ms (compile: 124ms, render: 92ms)
+ POST /api/pro/post-options 502 in 20.8s (compile: 3.6s, render: 17.2s)
+ POST /api/pro/post-options 200 in 17.0s (compile: 10ms, render: 17.0s)
+ POST /api/pro/image/create 200 in 57s (compile: 691ms, render: 56s)
+ GET /app/studio 200 in 426ms (compile: 331ms, render: 95ms)
+ GET /app/studio 200 in 225ms (compile: 137ms, render: 88ms)
+ GET /app/studio 200 in 142ms (compile: 79ms, render: 63ms)
+ GET /app/studio 200 in 264ms (compile: 126ms, render: 138ms)
+ GET /app/studio 200 in 266ms (compile: 139ms, render: 128ms)
+ GET /app/studio 200 in 288ms (compile: 153ms, render: 135ms)
+ GET /app/studio 200 in 267ms (compile: 120ms, render: 147ms)
+ GET /app/studio 200 in 538ms (compile: 31ms, render: 507ms)
+ GET /app/studio 200 in 79ms (compile: 17ms, render: 62ms)
+ GET /app/studio 200 in 149ms (compile: 89ms, render: 61ms)
+ GET /app/studio 200 in 152ms (compile: 87ms, render: 65ms)
+ GET /app/studio 200 in 179ms (compile: 109ms, render: 70ms)
+ GET /app/studio 200 in 143ms (compile: 80ms, render: 63ms)
+ GET /app/studio 200 in 303ms (compile: 106ms, render: 197ms)
+ GET /app/studio 200 in 81ms (compile: 12ms, render: 69ms)
+ GET /app/studio 200 in 186ms (compile: 110ms, render: 76ms)
+ POST /api/pro/image/create 200 in 65s (compile: 1950ms, render: 63s)
+ GET /app/studio 200 in 474ms (compile: 363ms, render: 111ms)
+ GET /app/studio 200 in 74ms (compile: 13ms, render: 61ms)
+ GET /app/studio 200 in 171ms (compile: 95ms, render: 75ms)
+ GET /app/studio 200 in 527ms (compile: 13ms, render: 514ms)
+ GET /app/studio 200 in 211ms (compile: 117ms, render: 93ms)
+ GET /api/pro/brand-kit/status?brandId=d2f28737-235d-404f-afc7-528f35aa2afa 200 in 2.8s (compile: 1321ms, render: 1527ms)
+ GET /app/studio 200 in 236ms (compile: 126ms, render: 110ms)
+ POST /api/pro/marketing-dna 201 in 11.5s (compile: 1972ms, render: 9.5s)
+ GET /app/studio 200 in 101ms (compile: 36ms, render: 64ms)
+ POST /api/pro/brand-kit/style 200 in 3.2s (compile: 1599ms, render: 1561ms)
+ POST /api/pro/post-options 200 in 14.9s (compile: 847ms, render: 14.0s)
+○ Compiling /api/pro/image/create ...
+ GET /app/studio 200 in 90ms (compile: 36ms, render: 54ms)
+ POST /api/pro/image/create 200 in 2.1min (compile: 55s, render: 70s)
+ GET /app/studio 200 in 455ms (compile: 348ms, render: 106ms)
+ GET /app/studio 200 in 58ms (compile: 9ms, render: 49ms)
+○ Compiling /api/pro/image/create ...
+ GET /app/studio 200 in 137ms (compile: 71ms, render: 65ms)
+ POST /api/pro/image/create 200 in 112s (compile: 7.0s, render: 105s)
+○ Compiling /api/linkedin/connection ...
+ GET /app/studio 200 in 402ms (compile: 137ms, render: 265ms)
+ GET /api/linkedin/connection 200 in 5.9s (compile: 3.8s, render: 2.2s)
+ GET /api/linkedin/connection 200 in 6.1s (compile: 3.8s, render: 2.4s)
+ GET /app/studio 200 in 505ms (compile: 383ms, render: 122ms)
+ GET /app/studio 200 in 154ms (compile: 31ms, render: 124ms)
+ GET / 200 in 4.6s (compile: 3.2s, render: 1389ms)
+ GET /app/studio 200 in 275ms (compile: 62ms, render: 213ms)
+ GET /app/studio 200 in 224ms (compile: 38ms, render: 186ms)
+ GET / 200 in 4.0s (compile: 2.8s, render: 1198ms)

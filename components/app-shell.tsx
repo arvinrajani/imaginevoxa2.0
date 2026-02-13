@@ -10,6 +10,7 @@ import {
   Settings,
   Wand2,
   FileStack,
+  LayoutTemplate,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/app", icon: <LayoutDashboard size={18} /> },
   { label: "Generate", href: "/app/generate", icon: <Wand2 size={18} /> },
+  { label: "Studio", href: "/app/studio", icon: <LayoutTemplate size={18} /> },
   { label: "Posts", href: "/app/posts", icon: <FileStack size={18} /> },
   { label: "LinkedIn", href: "/app/linkedin", icon: <PlugZap size={18} /> },
   { label: "Settings", href: "/app/settings", icon: <Settings size={18} /> },

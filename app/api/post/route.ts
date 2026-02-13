@@ -8,8 +8,9 @@ type PostRequest = {
 };
 
 type Org = {
-  urn: string;
-  // Add other properties if needed based on your schema
+  urn?: string;
+  id?: string;
+  name?: string;
 };
 
 export async function POST(request: Request) {
@@ -44,13 +45,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: connection, error: connectionError } = await supabase
+  const { data: connectionRows, error: connectionError } = await supabase
     .from("linkedin_connections")
     .select("*")
     .eq("user_id", user.id)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const connection = connectionRows?.[0] ?? null;
 
-  if (connectionError || !connection?.access_token) {
+  if (connectionError || !connection) {
     return NextResponse.json({ error: "LinkedIn not connected." }, { status: 400 });
   }
 
@@ -58,8 +61,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid target type." }, { status: 400 });
   }
 
+  const personalToken =
+    typeof connection.access_token === "string" ? connection.access_token : "";
+  const orgToken =
+    typeof connection.org_access_token === "string" ? connection.org_access_token : "";
+  const accessToken =
+    body.targetType === "org" ? (orgToken || personalToken) : personalToken;
+
+  if (!accessToken) {
+    return NextResponse.json({ error: "LinkedIn token missing. Please reconnect." }, { status: 400 });
+  }
+
+  const tokenExpiryRaw =
+    body.targetType === "org"
+      ? (connection.org_expires_at || connection.expires_at)
+      : connection.expires_at;
+
+  if (tokenExpiryRaw) {
+    const expiresAt = new Date(tokenExpiryRaw);
+    if (Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() <= Date.now()) {
+      return NextResponse.json({ error: "LinkedIn token expired. Please reconnect." }, { status: 400 });
+    }
+  }
+
   if (body.targetType === "org") {
-    const orgUrns = (connection.orgs ?? []).map((org: Org) => org.urn);
+    const orgUrns = Array.isArray(connection.orgs)
+      ? (connection.orgs as Org[])
+          .map((org) => {
+            if (typeof org?.urn === "string" && org.urn.trim()) return org.urn.trim();
+            if (typeof org?.id === "string" && org.id.trim()) return `urn:li:organization:${org.id.trim()}`;
+            return "";
+          })
+          .filter(Boolean)
+      : [];
+
     if (!body.targetUrn || !orgUrns.includes(body.targetUrn)) {
       return NextResponse.json(
         { error: "Organization not authorized." },
@@ -68,8 +103,14 @@ export async function POST(request: Request) {
     }
   }
 
-  const authorUrn =
-    body.targetType === "org" ? body.targetUrn : connection.member_urn;
+  const memberUrn =
+    typeof connection.member_urn === "string" && connection.member_urn.trim()
+      ? connection.member_urn.trim()
+      : typeof connection.linkedin_member_urn === "string" && connection.linkedin_member_urn.trim()
+      ? connection.linkedin_member_urn.trim()
+      : "";
+
+  const authorUrn = body.targetType === "org" ? body.targetUrn : memberUrn;
   if (!authorUrn) {
     return NextResponse.json({ error: "Missing target URN." }, { status: 400 });
   }
@@ -79,7 +120,7 @@ export async function POST(request: Request) {
   const linkedInResponse = await fetch("https://api.linkedin.com/v2/ugcPosts", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${connection.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       "X-Restli-Protocol-Version": "2.0.0",
     },

@@ -1,0 +1,8 @@
+⚠ IPC spawn blocked (EPERM); running dev server in-process.
+[Error: Failed to open database
+
+Caused by:
+    0: Loading persistence directory failed
+    1: Access is denied. (os error 5)] {
+  code: 'GenericFailure'
+}

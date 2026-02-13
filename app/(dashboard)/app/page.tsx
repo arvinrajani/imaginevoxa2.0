@@ -194,11 +194,11 @@ function PostCard({ post }: { post: Post }) {
             {post.post_content.length > 150 ? `${post.post_content.substring(0, 150)}...` : post.post_content}
           </p>
         </div>
-        <Link href={`/app/posts`}>
-          <Button variant="ghost" size="sm" className="shrink-0">
+        <Button asChild variant="ghost" size="sm" className="shrink-0">
+          <Link href="/app/posts">
             <ChevronRight className="h-4 w-4" />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
     </motion.div>
   );
@@ -218,12 +218,12 @@ function EmptyState() {
       <p className="text-sm text-slate-400 mb-4">
         Create your first AI-powered LinkedIn post
       </p>
-      <Link href="/app/generate">
-        <Button className="bg-gradient-to-r from-violet-600 to-blue-600">
+      <Button asChild className="bg-gradient-to-r from-violet-600 to-blue-600">
+        <Link href="/app/generate">
           <Plus className="h-4 w-4 mr-2" />
           Create Post
-        </Button>
-      </Link>
+        </Link>
+      </Button>
     </motion.div>
   );
 }
@@ -231,6 +231,7 @@ function EmptyState() {
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [daysUntilReset, setDaysUntilReset] = useState<number | null>(null);
   const [data, setData] = useState<DashboardData>({
     userName: '',
     plan: 'pro',
@@ -330,16 +331,19 @@ export default function DashboardPage() {
     fetchDashboardData();
   };
 
-  useEffect(() => {    fetchDashboardData();
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const now = new Date();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const days = Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    setDaysUntilReset(days);
   }, []);
 
   const creditsRemaining = Math.max(0, data.creditsTotal - data.creditsUsed);
   const creditPercentage = data.creditsTotal > 0 ? (data.creditsUsed / data.creditsTotal) * 100 : 0;
-
-  // Calculate days until reset (end of month)
-  const now = new Date();
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const daysUntilReset = Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
   const focusActions = [
     {
@@ -408,12 +412,12 @@ export default function DashboardPage() {
                 )}
               </Button>
             )}
-            <Link href="/app/generate">
-              <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white shadow-lg shadow-violet-500/25">
+            <Button asChild className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white shadow-lg shadow-violet-500/25">
+              <Link href="/app/generate">
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </>
         }
       />
@@ -513,12 +517,12 @@ export default function DashboardPage() {
                 </div>
               </div>
               <p className="text-sm text-slate-400 mb-4">{focusAction.description}</p>
-              <Link href={focusAction.href}>
-                <Button className="w-full bg-voxa-gradient text-white hover:opacity-90">
+              <Button asChild className="w-full bg-voxa-gradient text-white hover:opacity-90">
+                <Link href={focusAction.href}>
                   {focusAction.cta}
                   <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </motion.div>
           )}
 
@@ -623,18 +627,18 @@ export default function DashboardPage() {
                     />
                   </div>
                   <p className="text-sm text-slate-200 mt-2">
-                    Resets in {daysUntilReset} days • {PLAN_LIMITS[data.plan].name} Plan
+                    Resets in {daysUntilReset ?? '--'} days • {PLAN_LIMITS[data.plan].name} Plan
                   </p>
                 </>
               )}
             </div>
             {data.plan !== 'business' && (
-              <Link href="/pricing">
-                <Button className="w-full bg-white/20 hover:bg-white/30 text-white border-0">
+              <Button asChild className="w-full bg-white/20 hover:bg-white/30 text-white border-0">
+                <Link href="/pricing">
                   <CreditCard className="h-4 w-4 mr-2" />
                   Upgrade Plan
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             )}
           </motion.div>
 
@@ -669,11 +673,11 @@ export default function DashboardPage() {
                 : 'Connect your LinkedIn account to publish posts directly.'
               }
             </p>
-            <Link href="/app/linkedin">
-              <Button variant="outline" size="sm" className="w-full">
+            <Button asChild variant="outline" size="sm" className="w-full">
+              <Link href="/app/linkedin">
                 {data.linkedinConnected ? 'Manage Connection' : 'Connect LinkedIn'}
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </motion.div>
         </div>
       </div>

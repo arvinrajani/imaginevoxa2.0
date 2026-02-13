@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -21,6 +21,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 // Guest Generator Component
 function GuestGenerator() {
@@ -32,15 +34,15 @@ function GuestGenerator() {
   // Different content templates based on tone
   const toneTemplates: Record<string, (topic: string) => { content: string; imageUrl: string }> = {
     professional: (topic) => ({
-      content: `📊 ${topic}\n\nAfter analyzing hundreds of data points, here's what separates top performers:\n\n→ Strategic thinking over reactive decisions\n→ Consistent execution beats sporadic brilliance\n→ Building systems, not just hitting goals\n\nThe most successful leaders I've worked with all share one trait: they invest in understanding before acting.\n\nKey takeaway: Excellence isn't accidental—it's engineered.\n\nWhat frameworks have driven results in your experience?\n\n#${topic.replace(/\s+/g, '')} #Leadership #Strategy`,
+      content: `${topic} isn't a one-time project. The teams that win treat it like a system.\n\nAfter reviewing dozens of examples, three patterns show up again and again:\n- Clear ownership beats shared responsibility\n- Weekly cadence beats sporadic sprints\n- Simple scorecards beat vanity metrics\n\nIf you're working on ${topic}, try a 10-minute audit:\n1) What single outcome matters most?\n2) Which leading metric predicts it?\n3) What will you stop doing to make room?\n\nSmall systems create big results.\n\nWhat change moved the needle for you?\n\n#${topic.replace(/\s+/g, '')} #Leadership #Strategy`,
       imageUrl: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=600&fit=crop'
     }),
     casual: (topic) => ({
-      content: `Hey friends! 👋\n\nCan we talk about ${topic.toLowerCase()} for a sec?\n\nI've been thinking about this a lot lately and honestly... it's wild how much we overcomplicate things.\n\nHere's my hot take:\n\n✨ Keep it simple\n✨ Be yourself\n✨ Learn as you go\n\nSeriously, that's it. No fancy frameworks needed.\n\nAnyone else feel like we make things harder than they need to be? 😅\n\nDrop your thoughts below - I'm curious!\n\n#${topic.replace(/\s+/g, '')} #RealTalk #Learning`,
+      content: `Quick thought on ${topic}.\n\nI used to overthink it. What helped me most:\n- Pick one small win for this week\n- Show up consistently\n- Review what worked on Friday\n\nThat's it. The boring basics win.\n\nWhat are you trying right now?\n\n#${topic.replace(/\s+/g, '')} #RealTalk #Learning`,
       imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&h=600&fit=crop'
     }),
     bold: (topic) => ({
-      content: `🔥 UNPOPULAR OPINION about ${topic.toUpperCase()}:\n\nMost advice you've heard is WRONG.\n\nHere's the truth nobody wants to tell you:\n\n❌ "Play it safe" → Winners take calculated risks\n❌ "Wait for the right moment" → The right moment is NOW\n❌ "Follow the crowd" → Leaders create their own path\n\nI built my career by doing the OPPOSITE of conventional wisdom.\n\nStop asking for permission. Start making moves.\n\nWho's ready to break the rules? 💪\n\n#${topic.replace(/\s+/g, '')} #Mindset #Success`,
+      content: `Hot take on ${topic.toUpperCase()}:\n\nMost advice is optimized for feeling busy, not getting results.\n\nIf you want outcomes, do the opposite:\n- Say no to "nice-to-have" projects\n- Measure one metric that actually moves the needle\n- Ship before it's perfect, then iterate\n\nThe fastest teams I see win by reducing noise, not adding tools.\n\nAgree or disagree?\n\n#${topic.replace(/\s+/g, '')} #Mindset #Execution`,
       imageUrl: 'https://images.unsplash.com/photo-1533227268428-f9ed0900fb3b?w=800&h=600&fit=crop'
     }),
   };
@@ -313,6 +315,57 @@ function StatCard({ value, label, icon: Icon }: { value: string; label: string; 
 }
 
 export default function LandingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryString = searchParams.toString();
+  const oauthCode = searchParams.get('code');
+
+  useEffect(() => {
+    if (!oauthCode) return;
+
+    const params = new URLSearchParams(queryString);
+    if (!params.get('next')) {
+      params.set('next', '/app');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.replace(`/auth/callback?${params.toString()}`);
+    }
+  }, [oauthCode, queryString, router]);
+
+  useEffect(() => {
+    if (oauthCode) return;
+
+    let active = true;
+    const supabase = createClient();
+
+    const checkSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
+
+        if (data.session?.user) {
+          router.replace('/app');
+        }
+      } catch {
+        // Keep landing page usable if session lookup fails.
+      }
+    };
+
+    checkSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        router.replace('/app');
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [oauthCode, router]);
+
   return (
     <div className="min-h-screen bg-transparent text-slate-100">
       {/* Navigation */}

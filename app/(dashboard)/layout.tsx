@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   FileText,
   Sparkles,
-  Link2,
   Settings,
   Activity,
   BarChart3,
@@ -19,25 +18,32 @@ import {
   X,
   ChevronRight,
   Bell,
-  User,
   HelpCircle,
   Zap,
   Loader2,
-  Plus
+  Plus,
+  LayoutTemplate
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
 import { createClient } from '@/lib/supabase/client';
 
-const navigation = [
+const baseNavigation = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
   { name: 'Generate', href: '/app/generate', icon: Sparkles },
+  { name: 'Studio', href: '/app/studio', icon: LayoutTemplate },
   { name: 'My Posts', href: '/app/posts', icon: FileText },
   { name: 'LinkedIn', href: '/app/linkedin', icon: Linkedin },
   { name: 'Metrics', href: '/app/metrics', icon: BarChart3 },
   { name: 'Activity', href: '/app/activity', icon: Activity },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ];
+
+const PLAN_LIMITS = {
+  starter: { credits: 25, name: 'Starter' },
+  pro: { credits: 30, name: 'Pro' },
+  business: { credits: 60, name: 'Pro+' }
+};
 
 export default function AppLayout({
   children,
@@ -52,9 +58,12 @@ export default function AppLayout({
   const [user, setUser] = useState<{ email: string; name: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const navigation = useMemo(() => baseNavigation, []);
+
   const pageMeta = useMemo(() => {
     const metaMap: Array<{ match: string; title: string; subtitle: string }> = [
       { match: '/app/generate', title: 'Generate', subtitle: 'Craft a new post with Voxa AI.' },
+      { match: '/app/studio', title: 'Pro Studio', subtitle: 'Human-in-the-loop brand and content control.' },
       { match: '/app/posts', title: 'My Posts', subtitle: 'Review drafts, scheduled, and published posts.' },
       { match: '/app/linkedin', title: 'LinkedIn', subtitle: 'Manage your LinkedIn connections.' },
       { match: '/app/metrics', title: 'Metrics', subtitle: 'See your content performance at a glance.' },
@@ -69,59 +78,122 @@ export default function AppLayout({
     );
   }, [pathname]);
   
-  // Plan configurations
-  const PLAN_LIMITS = {
-    starter: { credits: 25, name: 'Starter' },
-    pro: { credits: 30, name: 'Pro' },
-    business: { credits: 60, name: 'Pro+' }
-  };
-  
   const creditPercentage = credits.total > 0 ? (credits.used / credits.total) * 100 : 0;
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient();
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
-      
-      if (error || !authUser) {
-        router.push('/login');
-        return;
+    let active = true;
+    const supabase = createClient();
+    const loginPath = `/login?next=${encodeURIComponent(pathname || '/app')}`;
+
+    const redirectToLogin = () => {
+      router.replace(loginPath);
+    };
+
+    const resolveSessionUser = async () => {
+      const maxAttempts = 8;
+      const retryDelayMs = 250;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.user) {
+          return sessionData.session.user;
+        }
+
+        const {
+          data: { user: fetchedUser },
+        } = await supabase.auth.getUser();
+
+        if (fetchedUser) {
+          return fetchedUser;
+        }
+
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
       }
 
-      // Get user profile with plan
-      const { data: profileRows } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .limit(1);
-      const profile = profileRows?.[0] ?? null;
+      return null;
+    };
 
-      const plan: 'starter' | 'pro' | 'business' = 'pro';
-      setUserPlan(plan);
+    const checkAuth = async () => {
+      try {
+        const authUser = await resolveSessionUser();
 
-      setUser({
-        email: authUser.email || '',
-        name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
-      });
-      
-      // Get posts this month to calculate credits used
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const { data: posts } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', authUser.id)
-        .gte('created_at', startOfMonth.toISOString());
-      
-      const postsThisMonth = posts?.length || 0;
-      const planCredits = PLAN_LIMITS[plan].credits;
-      setCredits({ used: postsThisMonth, total: planCredits });
-      setIsLoading(false);
+        if (!authUser) {
+          redirectToLogin();
+          return;
+        }
+
+        // Get user profile with plan
+        const { data: profileRows } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .limit(1);
+        const profile = profileRows?.[0] ?? null;
+
+        const rawPlan = String(profile?.plan ?? authUser.user_metadata?.plan ?? '').trim().toLowerCase();
+        const normalizedPlan = rawPlan.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const isBusinessPlan =
+          normalizedPlan.includes('business') ||
+          normalizedPlan.includes('pro+') ||
+          normalizedPlan.includes('pro plus');
+        const isStarterPlan =
+          normalizedPlan.includes('starter') ||
+          normalizedPlan.includes('free');
+        const isProPlan =
+          normalizedPlan.includes('pro') ||
+          normalizedPlan.includes('professional');
+
+        const plan: 'starter' | 'pro' | 'business' = isBusinessPlan
+          ? 'business'
+          : isStarterPlan
+          ? 'starter'
+          : isProPlan
+          ? 'pro'
+          : 'pro';
+        if (!active) return;
+        setUserPlan(plan);
+
+        setUser({
+          email: authUser.email || '',
+          name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+        });
+
+        // Get posts this month to calculate credits used
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const { data: posts } = await supabase
+          .from('posts')
+          .select('id')
+          .eq('user_id', authUser.id)
+          .gte('created_at', startOfMonth.toISOString());
+
+        if (!active) return;
+        const postsThisMonth = posts?.length || 0;
+        const planCredits = PLAN_LIMITS[plan].credits;
+        setCredits({ used: postsThisMonth, total: planCredits });
+        setIsLoading(false);
+      } catch {
+        if (!active) return;
+        redirectToLogin();
+      }
     };
 
     checkAuth();
-  }, [router]);
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_OUT' || event === 'USER_DELETED') && !session?.user) {
+        redirectToLogin();
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [pathname, router]);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -203,11 +275,12 @@ export default function AppLayout({
                 />
               </div>
               {userPlan !== 'business' && (
-                <Link href="/pricing">
-                  <button className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
-                    <Zap className="h-4 w-4" />
-                    {userPlan === 'starter' ? 'See Plans' : 'Upgrade Plan'}
-                  </button>
+                <Link
+                  href="/pricing"
+                  className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                >
+                  <Zap className="h-4 w-4" />
+                  {userPlan === 'starter' ? 'See Plans' : 'Upgrade Plan'}
                 </Link>
               )}
             </div>
@@ -256,7 +329,10 @@ export default function AppLayout({
                 <p className="text-sm font-medium text-white truncate">
                   {user?.name || 'User'}
                 </p>
-                <p className={`text-xs truncate ${
+                <p className="text-xs text-slate-400 truncate">
+                  {user?.email || 'No email'}
+                </p>
+                <p className={`text-[11px] truncate ${
                   userPlan === 'business' 
                     ? 'text-amber-300'
                   : userPlan === 'pro'
@@ -302,15 +378,17 @@ export default function AppLayout({
               </div>
 
               <div className="flex items-center gap-2">
-                <Link href="/app/generate">
-                  <Button
-                    size="sm"
-                    className="bg-voxa-gradient text-white hover:opacity-90 hidden sm:flex shadow-voxa"
-                  >
+                <Button
+                  asChild
+                  size="sm"
+                  className="bg-voxa-gradient text-white hover:opacity-90 hidden sm:flex shadow-voxa"
+                >
+                  <Link href="/app/generate">
                     <Plus className="h-4 w-4" />
                     New Post
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
+                {/* Notification actions are non-navigational controls */}
                 <button className="relative p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white">
                   <Bell className="h-5 w-5" />
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />

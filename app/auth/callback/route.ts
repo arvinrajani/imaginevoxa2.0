@@ -5,6 +5,9 @@ import { createServerClient } from "@supabase/ssr";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
+  const next = searchParams.get("next");
+  const redirectPath =
+    next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
 
   if (code) {
     const cookieStore = await cookies();
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       // Redirect to app after successful auth
-      return NextResponse.redirect(new URL("/app", request.url));
+      return NextResponse.redirect(new URL(redirectPath, request.url));
     }
   }
 

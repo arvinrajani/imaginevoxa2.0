@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Mail, 
   Lock, 
@@ -11,7 +11,6 @@ import {
   EyeOff, 
   ArrowRight, 
   Sparkles,
-  Check,
   AlertCircle,
   Shield
 } from 'lucide-react';
@@ -21,11 +20,56 @@ import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const redirectPath = useMemo(() => {
+    const nextParam = searchParams.get('next');
+    if (!nextParam || !nextParam.startsWith('/') || nextParam.startsWith('//')) {
+      return '/app';
+    }
+    return nextParam;
+  }, [searchParams]);
+
+  useEffect(() => {
+    let active = true;
+    const supabase = createClient();
+
+    const checkSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
+
+        if (data.session?.user) {
+          router.replace(redirectPath);
+        }
+      } catch {
+        // If session lookup fails, keep login usable.
+      }
+    };
+
+    checkSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        router.replace(redirectPath);
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [redirectPath, router]);
+
+  useEffect(() => {
+    if (searchParams.get('error') === 'auth_failed') {
+      setError('Sign-in could not be completed. Please try again.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +78,7 @@ export default function LoginPage() {
     
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -44,9 +88,13 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/app');
-      router.refresh();
-    } catch (err) {
+      if (!data.session) {
+        setError('Login succeeded but session was not established. Please try again.');
+        return;
+      }
+
+      router.replace(redirectPath);
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
@@ -59,10 +107,13 @@ export default function LoginPage() {
     
     try {
       const supabase = createClient();
+      const callbackUrl = new URL('/auth/callback', window.location.origin);
+      callbackUrl.searchParams.set('next', redirectPath);
+
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl.toString(),
         },
       });
 
@@ -70,7 +121,7 @@ export default function LoginPage() {
         setError(authError.message);
         setIsLoading(false);
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
       setIsLoading(false);
     }

@@ -532,7 +532,8 @@ export default function SettingsPage() {
 
       const postsThisMonth = posts?.length || 0;
 
-      const plan: 'starter' | 'pro' | 'business' = 'pro';
+      const plan: 'starter' | 'pro' | 'business' =
+        profile?.plan === 'pro' || profile?.plan === 'business' ? profile.plan : 'starter';
       const creditsTotal = PLANS[plan].credits;
 
       return {

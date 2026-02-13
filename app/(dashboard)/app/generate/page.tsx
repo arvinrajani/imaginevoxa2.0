@@ -823,20 +823,26 @@ export default function GeneratePage() {
       />
 
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <p className="text-xs text-gray-500 mb-1">Step 1</p>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Choose a source</p>
-          <p className="text-xs text-gray-500 mt-1">Text, PDF, images, or video.</p>
+        <div className="rounded-xl border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-br from-violet-50 to-white dark:from-violet-900/20 dark:to-gray-900 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full bg-violet-600 text-white flex items-center justify-center text-xs font-bold">1</div>
+            <p className="text-sm font-bold text-violet-900 dark:text-violet-100">Choose Your Content</p>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Start with text ideas, upload a PDF, add photos, or share a video</p>
         </div>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <p className="text-xs text-gray-500 mb-1">Step 2</p>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Add context</p>
-          <p className="text-xs text-gray-500 mt-1">Audience, goal, and tone.</p>
+        <div className="rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">2</div>
+            <p className="text-sm font-bold text-blue-900 dark:text-blue-100">Set Tone & Goals</p>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Tell us who you're talking to and what tone to use</p>
         </div>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <p className="text-xs text-gray-500 mb-1">Step 3</p>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Edit and publish</p>
-          <p className="text-xs text-gray-500 mt-1">Refine, then post or copy.</p>
+        <div className="rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-gray-900 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">3</div>
+            <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Review & Share</p>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Edit the AI draft, then publish directly or copy to LinkedIn</p>
         </div>
       </div>
 
@@ -985,10 +991,14 @@ export default function GeneratePage() {
                 <textarea
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g., My thoughts on remote work productivity, 5 lessons from scaling a startup, Why authenticity matters in leadership..."
+                  placeholder="Type your topic or idea here...\n\nExamples:\n• Share 3 lessons I learned from failing at my first startup\n• Explain why AI won't replace developers, but will change how we work\n• Announce our company's new sustainability initiative\n• Tell the story of how I landed my dream job\n• Give 5 actionable tips for better LinkedIn engagement\n\nThe more detail you provide, the better your AI-generated post will be!"
                   rows={4}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                  <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>Tip: Be specific! Instead of "productivity tips", try "5 time management techniques that helped me finish work by 3pm"</span>
+                </p>
               </div>
 
               {/* Quick Templates */}
@@ -1103,14 +1113,16 @@ export default function GeneratePage() {
                 <textarea
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g., This is a product catalog for BAGB intelligent capacitors. Key features include: reactive power compensation, energy saving, intelligent switching..."
+                  placeholder={pdfText && !pdfText.includes('Could not extract') 
+                    ? "Add context or angle for the post...\n\nExamples:\n• Highlight the 3 most important insights from this report\n• Focus on the cost-saving benefits mentioned in the document\n• Create a post that asks for feedback on these findings"
+                    : "Describe the main points from your PDF...\n\nExamples:\n• This product catalog covers our new smart capacitors with energy-saving features\n• Whitepaper about AI trends in 2026, focusing on practical business applications\n• Case study showing how our client increased sales by 40% in 6 months"}
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                   {pdfText && !pdfText.includes('Could not extract') 
-                    ? 'Add extra context to guide the AI'
-                    : 'Since text extraction failed, describe the main points from your PDF'}
+                    ? '✓ We extracted the text - add any extra context or focus areas here'
+                    : '⚠️ Couldn\'t extract text automatically - please summarize the key points from your PDF'}
                 </p>
               </div>
             </div>
@@ -1180,12 +1192,13 @@ export default function GeneratePage() {
                 <textarea
                   value={imagePrompt}
                   onChange={(e) => setImagePrompt(e.target.value)}
-                  placeholder="e.g., Just finished an amazing team offsite! Here are some highlights..., Proud to announce our new product launch..., Behind the scenes of our company culture..."
+                  placeholder="Tell us what story these images tell...\n\nExamples:\n• Just wrapped our best team offsite yet! These moments show what makes our culture special\n• Proud to unveil our new product. Here's what 6 months of work looks like\n• Behind the scenes of how we solve customer problems every day\n• Last week at the conference - met incredible people and learned so much"
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Describe what you want to say about your images
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                  <ImageIcon className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>AI will create engaging text to complement your images - be descriptive about what they show and why they matter</span>
                 </p>
               </div>
             </>
@@ -1270,12 +1283,13 @@ export default function GeneratePage() {
                 <textarea
                   value={videoPrompt}
                   onChange={(e) => setVideoPrompt(e.target.value)}
-                  placeholder="e.g., Sharing highlights from our product demo video, Behind the scenes of our event, A quick walkthrough of the new feature..."
+                  placeholder="Describe your video content...\n\nExamples:\n• Quick demo of our new feature that saves users 2 hours a week\n• Recap of last week's industry event with key takeaways\n• Behind-the-scenes look at how we build our products\n• Customer testimonial showing real results from our solution"
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Describe what you want to say about your video
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                  <Video className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>We'll write a compelling caption that drives engagement with your video content</span>
                 </p>
               </div>
             </>
@@ -1309,21 +1323,27 @@ export default function GeneratePage() {
           {/* Audience & Goal */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Audience and Goal
+              Audience and Goal (Optional but Recommended)
             </label>
             <div className="space-y-3">
-              <input
-                value={targetAudience}
-                onChange={(e) => setTargetAudience(e.target.value)}
-                placeholder="Target audience (e.g., Hiring managers, SaaS founders)"
-                className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
-              />
-              <input
-                value={postGoal}
-                onChange={(e) => setPostGoal(e.target.value)}
-                placeholder="Primary goal or CTA (e.g., Book a demo, Share feedback)"
-                className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
-              />
+              <div>
+                <input
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value)}
+                  placeholder="Who are you writing for? (e.g., Marketing managers, Tech entrepreneurs, Job seekers)"
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">This helps the AI write in a way that resonates with your readers</p>
+              </div>
+              <div>
+                <input
+                  value={postGoal}
+                  onChange={(e) => setPostGoal(e.target.value)}
+                  placeholder="What do you want readers to do? (e.g., Visit our website, Comment their thoughts, Book a call)"
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">We'll create a compelling call-to-action based on your goal</p>
+              </div>
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                   Length preference

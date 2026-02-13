@@ -292,7 +292,7 @@ export default function PricingPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Link href="/login">
+              <Link href="/app">
                 <Button variant="ghost" className="text-slate-300 hover:text-white">
                   Sign In
                 </Button>

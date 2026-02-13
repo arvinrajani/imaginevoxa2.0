@@ -70,7 +70,7 @@ export default function DemoPage() {
               <Link href="/#testimonials" className="px-3 py-1 rounded-full hover:bg-white/10 hover:text-white transition-colors">Testimonials</Link>
             </div>
             <div className="flex items-center gap-3">
-              <Link href="/login">
+              <Link href="/app">
                 <Button variant="ghost" className="text-slate-300 hover:text-white">
                   Sign In
                 </Button>
