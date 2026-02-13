@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { 
   Mail, 
   Lock, 
@@ -20,19 +20,25 @@ import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [redirectPath, setRedirectPath] = useState<string>('/app');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const redirectPath = useMemo(() => {
-    const nextParam = searchParams.get('next');
-    if (!nextParam || !nextParam.startsWith('/') || nextParam.startsWith('//')) {
-      return '/app';
+  useEffect(() => {
+    try {
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams('');
+      const nextParam = params.get('next');
+      if (!nextParam || !nextParam.startsWith('/') || nextParam.startsWith('//')) {
+        setRedirectPath('/app');
+      } else {
+        setRedirectPath(nextParam);
+      }
+    } catch {
+      setRedirectPath('/app');
     }
-    return nextParam;
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -66,10 +72,15 @@ export default function LoginPage() {
   }, [redirectPath, router]);
 
   useEffect(() => {
-    if (searchParams.get('error') === 'auth_failed') {
-      setError('Sign-in could not be completed. Please try again.');
+    try {
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams('');
+      if (params.get('error') === 'auth_failed') {
+        setError('Sign-in could not be completed. Please try again.');
+      }
+    } catch {
+      // ignore
     }
-  }, [searchParams]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

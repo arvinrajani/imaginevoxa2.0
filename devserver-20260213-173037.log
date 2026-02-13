@@ -57,3 +57,4 @@
  GET /app/studio 200 in 1162ms (compile: 266ms, render: 896ms)
  GET / 200 in 149ms (compile: 8ms, render: 141ms)
  GET /app/studio 200 in 83ms (compile: 4ms, render: 79ms)
+[?25h
