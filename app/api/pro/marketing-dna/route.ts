@@ -3,9 +3,20 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Missing OPENAI_API_KEY.');
+  }
+
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey });
+  }
+
+  return openaiClient;
+}
 
 type AnalysisType = 'linkedin' | 'manual';
 
@@ -473,6 +484,7 @@ async function analyzeLinkedInProfile(linkedinUrl: string, brandContext: BrandCo
     .filter(Boolean)
     .join('\n');
 
+  const openai = getOpenAIClient();
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -547,6 +559,7 @@ async function analyzeManualBrief(brief: string, brandContext: BrandContextInput
     .filter(Boolean)
     .join('\n');
 
+  const openai = getOpenAIClient();
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
