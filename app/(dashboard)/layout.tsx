@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   FileText,
   Sparkles,
+  Target,
   Settings,
   Activity,
   BarChart3,
@@ -32,6 +33,7 @@ const baseNavigation = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
   { name: 'Generate', href: '/app/generate', icon: Sparkles },
   { name: 'Studio', href: '/app/studio', icon: LayoutTemplate },
+  { name: 'Strategy', href: '/app/strategy', icon: Target },
   { name: 'My Posts', href: '/app/posts', icon: FileText },
   { name: 'LinkedIn', href: '/app/linkedin', icon: Linkedin },
   { name: 'Metrics', href: '/app/metrics', icon: BarChart3 },
@@ -64,6 +66,7 @@ export default function AppLayout({
     const metaMap: Array<{ match: string; title: string; subtitle: string }> = [
       { match: '/app/generate', title: 'Generate', subtitle: 'Craft a new post with Voxa AI.' },
       { match: '/app/studio', title: 'Pro Studio', subtitle: 'Human-in-the-loop brand and content control.' },
+      { match: '/app/strategy', title: 'Strategy Lab', subtitle: 'Optimize content and build your campaign calendar.' },
       { match: '/app/posts', title: 'My Posts', subtitle: 'Review drafts, scheduled, and published posts.' },
       { match: '/app/linkedin', title: 'LinkedIn', subtitle: 'Manage your LinkedIn connections.' },
       { match: '/app/metrics', title: 'Metrics', subtitle: 'See your content performance at a glance.' },

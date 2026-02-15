@@ -19,7 +19,8 @@ import {
   Trash2,
   Loader2,
   Target,
-  Layers
+  Layers,
+  CalendarDays
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -87,6 +88,13 @@ const quickActions = [
     icon: TrendingUp,
     href: '/app/metrics',
     gradient: 'from-emerald-500 to-teal-600',
+  },
+  {
+    title: 'Strategy Lab',
+    description: 'Optimize + plan 30 days',
+    icon: CalendarDays,
+    href: '/app/strategy',
+    gradient: 'from-cyan-500 to-blue-600',
   },
 ];
 
