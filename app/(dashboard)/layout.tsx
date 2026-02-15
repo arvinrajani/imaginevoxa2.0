@@ -124,13 +124,20 @@ export default function AppLayout({
           return;
         }
 
-        // Get user profile with plan
-        const { data: profileRows } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .limit(1);
-        const profile = profileRows?.[0] ?? null;
+        // Profile data is best-effort and should not block authenticated access.
+        let profile: { full_name?: string | null; plan?: string | null } | null = null;
+        try {
+          const { data: profileRows, error: profileError } = await supabase
+            .from('profiles')
+            .select('full_name, plan')
+            .eq('id', authUser.id)
+            .limit(1);
+          if (!profileError) {
+            profile = profileRows?.[0] ?? null;
+          }
+        } catch (error) {
+          console.warn('Profile lookup failed, continuing with defaults.', error);
+        }
 
         const rawPlan = String(profile?.plan ?? authUser.user_metadata?.plan ?? '').trim().toLowerCase();
         const normalizedPlan = rawPlan.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -160,18 +167,26 @@ export default function AppLayout({
           name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
         });
 
-        // Get posts this month to calculate credits used
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        // Post usage is also best-effort; keep app accessible if table/policies are not ready.
+        let postsThisMonth = 0;
+        try {
+          const now = new Date();
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        const { data: posts } = await supabase
-          .from('posts')
-          .select('id')
-          .eq('user_id', authUser.id)
-          .gte('created_at', startOfMonth.toISOString());
+          const { data: posts, error: postsError } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .gte('created_at', startOfMonth.toISOString());
+
+          if (!postsError) {
+            postsThisMonth = posts?.length || 0;
+          }
+        } catch (error) {
+          console.warn('Posts lookup failed, continuing with defaults.', error);
+        }
 
         if (!active) return;
-        const postsThisMonth = posts?.length || 0;
         const planCredits = PLAN_LIMITS[plan].credits;
         setCredits({ used: postsThisMonth, total: planCredits });
         setIsLoading(false);
@@ -183,8 +198,8 @@ export default function AppLayout({
 
     checkAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session?.user) {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
         redirectToLogin();
       }
     });
