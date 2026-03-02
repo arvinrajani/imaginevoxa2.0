@@ -18,7 +18,7 @@ export function AnimatedLogo({ size = 'md', showText = false, className = '' }: 
   };
 
   const s = sizes[size as keyof typeof sizes] || sizes.md;
-  const [logoSrc, setLogoSrc] = useState('/voxa-logo.svg');
+  const [logoSrc] = useState('/voxa-logo.png');
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
@@ -69,7 +69,7 @@ export function Logo({ size = 'md', showText = false, className = '' }: Animated
     <div className={`flex items-center gap-3 ${className}`}>
       <div className={`${s.logo} overflow-hidden bg-transparent`}>
         <img
-          src="/voxa-logo.svg"
+          src="/voxa-logo.png"
           alt="Voxa logo"
           className="h-full w-auto object-contain drop-shadow-[0_0_16px_rgba(34,211,238,0.3)]"
         />
