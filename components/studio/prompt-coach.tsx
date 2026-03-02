@@ -263,7 +263,7 @@ export default function PromptCoach({ onUsePrompt, defaultType = 'text' }: Promp
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-purple-600 dark:text-purple-300">
+              <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                 {step.icon}
               </div>
               <div>
@@ -330,7 +330,7 @@ export default function PromptCoach({ onUsePrompt, defaultType = 'text' }: Promp
                   onClick={() => setCurrentStep(idx)}
                   className={`h-2 rounded-full transition-all ${
                     idx === currentStep
-                      ? 'w-6 bg-purple-500'
+                      ? 'w-6 bg-purple-50'
                       : values[steps[idx].field]
                         ? 'w-2 bg-purple-300'
                         : 'w-2 bg-muted-foreground/30'

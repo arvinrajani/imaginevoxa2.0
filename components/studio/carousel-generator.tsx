@@ -127,7 +127,7 @@ export default function CarouselGenerator({ brandId, onUseCaption }: CarouselGen
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-indigo-500" />
+            <Layers className="h-5 w-5 text-indigo-50" />
             Carousel Generator
           </CardTitle>
           <CardDescription>
@@ -270,7 +270,7 @@ export default function CarouselGenerator({ brandId, onUseCaption }: CarouselGen
                             {slide.headline}
                           </h2>
                           <p
-                            className={`text-white/80 ${
+                            className={`text-gray-600 ${
                               slide.layout === 'title' ? 'text-base' : 'text-sm'
                             } leading-relaxed`}
                           >
@@ -317,7 +317,7 @@ export default function CarouselGenerator({ brandId, onUseCaption }: CarouselGen
                     key={idx}
                     onClick={() => setCurrentSlide(idx)}
                     className={`h-2 rounded-full transition-all ${
-                      idx === currentSlide ? 'w-6 bg-indigo-500' : 'w-2 bg-muted-foreground/30'
+                      idx === currentSlide ? 'w-6 bg-indigo-50' : 'w-2 bg-muted-foreground/30'
                     }`}
                   />
                 ))}
@@ -350,7 +350,7 @@ export default function CarouselGenerator({ brandId, onUseCaption }: CarouselGen
                       key={idx}
                       onClick={() => setCurrentSlide(idx)}
                       className={`aspect-square rounded-md overflow-hidden border-2 transition-all ${
-                        idx === currentSlide ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-transparent'
+                        idx === currentSlide ? 'border-indigo-50 ring-2 ring-indigo-200' : 'border-transparent'
                       }`}
                     >
                       <div

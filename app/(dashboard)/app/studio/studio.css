@@ -11,10 +11,10 @@
 
 @keyframes glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.25);
   }
   50% {
-    box-shadow: 0 0 40px rgba(6, 182, 212, 0.6);
+    box-shadow: 0 0 40px rgba(34, 211, 238, 0.5), 0 0 60px rgba(139, 92, 246, 0.2);
   }
 }
 
@@ -92,10 +92,10 @@
 .gradient-text-animated {
   background: linear-gradient(
     90deg,
-    #06b6d4,
-    #3b82f6,
+    #22d3ee,
+    #60a5fa,
     #8b5cf6,
-    #06b6d4
+    #22d3ee
   );
   background-size: 300% 100%;
   background-clip: text;
@@ -106,11 +106,11 @@
 
 /* Glass morphism effect */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 24px 0 rgba(15, 23, 42, 0.06);
 }
 
 /* Pro badge glow */
@@ -144,16 +144,16 @@
 
 .hover-lift:hover {
   transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
 }
 
 /* Loading skeleton shimmer */
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
+    #f1f5f9 25%,
+    #e2e8f0 50%,
+    #f1f5f9 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -171,17 +171,17 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #f8fafc;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #06b6d4, #3b82f6);
+  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #0891b2, #2563eb);
+  background: linear-gradient(180deg, #0891b2, #7c3aed);
 }
 
 /* Animated underline */
@@ -197,7 +197,7 @@ html {
   height: 2px;
   bottom: -4px;
   left: 0;
-  background: linear-gradient(90deg, #06b6d4, #3b82f6);
+  background: linear-gradient(90deg, #22d3ee, #8b5cf6);
   transition: width 0.3s ease;
 }
 
@@ -234,7 +234,7 @@ html {
   position: relative;
   border-radius: 1rem;
   padding: 2px;
-  background: linear-gradient(45deg, #06b6d4, #3b82f6, #8b5cf6, #06b6d4);
+  background: linear-gradient(45deg, #22d3ee, #60a5fa, #8b5cf6, #22d3ee);
   background-size: 300% 300%;
   animation: shimmer 3s ease infinite;
 }
@@ -254,7 +254,7 @@ html {
 
 .particle {
   position: absolute;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.3) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.25) 0%, transparent 70%);
   border-radius: 50%;
   animation: float 10s infinite ease-in-out;
 }

@@ -611,7 +611,7 @@ export default function SimpleStudioPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
       </div>
     );
   }
@@ -619,9 +619,9 @@ export default function SimpleStudioPage() {
   if (!selectedBrand) {
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-8">
-        <Card className="border-white/10 bg-[#0b1234]/80 p-8 text-center text-slate-100">
+        <Card className="border-gray-200/60 bg-white/80 p-8 text-center text-gray-800">
           <h2 className="text-2xl font-semibold">No brand available</h2>
-          <p className="mt-2 text-slate-300">
+          <p className="mt-2 text-gray-600">
             We could not load a brand for this account. Please refresh or create a brand in
             Settings.
           </p>
@@ -639,7 +639,7 @@ export default function SimpleStudioPage() {
         actions={
           <div className="flex items-center gap-2">
             {savedPostId ? (
-              <Badge className="border-emerald-400/40 bg-emerald-500/20 text-emerald-100">
+              <Badge className="border-emerald-400/40 bg-emerald-50/20 text-emerald-100">
                 Draft saved
               </Badge>
             ) : (
@@ -651,27 +651,27 @@ export default function SimpleStudioPage() {
         }
       />
 
-      <Card className="gap-5 border-white/10 bg-[#0b1234]/80 p-8 text-slate-100">
+      <Card className="gap-5 border-gray-200/60 bg-white/80 p-8 text-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">1. Upload your references</h2>
-            <p className="mt-1 text-slate-300">
+            <p className="mt-1 text-gray-600">
               Add images, PDFs, or text notes. The same context is used for both post and image
               generation.
             </p>
           </div>
-          <Badge variant="outline" className="border-white/20 text-slate-200">
+          <Badge variant="outline" className="border-gray-200 text-gray-700">
             Optional
           </Badge>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Brand</label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Brand</label>
             <select
               value={selectedBrandId}
               onChange={(event) => setSelectedBrandId(event.target.value)}
-              className="h-12 w-full rounded-md border border-white/20 bg-[#101a45] px-3 text-sm text-white outline-none focus:border-cyan-300"
+              className="h-12 w-full rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 outline-none focus:border-cyan-300"
             >
               {brands.map((brand) => (
                 <option key={brand.id} value={brand.id}>
@@ -695,7 +695,7 @@ export default function SimpleStudioPage() {
               size="lg"
               variant="outline"
               disabled={uploadingReferences}
-              className="h-12 border-white/20 bg-white/5 px-5 text-slate-100 hover:bg-white/10"
+              className="h-12 border-gray-200 bg-gray-50 px-5 text-gray-800 hover:bg-gray-100"
               onClick={() => referenceInputRef.current?.click()}
             >
               {uploadingReferences ? (
@@ -711,7 +711,7 @@ export default function SimpleStudioPage() {
               )}
             </Button>
 
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-gray-600">
               Tip: upload a short PDF case study or an image style reference for better output.
             </p>
 
@@ -720,19 +720,19 @@ export default function SimpleStudioPage() {
                 {references.map((reference) => (
                   <div
                     key={reference.id}
-                    className="rounded-xl border border-white/10 bg-[#0f1a47]/80 p-3"
+                    className="rounded-xl border border-gray-200/60 bg-gray-50/80 p-3"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <Badge
                         variant="outline"
-                        className="border-white/20 text-[10px] uppercase text-slate-300"
+                        className="border-gray-200 text-[10px] uppercase text-gray-600"
                       >
                         {reference.type}
                       </Badge>
                       <button
                         type="button"
                         onClick={() => removeReference(reference.id)}
-                        className="rounded-md p-1 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                        className="rounded-md p-1 text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
                         aria-label={`Remove ${reference.name}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -748,9 +748,9 @@ export default function SimpleStudioPage() {
                       />
                     )}
 
-                    <p className="text-sm font-medium text-slate-100">{reference.name}</p>
+                    <p className="text-sm font-medium text-gray-800">{reference.name}</p>
                     {reference.summary && (
-                      <p className="mt-2 text-xs leading-5 text-slate-300">
+                      <p className="mt-2 text-xs leading-5 text-gray-600">
                         {truncate(reference.summary, 240)}
                       </p>
                     )}
@@ -762,11 +762,11 @@ export default function SimpleStudioPage() {
         </div>
       </Card>
 
-      <Card className="gap-5 border-white/10 bg-[#0b1234]/80 p-8 text-slate-100">
+      <Card className="gap-5 border-gray-200/60 bg-white/80 p-8 text-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">2. Generate from one prompt</h2>
-            <p className="mt-1 text-slate-300">
+            <p className="mt-1 text-gray-600">
               This prompt drives both the post draft and the generated image.
             </p>
           </div>
@@ -779,7 +779,7 @@ export default function SimpleStudioPage() {
           value={sharedPrompt}
           onChange={(event) => setSharedPrompt(event.target.value)}
           placeholder="Example: Share how we helped logistics teams cut shipment delays by 32% using a simple forecasting workflow."
-          className="min-h-36 border-white/20 bg-[#101a45]/70 text-base text-white placeholder:text-slate-400"
+          className="min-h-36 border-gray-200 bg-gray-50/70 text-base text-gray-900 placeholder:text-gray-400"
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -788,7 +788,7 @@ export default function SimpleStudioPage() {
             size="lg"
             disabled={generating}
             onClick={handleGenerate}
-            className="h-12 min-w-[220px] bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+            className="h-12 min-w-[220px] bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600"
           >
             {generating ? (
               <>
@@ -831,21 +831,21 @@ export default function SimpleStudioPage() {
         )}
       </Card>
 
-      <Card className="gap-5 border-white/10 bg-[#0b1234]/80 p-8 text-slate-100">
+      <Card className="gap-5 border-gray-200/60 bg-white/80 p-8 text-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">3. Edit everything before saving</h2>
-            <p className="mt-1 text-slate-300">
+            <p className="mt-1 text-gray-600">
               Update post copy, hashtags, image prompt, and image itself on this single page.
             </p>
           </div>
-          <Badge variant="outline" className="border-white/20 text-slate-200">
+          <Badge variant="outline" className="border-gray-200 text-gray-700">
             Human review
           </Badge>
         </div>
 
         {!hasGeneratedDraft && (
-          <div className="rounded-xl border border-dashed border-white/25 bg-[#101a45]/60 p-8 text-center text-slate-300">
+          <div className="rounded-xl border border-dashed border-white/25 bg-gray-50/60 p-8 text-center text-gray-600">
             Generate once to unlock the post and image editors.
           </div>
         )}
@@ -853,46 +853,46 @@ export default function SimpleStudioPage() {
         {hasGeneratedDraft && (
           <>
             <div className="grid gap-6 xl:grid-cols-2">
-              <div className="space-y-4 rounded-xl border border-white/10 bg-[#101a45]/70 p-5">
+              <div className="space-y-4 rounded-xl border border-gray-200/60 bg-gray-50/70 p-5">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-lg font-semibold">Post editor</h3>
-                  <FileText className="h-4 w-4 text-cyan-200" />
+                  <FileText className="h-4 w-4 text-cyan-600" />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-200">Headline</label>
+                  <label className="text-sm font-medium text-gray-700">Headline</label>
                   <Input
                     value={headline}
                     onChange={(event) => setHeadline(event.target.value)}
-                    className="h-11 border-white/20 bg-[#0f1a47] text-white"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-900"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-200">Body</label>
+                  <label className="text-sm font-medium text-gray-700">Body</label>
                   <Textarea
                     value={body}
                     onChange={(event) => setBody(event.target.value)}
-                    className="min-h-56 border-white/20 bg-[#0f1a47] text-white"
+                    className="min-h-56 border-gray-200 bg-gray-50 text-gray-900"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-200">CTA</label>
+                  <label className="text-sm font-medium text-gray-700">CTA</label>
                   <Input
                     value={cta}
                     onChange={(event) => setCta(event.target.value)}
-                    className="h-11 border-white/20 bg-[#0f1a47] text-white"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-900"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-200">Hashtags</label>
+                  <label className="text-sm font-medium text-gray-700">Hashtags</label>
                   <Input
                     value={hashtagsInput}
                     onChange={(event) => setHashtagsInput(event.target.value)}
                     placeholder="#LinkedIn, #B2B, #Growth"
-                    className="h-11 border-white/20 bg-[#0f1a47] text-white"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-900"
                   />
                 </div>
 
@@ -901,7 +901,7 @@ export default function SimpleStudioPage() {
                   variant="outline"
                   disabled={regeneratingPost}
                   onClick={handleRegeneratePost}
-                  className="h-11 border-white/20 bg-white/5 text-slate-100 hover:bg-white/10"
+                  className="h-11 border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
                 >
                   {regeneratingPost ? (
                     <>
@@ -917,29 +917,29 @@ export default function SimpleStudioPage() {
                 </Button>
               </div>
 
-              <div className="space-y-4 rounded-xl border border-white/10 bg-[#101a45]/70 p-5">
+              <div className="space-y-4 rounded-xl border border-gray-200/60 bg-gray-50/70 p-5">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-lg font-semibold">Image editor</h3>
-                  <ImageIcon className="h-4 w-4 text-cyan-200" />
+                  <ImageIcon className="h-4 w-4 text-cyan-600" />
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#08112f]">
+                <div className="overflow-hidden rounded-xl border border-gray-200/60 bg-gray-50">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={imageUrl} alt="Generated visual" className="h-[280px] w-full object-cover" />
                   ) : (
-                    <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">
+                    <div className="flex h-[280px] items-center justify-center text-sm text-gray-500">
                       No image yet. Generate or upload one.
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-200">Image prompt</label>
+                  <label className="text-sm font-medium text-gray-700">Image prompt</label>
                   <Textarea
                     value={imagePrompt}
                     onChange={(event) => setImagePrompt(event.target.value)}
-                    className="min-h-28 border-white/20 bg-[#0f1a47] text-white"
+                    className="min-h-28 border-gray-200 bg-gray-50 text-gray-900"
                   />
                 </div>
 
@@ -949,7 +949,7 @@ export default function SimpleStudioPage() {
                     variant="outline"
                     disabled={regeneratingImage}
                     onClick={handleRegenerateImage}
-                    className="h-11 border-white/20 bg-white/5 text-slate-100 hover:bg-white/10"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
                   >
                     {regeneratingImage ? (
                       <>
@@ -977,7 +977,7 @@ export default function SimpleStudioPage() {
                     variant="outline"
                     disabled={uploadingReplacementImage}
                     onClick={() => replacementImageInputRef.current?.click()}
-                    className="h-11 border-white/20 bg-white/5 text-slate-100 hover:bg-white/10"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
                   >
                     {uploadingReplacementImage ? (
                       <>
@@ -999,7 +999,7 @@ export default function SimpleStudioPage() {
                       setImageUrl('');
                       setImageAssetId(null);
                     }}
-                    className="h-11 border-white/20 bg-white/5 text-slate-100 hover:bg-white/10"
+                    className="h-11 border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
                   >
                     <Trash2 className="h-4 w-4" />
                     Remove image
@@ -1008,14 +1008,14 @@ export default function SimpleStudioPage() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-xl border border-white/10 bg-[#101a45]/70 p-5">
-              <div className="flex items-center gap-2 text-slate-100">
-                <PencilLine className="h-4 w-4 text-cyan-200" />
+            <div className="space-y-4 rounded-xl border border-gray-200/60 bg-gray-50/70 p-5">
+              <div className="flex items-center gap-2 text-gray-800">
+                <PencilLine className="h-4 w-4 text-cyan-600" />
                 <h3 className="text-lg font-semibold">Live preview</h3>
               </div>
 
               <div className="rounded-xl border border-slate-200/70 bg-white p-5 text-slate-900 shadow-sm">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{selectedBrand.name}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-gray-400">{selectedBrand.name}</p>
                 <h4 className="mt-2 text-xl font-semibold leading-snug">
                   {headline || 'Your headline appears here'}
                 </h4>
@@ -1051,7 +1051,7 @@ export default function SimpleStudioPage() {
                 size="lg"
                 disabled={savingDraft}
                 onClick={handleSaveDraft}
-                className="h-12 min-w-[190px] bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                className="h-12 min-w-[190px] bg-emerald-500 text-white hover:bg-emerald-600"
               >
                 {savingDraft ? (
                   <>
@@ -1067,7 +1067,7 @@ export default function SimpleStudioPage() {
               </Button>
 
               {savedPostId && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-50/10 px-3 py-2 text-sm text-emerald-100">
                   <CheckCircle2 className="h-4 w-4" />
                   Draft saved with ID {savedPostId}
                 </div>
@@ -1076,7 +1076,7 @@ export default function SimpleStudioPage() {
               <Button
                 asChild
                 variant="outline"
-                className="h-12 border-white/20 bg-white/5 text-slate-100 hover:bg-white/10"
+                className="h-12 border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
               >
                 <Link href="/app/posts">Open My Posts</Link>
               </Button>

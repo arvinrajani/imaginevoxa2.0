@@ -12,6 +12,7 @@ import {
   Target,
   Settings,
   Activity,
+  AlertTriangle,
   BarChart3,
   CreditCard,
   LogOut,
@@ -23,20 +24,25 @@ import {
   Zap,
   Loader2,
   Plus,
-  LayoutTemplate
+  MessageSquare,
+  LayoutTemplate,
+  Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
 import { createClient } from '@/lib/supabase/client';
+import { GlobalBrandSelector } from '@/components/dashboard/global-brand-selector';
 
 const baseNavigation = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
+  { name: 'Brands', href: '/app/brands', icon: Building2 },
   { name: 'Generate', href: '/app/generate', icon: Sparkles },
   { name: 'Studio', href: '/app/studio', icon: LayoutTemplate },
   { name: 'Strategy', href: '/app/strategy', icon: Target },
   { name: 'My Posts', href: '/app/posts', icon: FileText },
   { name: 'LinkedIn', href: '/app/linkedin', icon: Linkedin },
-  { name: 'Metrics', href: '/app/metrics', icon: BarChart3 },
+  { name: 'Meta', href: '/app/meta', icon: Zap },
+  { name: 'AI Chatbot', href: '/app/settings/chatbot', icon: MessageSquare },
   { name: 'Activity', href: '/app/activity', icon: Activity },
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ];
@@ -69,7 +75,6 @@ export default function AppLayout({
       { match: '/app/strategy', title: 'Strategy Lab', subtitle: 'Optimize content and build your campaign calendar.' },
       { match: '/app/posts', title: 'My Posts', subtitle: 'Review drafts, scheduled, and published posts.' },
       { match: '/app/linkedin', title: 'LinkedIn', subtitle: 'Manage your LinkedIn connections.' },
-      { match: '/app/metrics', title: 'Metrics', subtitle: 'See your content performance at a glance.' },
       { match: '/app/activity', title: 'Activity', subtitle: 'Track everything happening in your workspace.' },
       { match: '/app/settings', title: 'Settings', subtitle: 'Profile, billing, and preferences.' },
       { match: '/app', title: 'Dashboard', subtitle: 'Your daily command center.' },
@@ -80,7 +85,7 @@ export default function AppLayout({
       { title: 'Workspace', subtitle: 'Welcome back to Voxa.' }
     );
   }, [pathname]);
-  
+
   const creditPercentage = credits.total > 0 ? (credits.used / credits.total) * 100 : 0;
 
   useEffect(() => {
@@ -158,10 +163,10 @@ export default function AppLayout({
         const plan: 'starter' | 'pro' | 'business' = isBusinessPlan
           ? 'business'
           : isStarterPlan
-          ? 'starter'
-          : isProPlan
-          ? 'pro'
-          : 'pro';
+            ? 'starter'
+            : isProPlan
+              ? 'pro'
+              : 'pro';
         if (!active) return;
         setUserPlan(plan);
 
@@ -219,19 +224,30 @@ export default function AppLayout({
     router.push('/login');
   };
 
+  const handleTopNav = (href: string) => {
+    if (pathname === href) {
+      router.refresh();
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+    router.push(href);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#050821] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-300 mx-auto mb-4" />
-          <p className="text-slate-400">Loading...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-cyan-600 mx-auto mb-4" />
+          <p className="text-gray-500">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050821]">
+    <div className="min-h-screen">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -240,40 +256,38 @@ export default function AppLayout({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-40 bg-gray-900/20 backdrop-blur-sm lg:hidden"
           />
         )}
       </AnimatePresence>
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#0b1234] border-r border-white/10 transform transition-transform duration-300 lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 border-r border-gray-200/60 backdrop-blur-xl transform transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between px-6 h-16 border-b border-white/10">
+          <div className="flex items-center justify-between px-6 h-16 border-b border-gray-200/60">
             <Link href="/app">
               <AnimatedLogo size="lg" />
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-lg hover:bg-white/5"
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
             >
-              <X className="h-5 w-5 text-slate-400" />
+              <X className="h-5 w-5 text-gray-500" />
             </button>
           </div>
 
           {/* Credits Card */}
           <div className="px-4 py-4">
-            <div className={`rounded-xl p-4 text-white ${
-              userPlan === 'business' 
-                ? 'bg-gradient-to-br from-cyan-500 via-blue-600 to-purple-600'
-                : userPlan === 'pro'
+            <div className={`rounded-xl p-4 text-white ${userPlan === 'business'
+              ? 'bg-gradient-to-br from-cyan-500 via-blue-600 to-purple-600'
+              : userPlan === 'pro'
                 ? 'bg-voxa-gradient'
-                : 'bg-[#1c244d]'
-            }`}>
+                : 'bg-gradient-to-br from-gray-100 to-gray-200 !text-gray-900'
+              }`}>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium opacity-90">
                   {PLAN_LIMITS[userPlan].name} Plan
@@ -292,6 +306,14 @@ export default function AppLayout({
                   className="h-full bg-white rounded-full"
                 />
               </div>
+              {credits.total - credits.used <= 3 && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50/20 border border-red-400/30 px-2.5 py-2 text-xs text-red-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+                  <span>
+                    Only <strong>{credits.total - credits.used}</strong> credit{credits.total - credits.used === 1 ? '' : 's'} left this month.
+                  </span>
+                </div>
+              )}
               {userPlan !== 'business' && (
                 <Link
                   href="/pricing"
@@ -304,27 +326,29 @@ export default function AppLayout({
             </div>
           </div>
 
+          {/* Global Brand Selector */}
+          <GlobalBrandSelector />
+
           {/* Navigation */}
           <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
-              const isActive = pathname === item.href || 
+              const isActive = pathname === item.href ||
                 (item.href !== '/app' && pathname.startsWith(item.href));
-              
+
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-cyan-500/15 text-cyan-200'
-                      : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
+                    ? 'bg-cyan-50 text-cyan-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
                 >
-                  <item.icon className={`h-5 w-5 ${isActive ? 'text-cyan-200' : ''}`} />
+                  <item.icon className={`h-5 w-5 ${isActive ? 'text-cyan-600' : ''}`} />
                   {item.name}
                   {isActive && (
-                    <ChevronRight className="h-4 w-4 ml-auto text-cyan-200/70" />
+                    <ChevronRight className="h-4 w-4 ml-auto text-cyan-600/70" />
                   )}
                 </Link>
               );
@@ -332,37 +356,35 @@ export default function AppLayout({
           </nav>
 
           {/* User Menu */}
-          <div className="p-4 border-t border-white/10">
+          <div className="p-4 border-t border-gray-200/60">
             <div className="flex items-center gap-3 px-3 py-2">
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold ${
-                userPlan === 'business' 
-                  ? 'bg-gradient-to-br from-amber-400 to-orange-500'
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold ${userPlan === 'business'
+                ? 'bg-gradient-to-br from-amber-400 to-orange-500'
                 : userPlan === 'pro'
                   ? 'bg-gradient-to-br from-violet-400 to-blue-500'
-                : 'bg-gradient-to-br from-[#2a3563] to-[#1d254c]'
-              }`}>
+                  : 'bg-gradient-to-br from-gray-500 to-gray-600'
+                }`}>
                 {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
+                <p className="text-sm font-medium text-gray-900 truncate">
                   {user?.name || 'User'}
                 </p>
-                <p className="text-xs text-slate-400 truncate">
+                <p className="text-xs text-gray-500 truncate">
                   {user?.email || 'No email'}
                 </p>
-                <p className={`text-[11px] truncate ${
-                  userPlan === 'business' 
-                    ? 'text-amber-300'
+                <p className={`text-[11px] truncate ${userPlan === 'business'
+                  ? 'text-amber-600'
                   : userPlan === 'pro'
-                    ? 'text-cyan-200'
-                    : 'text-slate-400'
-                }`}>
+                    ? 'text-cyan-600'
+                    : 'text-gray-500'
+                  }`}>
                   {PLAN_LIMITS[userPlan].name} Plan
                 </p>
               </div>
-              <button 
+              <button
                 onClick={handleLogout}
-                className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white"
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900"
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -375,22 +397,22 @@ export default function AppLayout({
       <div className="lg:pl-72">
         {/* Top Bar */}
         <header className="sticky top-0 z-30">
-          <div className="relative h-16 overflow-hidden bg-[#0b1234]/75 backdrop-blur-xl border-b border-white/10">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(360px_120px_at_12%_0%,rgba(34,211,238,0.18),transparent_70%),radial-gradient(320px_120px_at_88%_0%,rgba(99,102,241,0.16),transparent_70%)]" />
-            <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
+          <div className="relative h-16 overflow-hidden bg-white/80 backdrop-blur-xl border-b border-gray-200/60">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(360px_120px_at_12%_0%,rgba(6,182,212,0.06),transparent_70%),radial-gradient(320px_120px_at_88%_0%,rgba(139,92,246,0.05),transparent_70%)]" />
+            <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent" />
             <div className="relative flex items-center justify-between h-full px-4 sm:px-6">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
+                className="lg:hidden p-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100"
               >
-                <Menu className="h-5 w-5 text-slate-200" />
+                <Menu className="h-5 w-5 text-gray-700" />
               </button>
 
               <div className="flex flex-col justify-center flex-1 px-2 sm:px-4">
-                <h1 className="text-sm sm:text-base font-display font-semibold text-white tracking-tight">
+                <h1 className="text-sm sm:text-base font-display font-semibold text-gray-900 tracking-tight">
                   <span className="text-voxa-gradient">{pageMeta.title}</span>
                 </h1>
-                <p className="hidden sm:block text-xs text-slate-300">
+                <p className="hidden sm:block text-xs text-gray-500">
                   {pageMeta.subtitle}
                 </p>
               </div>
@@ -407,11 +429,23 @@ export default function AppLayout({
                   </Link>
                 </Button>
                 {/* Notification actions are non-navigational controls */}
-                <button className="relative p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white">
+                <button
+                  type="button"
+                  onClick={() => handleTopNav('/app/activity')}
+                  aria-label="Open activity notifications"
+                  title="Open activity notifications"
+                  className="relative p-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900"
+                >
                   <Bell className="h-5 w-5" />
                   <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
                 </button>
-                <button className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white">
+                <button
+                  type="button"
+                  onClick={() => handleTopNav('/app/settings')}
+                  aria-label="Open help and settings"
+                  title="Open help and settings"
+                  className="p-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-900"
+                >
                   <HelpCircle className="h-5 w-5" />
                 </button>
               </div>

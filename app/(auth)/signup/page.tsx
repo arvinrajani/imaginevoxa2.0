@@ -134,16 +134,16 @@ export default function SignupPage() {
 
           {step === 'form' ? (
             <>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 Create your account
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-8">
+              <p className="text-gray-600 mb-8">
                 Start creating viral LinkedIn content in minutes.
               </p>
 
               {/* Error Message */}
               {error && (
-                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-400">
+                <div className="mb-6 p-4 bg-red-50/20 border border-red-200 rounded-xl flex items-center gap-3 text-red-600">
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   <p className="text-sm">{error}</p>
                 </div>
@@ -153,7 +153,7 @@ export default function SignupPage() {
               <Button
                 onClick={handleGoogleSignup}
                 variant="outline"
-                className="w-full h-12 mb-6 text-gray-700 dark:text-gray-300 font-medium"
+                className="w-full h-12 mb-6 text-gray-700 font-medium"
                 disabled={isLoading}
               >
                 <svg className="h-5 w-5 mr-3" viewBox="0 0 24 24">
@@ -179,10 +179,10 @@ export default function SignupPage() {
 
               <div className="relative mb-6">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+                  <div className="w-full border-t border-gray-200" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="bg-white dark:bg-gray-950 px-4 text-gray-500">
+                  <span className="bg-white px-4 text-gray-500">
                     or continue with email
                   </span>
                 </div>
@@ -191,7 +191,7 @@ export default function SignupPage() {
               {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Full Name
                   </label>
                   <div className="relative">
@@ -203,14 +203,14 @@ export default function SignupPage() {
                       placeholder="John Doe"
                       autoComplete="name"
                       autoCapitalize="words"
-                      className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                      className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-cyan-50 focus:border-transparent transition-all"
                       required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Email
                   </label>
                   <div className="relative">
@@ -224,14 +224,14 @@ export default function SignupPage() {
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
-                      className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                      className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-cyan-50 focus:border-transparent transition-all"
                       required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Password
                   </label>
                   <div className="relative">
@@ -242,7 +242,7 @@ export default function SignupPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
                       autoComplete="new-password"
-                      className="w-full h-12 pl-10 pr-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                      className="w-full h-12 pl-10 pr-12 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-cyan-50 focus:border-transparent transition-all"
                       required
                       minLength={8}
                     />
@@ -262,7 +262,7 @@ export default function SignupPage() {
                   className="w-full h-12 bg-voxa-gradient hover:opacity-90 text-white font-semibold rounded-xl shadow-lg shadow-voxa"
                 >
                   {isLoading ? (
-                    <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="h-5 w-5 border-2 border-gray-300 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>Create Account <ArrowRight className="h-5 w-5 ml-2" /></>
                   )}
@@ -293,13 +293,13 @@ export default function SignupPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="text-center"
             >
-              <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center mx-auto mb-6">
-                <Mail className="h-8 w-8 text-green-600 dark:text-green-400" />
+              <div className="h-16 w-16 rounded-full bg-green-100/50 flex items-center justify-center mx-auto mb-6">
+                <Mail className="h-8 w-8 text-green-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Check your email
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="text-gray-600 mb-6">
                 We sent a verification link to <strong>{email}</strong>
               </p>
               <Button variant="outline" onClick={() => setStep('form')}>
@@ -322,7 +322,7 @@ export default function SignupPage() {
             transition={{ delay: 0.3 }}
             className="max-w-md text-white"
           >
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Sparkles className="h-4 w-4" />
               Join 2,500+ creators
             </div>

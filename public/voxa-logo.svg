@@ -5,8 +5,12 @@
       <stop offset="50%" stop-color="#2474FF" />
       <stop offset="100%" stop-color="#7A2BFF" />
     </linearGradient>
+    <linearGradient id="voxa-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#060B27" />
+      <stop offset="100%" stop-color="#0A1640" />
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#060B27" />
+  <rect width="512" height="512" rx="80" ry="80" fill="url(#voxa-bg)" />
   <path
     d="M24 308 C 92 180 164 180 232 308 C 300 436 372 436 440 308"
     fill="none"

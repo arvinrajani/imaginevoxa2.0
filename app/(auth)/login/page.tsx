@@ -139,7 +139,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#050821] text-slate-100">
+    <div className="min-h-screen flex bg-gray-50 text-gray-800">
       {/* Left Panel - Visual */}
       <div className="hidden lg:flex flex-1 bg-voxa-gradient relative overflow-hidden">
         {/* Grid pattern */}
@@ -152,7 +152,7 @@ export default function LoginPage() {
             transition={{ delay: 0.3 }}
             className="max-w-md text-white"
           >
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Sparkles className="h-4 w-4" />
               Welcome back
             </div>
@@ -161,19 +161,19 @@ export default function LoginPage() {
               Pick up where you left off
             </h2>
             
-            <p className="text-lg text-white/80 mb-8">
+            <p className="text-lg text-white/70 mb-8">
               Your AI-powered LinkedIn content assistant is ready to help you create engaging posts.
             </p>
 
             {/* Mock stats */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+              <div className="bg-white/15 backdrop-blur-sm rounded-xl p-4">
                 <p className="text-3xl font-bold">2.5M+</p>
-                <p className="text-sm text-white/70">Posts created</p>
+                <p className="text-sm text-white/60">Posts created</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+              <div className="bg-white/15 backdrop-blur-sm rounded-xl p-4">
                 <p className="text-3xl font-bold">50K+</p>
-                <p className="text-sm text-white/70">Happy users</p>
+                <p className="text-sm text-white/60">Happy users</p>
               </div>
             </div>
           </motion.div>
@@ -181,7 +181,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-[#0b1234]">
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -192,16 +192,16 @@ export default function LoginPage() {
             <AnimatedLogo size="lg" />
           </Link>
 
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome back
           </h1>
-          <p className="text-slate-300 mb-8">
+          <p className="text-gray-600 mb-8">
             Sign in to continue creating amazing content.
           </p>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-400">
+            <div className="mb-6 p-4 bg-red-50/20 border border-red-200 rounded-xl flex items-center gap-3 text-red-600">
               <AlertCircle className="h-5 w-5 shrink-0" />
               <p className="text-sm">{error}</p>
             </div>
@@ -211,7 +211,7 @@ export default function LoginPage() {
           <Button
             onClick={handleGoogleLogin}
             variant="outline"
-            className="w-full h-12 mb-6 border-white/20 text-slate-200 font-medium hover:bg-white/10"
+            className="w-full h-12 mb-6 border-gray-200 text-gray-700 font-medium hover:bg-gray-100"
             disabled={isLoading}
           >
             <svg className="h-5 w-5 mr-3" viewBox="0 0 24 24">
@@ -237,10 +237,10 @@ export default function LoginPage() {
 
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
+              <div className="w-full border-t border-gray-200/60" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-[#0b1234] px-4 text-slate-400">
+              <span className="bg-white px-4 text-gray-500">
                 or continue with email
               </span>
             </div>
@@ -249,11 +249,11 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-200 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Email
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="email"
                   value={email}
@@ -263,7 +263,7 @@ export default function LoginPage() {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full h-12 pl-10 pr-4 rounded-xl border border-white/10 bg-[#0f173d] focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                  className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-200/60 bg-gray-100 focus:ring-2 focus:ring-cyan-50 focus:border-transparent transition-all"
                   required
                 />
               </div>
@@ -271,7 +271,7 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-slate-200">
+              <label className="block text-sm font-medium text-gray-700">
                 Password
               </label>
                 <Link href="/forgot-password" className="text-sm text-cyan-600 hover:text-cyan-700">
@@ -279,20 +279,20 @@ export default function LoginPage() {
                 </Link>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full h-12 pl-10 pr-12 rounded-xl border border-white/10 bg-[#0f173d] focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                  className="w-full h-12 pl-10 pr-12 rounded-xl border border-gray-200/60 bg-gray-100 focus:ring-2 focus:ring-cyan-50 focus:border-transparent transition-all"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -305,21 +305,21 @@ export default function LoginPage() {
               className="w-full h-12 bg-voxa-gradient hover:opacity-90 text-white font-semibold rounded-xl shadow-lg shadow-voxa"
             >
               {isLoading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="h-5 w-5 border-2 border-gray-300 border-t-white rounded-full animate-spin" />
               ) : (
                 <>Sign In <ArrowRight className="h-5 w-5 ml-2" /></>
               )}
             </Button>
           </form>
 
-          <p className="text-center text-sm text-slate-400 mt-6">
+          <p className="text-center text-sm text-gray-500 mt-6">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="text-cyan-600 hover:text-cyan-700 font-medium">
               Sign up
             </Link>
           </p>
-          <p className="text-center text-xs text-slate-500 mt-4 flex items-center justify-center gap-2">
-            <Shield className="h-4 w-4 text-cyan-200" />
+          <p className="text-center text-xs text-gray-400 mt-4 flex items-center justify-center gap-2">
+            <Shield className="h-4 w-4 text-cyan-600" />
             Passwords are hashed and managed by Supabase Auth. We never store them in plaintext.
           </p>
         </motion.div>

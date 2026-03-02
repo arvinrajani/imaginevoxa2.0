@@ -50,9 +50,9 @@ const APPROACH_ICONS: Record<string, React.ReactNode> = {
 };
 
 const APPROACH_COLORS: Record<string, string> = {
-  'Fresh Angle': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  'Deep Dive': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  'Flip It': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  'Fresh Angle': 'bg-blue-100 text-blue-800',
+  'Deep Dive': 'bg-purple-100 text-purple-800',
+  'Flip It': 'bg-orange-100 text-orange-800',
 };
 
 export default function PostRemixer({ initialPost = '', onUsePost }: PostRemixerProps) {

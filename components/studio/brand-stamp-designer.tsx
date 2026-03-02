@@ -189,7 +189,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 bg-gradient-to-br from-purple-50 to-pink-50">
+      <Card className="p-6 bg-gradient-to-br from-purple-500 to-pink-500">
         <div className="flex items-center gap-2 mb-4">
           <Stamp className="w-5 h-5 text-purple-600" />
           <h3 className="font-semibold text-purple-900">Brand Stamp Designer</h3>
@@ -213,7 +213,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                   onClick={() => setCurrentStamp({ ...currentStamp, type: type.value as any })}
                   className={`p-4 rounded-lg border-2 transition-all text-center ${
                     currentStamp.type === type.value
-                      ? 'border-purple-500 bg-purple-50'
+                      ? 'border-purple-50 bg-purple-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -234,7 +234,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                   onClick={() => setCurrentStamp({ ...currentStamp, position: pos.value as any })}
                   className={`p-3 rounded-lg border-2 transition-all text-center ${
                     currentStamp.position === pos.value
-                      ? 'border-purple-500 bg-purple-50'
+                      ? 'border-purple-50 bg-purple-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -272,7 +272,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                       })}
                       className={`p-3 rounded-lg border-2 transition-all text-center ${
                         currentStamp.elements?.shape === shape.value
-                          ? 'border-purple-500 bg-purple-50'
+                          ? 'border-purple-50 bg-purple-50'
                           : 'border-gray-200'
                       }`}
                     >
@@ -297,7 +297,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                         })}
                         className={`w-10 h-10 rounded border-2 ${
                           currentStamp.elements?.backgroundColor === color
-                            ? 'border-purple-500 ring-2 ring-purple-200'
+                            ? 'border-purple-50 ring-2 ring-purple-200'
                             : 'border-gray-300'
                         }`}
                         style={{ backgroundColor: color }}
@@ -317,7 +317,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                         })}
                         className={`w-10 h-10 rounded border-2 ${
                           currentStamp.elements?.textColor === color
-                            ? 'border-purple-500 ring-2 ring-purple-200'
+                            ? 'border-purple-50 ring-2 ring-purple-200'
                             : 'border-gray-300'
                         }`}
                         style={{ backgroundColor: color }}
@@ -340,7 +340,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
                       })}
                       className={`px-4 py-2 rounded-lg border-2 capitalize ${
                         currentStamp.elements?.size === size
-                          ? 'border-purple-500 bg-purple-50'
+                          ? 'border-purple-50 bg-purple-50'
                           : 'border-gray-200'
                       }`}
                     >
@@ -432,7 +432,7 @@ export function BrandStampDesigner({ brandColors, logoUrl, onStampCreated }: Bra
       </div>
 
       {/* AI Suggestions */}
-      <Card className="p-6 bg-gradient-to-br from-cyan-50 to-blue-50">
+      <Card className="p-6 bg-gradient-to-br from-cyan-500 to-blue-500">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-cyan-600 mt-1" />
           <div>

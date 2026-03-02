@@ -69,15 +69,15 @@ const SCORE_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
 };
 
 function getScoreColor(score: number) {
-  if (score >= 80) return 'text-green-600 dark:text-green-400';
-  if (score >= 60) return 'text-yellow-600 dark:text-yellow-400';
-  return 'text-red-600 dark:text-red-400';
+  if (score >= 80) return 'text-green-600';
+  if (score >= 60) return 'text-yellow-600';
+  return 'text-red-600';
 }
 
 function getScoreBarColor(score: number) {
-  if (score >= 80) return 'bg-green-500';
+  if (score >= 80) return 'bg-green-50';
   if (score >= 60) return 'bg-yellow-500';
-  return 'bg-red-500';
+  return 'bg-red-50';
 }
 
 function getScoreGrade(score: number) {
@@ -338,7 +338,7 @@ export default function PerformancePredictor({ initialContent = '', onUseHook }:
               </div>
             </CardHeader>
             <CardContent>
-              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+              <div className="bg-yellow-50/20 border border-yellow-200 rounded-lg p-3">
                 <p className="text-sm font-medium">{result.rewritten_hook}</p>
               </div>
             </CardContent>

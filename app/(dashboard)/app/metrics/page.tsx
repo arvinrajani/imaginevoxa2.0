@@ -23,11 +23,13 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
+import { useWorkspace } from '@/lib/context/workspace-context';
 
 type RangeOption = '30d' | '90d' | '365d';
 
 type Post = {
   id: string;
+  brand_id?: string | null;
   title: string | null;
   post_content: string;
   status: string;
@@ -154,16 +156,16 @@ function MetricCard({
       className={`rounded-2xl border p-4 shadow-sm ${
         highlight
           ? 'bg-voxa-gradient text-white border-transparent shadow-voxa'
-          : 'bg-[#0b1234] border-white/10'
+          : 'bg-white border-gray-200/60'
       }`}
     >
       <div className="flex items-center justify-between mb-3">
         <div
           className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-            highlight ? 'bg-white/15' : 'bg-cyan-100/80 dark:bg-cyan-900/30'
+            highlight ? 'bg-white/15' : 'bg-cyan-100/80'
           }`}
         >
-          <Icon className={`h-5 w-5 ${highlight ? 'text-white' : 'text-cyan-600 dark:text-cyan-300'}`} />
+          <Icon className={`h-5 w-5 ${highlight ? 'text-gray-900' : 'text-cyan-600'}`} />
         </div>
         {typeof delta === 'number' && (
           <span
@@ -180,8 +182,8 @@ function MetricCard({
           </span>
         )}
       </div>
-      <p className={`text-sm ${highlight ? 'text-slate-100' : 'text-slate-400'}`}>{label}</p>
-      <p className={`text-2xl font-bold ${highlight ? 'text-white' : 'text-white'}`}>
+      <p className={`text-sm ${highlight ? 'text-gray-800' : 'text-gray-500'}`}>{label}</p>
+      <p className={`text-2xl font-bold ${highlight ? 'text-gray-900' : 'text-gray-900'}`}>
         {value}
       </p>
     </div>
@@ -204,15 +206,15 @@ function SummaryRow({
   const isPositive = typeof delta === 'number' && delta >= 0;
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0b1234] p-3">
+    <div className="flex items-center justify-between rounded-xl border border-gray-200/60 bg-white p-3">
       <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-lg bg-white/10 flex items-center justify-center">
-          <Icon className="h-4 w-4 text-cyan-200" />
+        <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center">
+          <Icon className="h-4 w-4 text-cyan-600" />
         </div>
-        <span className="text-sm font-medium text-slate-300">{label}</span>
+        <span className="text-sm font-medium text-gray-600">{label}</span>
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold text-white">{value}</span>
+        <span className="text-sm font-semibold text-gray-900">{value}</span>
         {typeof delta === 'number' ? (
           <span
             className={`text-xs font-semibold ${
@@ -223,9 +225,9 @@ function SummaryRow({
             {Math.abs(delta).toFixed(1)}%
           </span>
         ) : status ? (
-          <span className="text-xs text-slate-500">{status}</span>
+          <span className="text-xs text-gray-400">{status}</span>
         ) : (
-          <span className="text-xs text-slate-500">—</span>
+          <span className="text-xs text-gray-400">—</span>
         )}
       </div>
     </div>
@@ -233,6 +235,7 @@ function SummaryRow({
 }
 
 export default function MetricsPage() {
+  const { selectedBrand } = useWorkspace();
   const [range, setRange] = useState<RangeOption>('90d');
   const [profile, setProfile] = useState<Profile>({
     name: 'Creator',
@@ -327,10 +330,15 @@ export default function MetricsPage() {
       }
     }
 
-    const { data: postRows, error: postsError } = await supabase
+    let postsQuery = supabase
       .from('posts')
       .select('*')
       .eq('user_id', user.id);
+    if (selectedBrand?.id) {
+      postsQuery = postsQuery.eq('brand_id', selectedBrand.id);
+    }
+
+    const { data: postRows, error: postsError } = await postsQuery;
 
     if (postsError) {
       setError('Unable to load posts for analytics.');
@@ -347,15 +355,19 @@ export default function MetricsPage() {
     setConnection({ connected: Boolean(connectionRow) });
     setPosts((postRows as Post[]) || []);
     setIsRefreshing(false);
-  }, [loadUser, supabase]);
+  }, [loadUser, selectedBrand?.id, supabase]);
 
   const refreshPosts = useCallback(async (id: string) => {
-    const { data: postRows } = await supabase
+    let postsQuery = supabase
       .from('posts')
       .select('*')
       .eq('user_id', id);
+    if (selectedBrand?.id) {
+      postsQuery = postsQuery.eq('brand_id', selectedBrand.id);
+    }
+    const { data: postRows } = await postsQuery;
     setPosts((postRows as Post[]) || []);
-  }, [supabase]);
+  }, [selectedBrand?.id, supabase]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -669,27 +681,30 @@ export default function MetricsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div className="h-14 w-14 rounded-full bg-voxa-gradient p-[2px]">
-              <div className="h-full w-full rounded-full bg-[#0b1234] p-1">
+              <div className="h-full w-full rounded-full bg-white p-1">
                 <img src={profile.avatar} alt="Profile avatar" className="h-full w-full rounded-full object-cover" />
               </div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Metrics dashboard</p>
-              <h1 className="text-2xl font-bold text-white">LinkedIn metrics</h1>
-              <p className="text-sm text-slate-400">{profile.name} - {profile.headline}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">Metrics dashboard</p>
+              <h1 className="text-2xl font-bold text-gray-900">LinkedIn metrics</h1>
+              <p className="text-sm text-gray-500">{profile.name} - {profile.headline}</p>
+              <p className="text-xs text-cyan-600 mt-1">
+                Scope: {selectedBrand?.name || 'All brands'}
+              </p>
               {lastSyncedAt && (
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Last synced {new Date(lastSyncedAt).toLocaleString()}
                 </p>
               )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
-              <Calendar className="h-4 w-4 text-cyan-200" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200/60 bg-gray-50 px-4 py-2 text-sm text-gray-600">
+              <Calendar className="h-4 w-4 text-cyan-600" />
               {RANGE_LABELS[range]}
             </div>
-            <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
+            <div className="inline-flex rounded-full border border-gray-200/60 bg-gray-50 p-1">
               {(['30d', '90d', '365d'] as RangeOption[]).map((option) => (
                 <button
                   key={option}
@@ -697,7 +712,7 @@ export default function MetricsPage() {
                   className={`px-4 py-1.5 text-xs font-medium rounded-full transition ${
                     range === option
                       ? 'bg-voxa-gradient text-white'
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   {option === '365d' ? '1Y' : option.toUpperCase()}
@@ -707,7 +722,7 @@ export default function MetricsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="border-white/15 text-slate-200 hover:bg-white/10"
+              className="border-gray-200/60 text-gray-700 hover:bg-gray-100"
               disabled={!connection.connected || !hasEngagement}
             >
               <Download className="h-4 w-4 mr-2" />
@@ -721,34 +736,34 @@ export default function MetricsPage() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-rose-300/60 dark:border-rose-500/30 bg-rose-100 text-rose-900 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-3 text-sm">
+          <div className="rounded-xl border border-rose-300/60 bg-rose-100 text-rose-800 px-4 py-3 text-sm">
             {error}
           </div>
         )}
 
         {warning && !error && (
-          <div className="rounded-xl border border-amber-300/60 dark:border-amber-500/30 bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200 px-4 py-3 text-sm">
+          <div className="rounded-xl border border-amber-300/60 bg-amber-50 text-amber-900/10 px-4 py-3 text-sm">
             {warning}
           </div>
         )}
 
         {connection.connected && linkedInPostCount === 0 && !isLoading && (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+          <div className="rounded-xl border border-gray-200/60 bg-gray-50 px-4 py-3 text-sm text-gray-600">
             No LinkedIn posts are available to sync yet. Publish at least one post through Voxa to see analytics here.
           </div>
         )}
 
         {!connection.connected && !isLoading && (
-          <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="rounded-2xl border border-gray-200/60 bg-white p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 text-cyan-200" />
+              <div className="h-12 w-12 rounded-xl bg-gray-100 flex items-center justify-center">
+                <BarChart3 className="h-6 w-6 text-cyan-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-gray-900">
                   Connect LinkedIn to unlock engagement analytics
                 </h2>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-gray-500">
                   Link your account to see impressions, likes, comments, and followers.
                 </p>
               </div>
@@ -771,17 +786,17 @@ export default function MetricsPage() {
             </div>
 
             <div className="grid lg:grid-cols-[2fr_1fr] gap-6">
-              <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6">
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Progression</h3>
-                    <p className="text-sm text-slate-400">{seriesLabel}</p>
-                    <p className="text-xs text-slate-500">
+                    <h3 className="text-lg font-semibold text-gray-900">Progression</h3>
+                    <p className="text-sm text-gray-500">{seriesLabel}</p>
+                    <p className="text-xs text-gray-400">
                       Source: {hasEngagement ? 'LinkedIn analytics sync' : 'Voxa post activity'}
                     </p>
                   </div>
                   {!hasEngagement && (
-                    <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/10 text-cyan-200">
+                    <span className="text-xs font-medium px-3 py-1 rounded-full bg-gray-100 text-cyan-600">
                       Post counts shown
                     </span>
                   )}
@@ -805,7 +820,7 @@ export default function MetricsPage() {
                       <circle key={index} cx={point.x} cy={point.y} r="4" fill="#19D5FF" />
                     ))}
                   </svg>
-                  <div className="mt-2 grid grid-cols-6 text-xs text-slate-500">
+                  <div className="mt-2 grid grid-cols-6 text-xs text-gray-400">
                     {series.labels.map((label, index) =>
                       index % 2 === 0 ? <span key={label}>{label}</span> : <span key={label} />
                     )}
@@ -813,8 +828,8 @@ export default function MetricsPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   Cumulative totals
                 </h3>
                 <div className="space-y-3">
@@ -854,23 +869,23 @@ export default function MetricsPage() {
                   />
                 </div>
                 {!hasEngagement && (
-                  <p className="text-xs text-slate-500 mt-4">
+                  <p className="text-xs text-gray-400 mt-4">
                     Engagement metrics appear after your LinkedIn posts sync with analytics.
                   </p>
                 )}
                 {connection.connected && (
-                  <p className="text-xs text-slate-500 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Follower analytics require additional LinkedIn API permissions.
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6">
+            <div className="rounded-2xl border border-gray-200/60 bg-white p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Best posts</h3>
-                  <p className="text-sm text-slate-400">Top performing content in this range.</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Best posts</h3>
+                  <p className="text-sm text-gray-500">Top performing content in this range.</p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/app/posts">View all</Link>
@@ -878,7 +893,7 @@ export default function MetricsPage() {
               </div>
 
               {topPosts.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-400">
+                <div className="rounded-xl border border-dashed border-gray-200/60 p-6 text-center text-sm text-gray-500">
                   No published posts yet. Generate your first post to see analytics here.
                 </div>
               ) : (
@@ -887,25 +902,25 @@ export default function MetricsPage() {
                     <motion.div
                       key={post.id}
                       whileHover={{ y: -4 }}
-                      className="rounded-xl border border-white/10 p-4 bg-[#0b1234]/70"
+                      className="rounded-xl border border-gray-200/60 p-4 bg-white/70"
                     >
-                      <p className="text-sm font-semibold text-white mb-2">
+                      <p className="text-sm font-semibold text-gray-900 mb-2">
                         {post.title || getFirstLine(post.post_content)}
                       </p>
-                      <p className="text-xs text-slate-500 mb-4">
+                      <p className="text-xs text-gray-400 mb-4">
                         {getPostDate(post).toLocaleDateString()}
                       </p>
-                      <div className="grid grid-cols-3 gap-2 text-xs text-slate-400">
+                      <div className="grid grid-cols-3 gap-2 text-xs text-gray-500">
                         <span className="inline-flex items-center gap-1">
-                          <Eye className="h-3 w-3 text-cyan-200" />
+                          <Eye className="h-3 w-3 text-cyan-600" />
                           {formatCompact(Number(post.engagement_views || 0))}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <Heart className="h-3 w-3 text-cyan-200" />
+                          <Heart className="h-3 w-3 text-cyan-600" />
                           {formatCompact(Number(post.engagement_likes || 0))}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3 text-cyan-200" />
+                          <MessageCircle className="h-3 w-3 text-cyan-600" />
                           {formatCompact(Number(post.engagement_comments || 0))}
                         </span>
                       </div>
@@ -916,64 +931,64 @@ export default function MetricsPage() {
             </div>
 
             <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6">
-              <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6">
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-6">
                 <div className="flex items-center justify-between mb-5">
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Voxa content intelligence</h3>
-                    <p className="text-sm text-slate-400">
+                    <h3 className="text-lg font-semibold text-gray-900">Voxa content intelligence</h3>
+                    <p className="text-sm text-gray-500">
                       Signal-level insights based on your posting behavior.
                     </p>
                   </div>
                   {insights.usingDrafts && (
-                    <span className="text-xs px-3 py-1 rounded-full bg-white/10 text-cyan-200">
+                    <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-cyan-600">
                       Using drafts
                     </span>
                   )}
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Momentum score</p>
-                        <p className="text-2xl font-bold text-white mt-2">{insights.momentumScore}</p>
-                        <p className="text-xs text-slate-500 mt-1">Cadence + hooks + CTAs + media</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Momentum score</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-2">{insights.momentumScore}</p>
+                        <p className="text-xs text-gray-400 mt-1">Cadence + hooks + CTAs + media</p>
                       </div>
                       <div className="h-10 w-10 rounded-xl bg-cyan-100/80 flex items-center justify-center">
                         <Sparkles className="h-5 w-5 text-cyan-600" />
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Avg words</p>
-                        <p className="text-2xl font-bold text-white mt-2">{insights.avgWords}</p>
-                        <p className="text-xs text-slate-500 mt-1">Sweet spot: 120–220</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Avg words</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-2">{insights.avgWords}</p>
+                        <p className="text-xs text-gray-400 mt-1">Sweet spot: 120–220</p>
                       </div>
                       <div className="h-10 w-10 rounded-xl bg-cyan-100/80 flex items-center justify-center">
                         <Timer className="h-5 w-5 text-cyan-600" />
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Hook rate</p>
-                        <p className="text-2xl font-bold text-white mt-2">{insights.hookRate}%</p>
-                        <p className="text-xs text-slate-500 mt-1">Strong first-line openers</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Hook rate</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-2">{insights.hookRate}%</p>
+                        <p className="text-xs text-gray-400 mt-1">Strong first-line openers</p>
                       </div>
                       <div className="h-10 w-10 rounded-xl bg-cyan-100/80 flex items-center justify-center">
                         <Lightbulb className="h-5 w-5 text-cyan-600" />
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">CTA rate</p>
-                        <p className="text-2xl font-bold text-white mt-2">{insights.ctaRate}%</p>
-                        <p className="text-xs text-slate-500 mt-1">Posts with a clear ask</p>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">CTA rate</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-2">{insights.ctaRate}%</p>
+                        <p className="text-xs text-gray-400 mt-1">Posts with a clear ask</p>
                       </div>
                       <div className="h-10 w-10 rounded-xl bg-cyan-100/80 flex items-center justify-center">
                         <Target className="h-5 w-5 text-cyan-600" />
@@ -983,59 +998,59 @@ export default function MetricsPage() {
                 </div>
 
                 <div className="mt-6 grid md:grid-cols-3 gap-4">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Avg hashtag density</p>
-                    <p className="text-xl font-semibold text-white mt-2">{insights.avgHashtags}</p>
-                    <p className="text-xs text-slate-500 mt-1">Ideal range: 3–5 tags</p>
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Avg hashtag density</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-2">{insights.avgHashtags}</p>
+                    <p className="text-xs text-gray-400 mt-1">Ideal range: 3–5 tags</p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Best posting day</p>
-                    <p className="text-xl font-semibold text-white mt-2">{insights.bestDay}</p>
-                    <p className="text-xs text-slate-500 mt-1">Most frequent publish day</p>
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Best posting day</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-2">{insights.bestDay}</p>
+                    <p className="text-xs text-gray-400 mt-1">Most frequent publish day</p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">Best posting time</p>
-                    <p className="text-xl font-semibold text-white mt-2">{insights.bestTime}</p>
-                    <p className="text-xs text-slate-500 mt-1">Based on your history</p>
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Best posting time</p>
+                    <p className="text-xl font-semibold text-gray-900 mt-2">{insights.bestTime}</p>
+                    <p className="text-xs text-gray-400 mt-1">Based on your history</p>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-[#0b1234] p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Next best actions</h3>
-                <div className="space-y-3 text-sm text-slate-300">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="rounded-2xl border border-gray-200/60 bg-white p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Next best actions</h3>
+                <div className="space-y-3 text-sm text-gray-600">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
                     {insights.avgGap > 4
                       ? 'Post twice per week to keep momentum.'
                       : 'Your cadence is strong. Maintain consistency.'}
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
                     {insights.ctaRate < 40
                       ? 'Add a question or clear CTA in every post.'
                       : 'CTA usage is strong. Try rotating 2-3 CTA styles.'}
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
                     {insights.hookRate < 50
                       ? 'Start with a hook: question, stat, or bold insight.'
                       : 'Hooks are working. Keep the first line under 12 words.'}
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
                     {insights.mediaRate < 30
                       ? 'Add images or short videos to boost reach.'
                       : 'Media usage is healthy. Keep 1 in 3 posts visual.'}
                   </div>
                 </div>
 
-                <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
-                  <h4 className="text-sm font-semibold text-white mb-3">Top hashtags</h4>
+                <div className="mt-6 rounded-xl border border-gray-200/60 bg-gray-50 p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Top hashtags</h4>
                   {insights.topHashtags.length === 0 ? (
-                    <p className="text-xs text-slate-400">Add hashtags to help LinkedIn categorize your posts.</p>
+                    <p className="text-xs text-gray-500">Add hashtags to help LinkedIn categorize your posts.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {insights.topHashtags.map((tag) => (
                         <span
                           key={tag.tag}
-                          className="text-xs px-3 py-1 rounded-full bg-white/10 text-cyan-200"
+                          className="text-xs px-3 py-1 rounded-full bg-gray-100 text-cyan-600"
                         >
                           {tag.tag} · {tag.count}
                         </span>

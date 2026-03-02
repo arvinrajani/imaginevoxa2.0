@@ -86,9 +86,9 @@ const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; label: string; co
 };
 
 const ENGAGEMENT_COLORS: Record<string, string> = {
-  viral: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  high: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  viral: 'bg-red-100 text-red-700/30',
+  high: 'bg-green-100 text-green-700/30',
+  medium: 'bg-yellow-100 text-yellow-700/30',
 };
 
 interface HookLibraryProps {

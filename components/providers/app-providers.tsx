@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
 import { Toaster } from "sonner";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { WorkspaceProvider } from "@/lib/context/workspace-context";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -22,10 +23,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      {children}
-      <ThemeToggle />
-      <Toaster richColors position="top-right" />
-      <ReactQueryDevtools initialIsOpen={false} />
+      <WorkspaceProvider>
+        {children}
+        <ThemeToggle />
+        <Toaster richColors position="top-right" />
+        <ReactQueryDevtools initialIsOpen={false} />
+      </WorkspaceProvider>
     </QueryClientProvider>
   );
 }

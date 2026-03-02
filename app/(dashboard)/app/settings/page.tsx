@@ -57,11 +57,11 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
   const handleSave = async () => {
     setIsSaving(true);
     const supabase = createClient();
-    
+
     await supabase
       .from('profiles')
       .upsert({ id: userData.id, full_name: name });
-    
+
     setIsSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -71,17 +71,17 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Profile Information
         </h3>
-        
+
         {/* Avatar */}
         <div className="flex items-center gap-6 mb-6">
           <div className="h-20 w-20 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold">
             {name.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
           </div>
           <div>
-            <p className="font-medium text-gray-900 dark:text-white">{name || 'User'}</p>
+            <p className="font-medium text-gray-900">{name || 'User'}</p>
             <p className="text-sm text-gray-500">{userData.email}</p>
             <p className="text-xs text-gray-400 mt-1">Member since {new Date(userData.memberSince).toLocaleDateString()}</p>
           </div>
@@ -90,32 +90,32 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
         {/* Form */}
         <div className="space-y-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Full Name
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Email
             </label>
             <input
               type="email"
               value={userData.email}
               disabled
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed"
             />
             <p className="text-xs text-gray-500 mt-1">Contact support to change your email</p>
           </div>
           <Button
             onClick={handleSave}
             disabled={isSaving || name === userData.name}
-            className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+            className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white"
           >
             {isSaving ? (
               <>
@@ -134,37 +134,37 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
         </div>
       </div>
 
-      <hr className="border-gray-200 dark:border-gray-700" />
+      <hr className="border-gray-200" />
 
       {/* Preferences */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Preferences
         </h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
             <div className="flex items-center gap-3">
               <Palette className="h-5 w-5 text-gray-500" />
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">Theme</p>
+                <p className="font-medium text-gray-900">Theme</p>
                 <p className="text-sm text-gray-500">Choose your preferred theme</p>
               </div>
             </div>
-            <select className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <select className="h-10 px-4 rounded-lg border border-gray-200 bg-white">
               <option>System</option>
               <option>Light</option>
               <option>Dark</option>
             </select>
           </div>
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
             <div className="flex items-center gap-3">
               <Globe className="h-5 w-5 text-gray-500" />
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">Default Tone</p>
+                <p className="font-medium text-gray-900">Default Tone</p>
                 <p className="text-sm text-gray-500">Default tone for generated posts</p>
               </div>
             </div>
-            <select className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <select className="h-10 px-4 rounded-lg border border-gray-200 bg-white">
               <option>Professional</option>
               <option>Casual</option>
               <option>Bold</option>
@@ -181,7 +181,7 @@ function BillingSettings({ userData }: { userData: UserData }) {
   const plan = PLANS[userData.plan];
   const creditsRemaining = Math.max(0, userData.creditsTotal - userData.creditsUsed);
   const creditPercentage = userData.creditsTotal > 0 ? (userData.creditsUsed / userData.creditsTotal) * 100 : 0;
-  
+
   // Calculate days until reset
   const now = new Date();
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -190,29 +190,28 @@ function BillingSettings({ userData }: { userData: UserData }) {
   return (
     <div className="space-y-6">
       {/* Current Plan */}
-      <div className={`rounded-2xl p-6 text-white ${
-        userData.plan === 'starter' 
-          ? 'bg-gradient-to-br from-gray-600 to-gray-700' 
+      <div className={`rounded-2xl p-6 text-white ${userData.plan === 'starter'
+          ? 'bg-gradient-to-br from-gray-600 to-gray-700'
           : 'bg-gradient-to-br from-violet-500 to-blue-600'
-      }`}>
+        }`}>
         <div className="flex items-center gap-2 mb-4">
           {userData.plan !== 'starter' && <Crown className="h-5 w-5 text-amber-300" />}
           <span className="font-semibold">{plan.name} Plan</span>
         </div>
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-4xl font-bold">${plan.price}</span>
-          <span className="text-white/70">/month</span>
+          <span className="text-gray-500">/month</span>
         </div>
         {userData.plan === 'starter' ? (
-          <p className="text-white/80 mb-4">
+          <p className="text-gray-600 mb-4">
             You&apos;re on the Starter plan. Upgrade to unlock Voxa image generation and direct publishing!
           </p>
         ) : userData.plan === 'pro' ? (
-          <p className="text-white/80 mb-4">
+          <p className="text-gray-600 mb-4">
             You&apos;re on the Pro plan. Upgrade to Pro+ for higher posting limits.
           </p>
         ) : (
-          <p className="text-white/80 mb-4">
+          <p className="text-gray-600 mb-4">
             Thanks for being a Pro+ member!
           </p>
         )}
@@ -222,20 +221,20 @@ function BillingSettings({ userData }: { userData: UserData }) {
               {userData.plan === 'starter' ? 'Upgrade Plan' : 'Change Plan'}
             </Button>
           </Link>
-          <Button variant="outline" className="border-white/30 text-white hover:bg-white/10">
+          <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-100">
             Cancel Subscription
           </Button>
         </div>
       </div>
 
       {/* Plan Features */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white rounded-xl p-6 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Plan Features
         </h3>
         <ul className="space-y-3">
           {plan.features.map((feature, i) => (
-            <li key={i} className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+            <li key={i} className="flex items-center gap-3 text-gray-600">
               <Check className="h-5 w-5 text-green-500" />
               {feature}
             </li>
@@ -244,17 +243,17 @@ function BillingSettings({ userData }: { userData: UserData }) {
       </div>
 
       {/* Credits Usage */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white rounded-xl p-6 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Credits Usage
         </h3>
         <div className="flex items-baseline gap-2 mb-3">
-          <span className="text-3xl font-bold text-gray-900 dark:text-white">
+          <span className="text-3xl font-bold text-gray-900">
             {creditsRemaining}
           </span>
           <span className="text-gray-500">/ {userData.creditsTotal} credits remaining</span>
         </div>
-        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-4">
+        <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${Math.min(100, 100 - creditPercentage)}%` }}
@@ -268,8 +267,8 @@ function BillingSettings({ userData }: { userData: UserData }) {
       </div>
 
       {/* Billing History */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+      <div className="bg-white rounded-xl p-6 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Billing History
         </h3>
         <div className="text-center py-8">
@@ -306,29 +305,27 @@ function NotificationSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Email Notifications
         </h3>
         <div className="space-y-3">
           {notificationOptions.map(option => (
             <div
               key={option.key}
-              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl"
+              className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
             >
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">{option.title}</p>
+                <p className="font-medium text-gray-900">{option.title}</p>
                 <p className="text-sm text-gray-500">{option.description}</p>
               </div>
               <button
                 onClick={() => toggleNotification(option.key)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  notifications[option.key] ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
+                className={`relative w-12 h-6 rounded-full transition-colors ${notifications[option.key] ? 'bg-violet-600' : 'bg-gray-300'
+                  }`}
               >
                 <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    notifications[option.key] ? 'left-7' : 'left-1'
-                  }`}
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${notifications[option.key] ? 'left-7' : 'left-1'
+                    }`}
                 />
               </button>
             </div>
@@ -343,36 +340,36 @@ function SecuritySettings({ userData }: { userData: UserData }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Security Settings
         </h3>
         <div className="space-y-4">
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+          <div className="p-4 bg-gray-50 rounded-xl">
             <div className="flex items-center justify-between mb-2">
-              <p className="font-medium text-gray-900 dark:text-white">Password</p>
+              <p className="font-medium text-gray-900">Password</p>
               <Button variant="outline" size="sm">Change Password</Button>
             </div>
             <p className="text-sm text-gray-500">
               Last changed: Never
             </p>
           </div>
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+          <div className="p-4 bg-gray-50 rounded-xl">
             <div className="flex items-center justify-between mb-2">
-              <p className="font-medium text-gray-900 dark:text-white">Two-Factor Authentication</p>
+              <p className="font-medium text-gray-900">Two-Factor Authentication</p>
               <Button variant="outline" size="sm">Enable</Button>
             </div>
             <p className="text-sm text-gray-500">
               Add an extra layer of security to your account
             </p>
           </div>
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-            <p className="font-medium text-gray-900 dark:text-white mb-2">Active Sessions</p>
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <p className="font-medium text-gray-900 mb-2">Active Sessions</p>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Current session</p>
+                <p className="text-sm text-gray-600">Current session</p>
                 <p className="text-xs text-gray-500">Windows • Chrome • Active now</p>
               </div>
-              <span className="text-xs bg-green-100 dark:bg-green-900/50 text-green-600 px-2 py-1 rounded-full">
+              <span className="text-xs bg-green-100/50 text-green-600 px-2 py-1 rounded-full">
                 Current
               </span>
             </div>
@@ -390,16 +387,16 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
 
   const handleDeleteData = async () => {
     if (deleteInput !== 'DELETE') return;
-    
+
     setIsDeleting(true);
     const supabase = createClient();
-    
+
     // Delete all user's posts
     await supabase.from('posts').delete().eq('user_id', userData.id);
-    
+
     // Delete LinkedIn connections
     await supabase.from('linkedin_connections').delete().eq('user_id', userData.id);
-    
+
     setIsDeleting(false);
     setShowDeleteConfirm(false);
     setDeleteInput('');
@@ -409,11 +406,11 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Export Data
         </h3>
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-          <p className="text-gray-600 dark:text-gray-400 mb-3">
+        <div className="p-4 bg-gray-50 rounded-xl">
+          <p className="text-gray-600 mb-3">
             Download a copy of all your data including posts, settings, and activity.
           </p>
           <Button variant="outline">
@@ -423,24 +420,24 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
         </div>
       </div>
 
-      <hr className="border-gray-200 dark:border-gray-700" />
+      <hr className="border-gray-200" />
 
       <div>
         <h3 className="text-lg font-semibold text-red-600 mb-4 flex items-center gap-2">
           <AlertTriangle className="h-5 w-5" />
           Danger Zone
         </h3>
-        
-        <div className="p-4 border border-red-200 dark:border-red-900 rounded-xl bg-red-50 dark:bg-red-900/20">
-          <p className="font-medium text-gray-900 dark:text-white mb-2">Delete All Data</p>
+
+        <div className="p-4 border border-red-200 rounded-xl bg-red-50/20">
+          <p className="font-medium text-gray-900 mb-2">Delete All Data</p>
           <p className="text-sm text-gray-500 mb-4">
             Permanently delete all your posts, drafts, and LinkedIn connections. This action cannot be undone.
           </p>
-          
+
           {!showDeleteConfirm ? (
             <Button
               variant="outline"
-              className="border-red-300 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/50"
+              className="border-red-300 text-red-600 hover:bg-red-100/50"
               onClick={() => setShowDeleteConfirm(true)}
             >
               <Trash2 className="h-4 w-4 mr-2" />
@@ -455,7 +452,7 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
                 type="text"
                 value={deleteInput}
                 onChange={(e) => setDeleteInput(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-gray-900"
+                className="w-full h-10 px-3 rounded-lg border border-red-300 bg-white"
                 placeholder="DELETE"
               />
               <div className="flex gap-2">
@@ -481,14 +478,14 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
           )}
         </div>
 
-        <div className="p-4 border border-red-200 dark:border-red-900 rounded-xl bg-red-50 dark:bg-red-900/20 mt-4">
-          <p className="font-medium text-gray-900 dark:text-white mb-2">Delete Account</p>
+        <div className="p-4 border border-red-200 rounded-xl bg-red-50/20 mt-4">
+          <p className="font-medium text-gray-900 mb-2">Delete Account</p>
           <p className="text-sm text-gray-500 mb-4">
             Permanently delete your account and all associated data.
           </p>
           <Button
             variant="outline"
-            className="border-red-300 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/50"
+            className="border-red-300 text-red-600 hover:bg-red-100/50"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete Account
@@ -506,7 +503,7 @@ export default function SettingsPage() {
     queryKey: ['settings-user'],
     queryFn: async (): Promise<UserData> => {
       const supabase = createClient();
-      
+
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         throw new Error('Unauthorized');
@@ -523,7 +520,7 @@ export default function SettingsPage() {
       // Get posts this month
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
+
       const { data: posts } = await supabase
         .from('posts')
         .select('id')
@@ -569,7 +566,7 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500">Manage your account settings and preferences</p>
       </div>
 
@@ -581,11 +578,10 @@ export default function SettingsPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${activeTab === tab.id
+                    ? 'bg-violet-100/50 text-violet-600'
+                    : 'text-gray-600 hover:bg-gray-100'
+                  }`}
               >
                 <tab.icon className="h-5 w-5" />
                 <span className="font-medium">{tab.label}</span>

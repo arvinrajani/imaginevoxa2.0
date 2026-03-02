@@ -35,11 +35,11 @@ interface ActivityLog {
 }
 
 const activityConfig: Record<ActivityType, { icon: React.ElementType; color: string }> = {
-  post_published: { icon: Send, color: 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' },
-  post_failed: { icon: XCircle, color: 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400' },
-  post_created: { icon: Sparkles, color: 'bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400' },
-  post_draft: { icon: FileText, color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' },
-  linkedin_connected: { icon: Linkedin, color: 'bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400' },
+  post_published: { icon: Send, color: 'bg-green-100/50 text-green-600' },
+  post_failed: { icon: XCircle, color: 'bg-red-100/50 text-red-600' },
+  post_created: { icon: Sparkles, color: 'bg-violet-100/50 text-violet-600' },
+  post_draft: { icon: FileText, color: 'bg-blue-100/50 text-blue-600' },
+  linkedin_connected: { icon: Linkedin, color: 'bg-sky-100/50 text-sky-600' },
 };
 
 function ActivityRow({ activity }: { activity: ActivityLog }) {
@@ -67,18 +67,18 @@ function ActivityRow({ activity }: { activity: ActivityLog }) {
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="flex items-start gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors"
+      className="flex items-start gap-4 p-4 hover:bg-gray-50/50 rounded-xl transition-colors"
     >
       <div className={`h-10 w-10 rounded-xl ${config.color} flex items-center justify-center shrink-0`}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <h4 className="font-medium text-gray-900 dark:text-white">
+          <h4 className="font-medium text-gray-900">
             {activity.title}
           </h4>
           {activity.status === 'error' && (
-            <span className="text-xs bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-red-100/50 text-red-600 px-2 py-0.5 rounded-full">
               Error
             </span>
           )}
@@ -111,13 +111,13 @@ function StatsCard({ icon: Icon, label, value, color }: {
   color: string;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+    <div className="bg-white rounded-xl p-4 border border-gray-200">
       <div className="flex items-center justify-between mb-2">
         <div className={`h-8 w-8 rounded-lg ${color} flex items-center justify-center`}>
           <Icon className="h-4 w-4 text-white" />
         </div>
       </div>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
     </div>
   );
@@ -316,13 +316,13 @@ export default function ActivityPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search activity..."
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
+            className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent transition-all"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as ActivityType | 'all')}
-          className="h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          className="h-11 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent"
         >
           <option value="all">All Types</option>
           <option value="post_published">Published</option>
@@ -337,12 +337,12 @@ export default function ActivityPage() {
       </div>
 
       {/* Activity List */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         {Object.entries(groupedActivities).length > 0 ? (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          <div className="divide-y divide-gray-100">
             {Object.entries(groupedActivities).map(([date, dateActivities], groupIndex) => (
               <div key={date}>
-                <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/50">
+                <div className="px-4 py-2 bg-gray-50/50">
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {formatGroupDate(date)}
                   </span>

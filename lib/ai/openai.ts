@@ -175,3 +175,115 @@ export async function generateImageBase({
 
   return { base64 };
 }
+
+// ---------------------------------------------------------------------------
+// Image editing – pass reference image(s) + prompt to gpt-image-1
+// ---------------------------------------------------------------------------
+
+type ImageEditOptions = {
+  model: string;
+  prompt: string;
+  /** PNG image buffers to use as reference inputs (logo, product photo, etc.) */
+  images: Array<{ buffer: Buffer; filename?: string }>;
+  size?: string;
+  quality?: "low" | "medium" | "high";
+};
+
+/**
+ * Uses the OpenAI /images/edits endpoint (gpt-image-1) to generate a new
+ * image that incorporates the supplied reference image(s) into the design
+ * according to the prompt.  This is the key to "baking" logos and reference
+ * photos into the AI-generated creative rather than overlaying them after.
+ */
+export async function generateImageEdit({
+  model,
+  prompt,
+  images,
+  size = "1536x1024",
+  quality = "high",
+}: ImageEditOptions): Promise<{ base64: string }> {
+  const normalizedSize = normalizeSize(model, size);
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", prompt);
+  form.append("size", normalizedSize);
+  form.append("quality", quality);
+  form.append("n", "1");
+
+  for (const img of images) {
+    const blob = new Blob([new Uint8Array(img.buffer)], { type: "image/png" });
+    form.append("image[]", blob, img.filename || "image.png");
+  }
+
+  const response = await fetch(`${OPENAI_API_BASE}/images/edits`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getApiKey()}`,
+    },
+    body: form as any,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI image edit failed: ${response.status} ${errorText}`);
+  }
+
+  const result = (await response.json()) as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+  };
+
+  const base64 = result.data?.[0]?.b64_json;
+  if (base64) return { base64 };
+
+  const url = result.data?.[0]?.url;
+  if (url) {
+    const imgRes = await fetch(url);
+    const buf = await imgRes.arrayBuffer();
+    return { base64: Buffer.from(buf).toString("base64") };
+  }
+
+  throw new Error("OpenAI image edit did not return output.");
+}
+
+// ---------------------------------------------------------------------------
+// Audio / media transcription
+// ---------------------------------------------------------------------------
+
+/**
+ * Transcribe an audio or video buffer using OpenAI's transcription endpoint.
+ *
+ * Accepts any media type supported by the API (mp3, wav, mp4, m4a, webm, etc.).
+ * Returns the raw text that Whisper/OAI generates. In the future we could run
+ * a summarization step on this result, but for now the full transcription is
+ * returned so it can be concatenated with any user-provided context.
+ */
+export async function transcribeMedia(
+  buffer: Buffer,
+  mimeType: string = "audio/mpeg"
+): Promise<string> {
+  const url = `${OPENAI_API_BASE}/audio/transcriptions`;
+
+  // `fetch` running on Node >=18 supports FormData/Blob out of the box.
+  const form = new FormData();
+  const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+  form.append("file", blob, "media");
+  form.append("model", "whisper-1");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getApiKey()}`,
+      // NOTE: do NOT set Content-Type explicitly; the form will set it.
+    },
+    body: form as any, // TS doesn't know about Node's FormData
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenAI transcription failed: ${response.status} ${text}`);
+  }
+
+  const result = await response.json();
+  return (result as any).text || "";
+}

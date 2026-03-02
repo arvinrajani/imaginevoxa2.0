@@ -53,7 +53,7 @@ export function StudioDashboard({ brandName, brandColors, stats, recentActivity,
             posts in seconds.
           </p>
           <div className="flex gap-3">
-            <Button className="bg-gradient-to-r from-cyan-500 to-blue-500" onClick={() => navigateTo('/app/generate')}>
+            <Button className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500" onClick={() => navigateTo('/app/generate')}>
               <Sparkles className="w-4 h-4 mr-2" />
               Generate New Post
             </Button>
@@ -209,7 +209,7 @@ export function StudioDashboard({ brandName, brandColors, stats, recentActivity,
       </div>
 
       {/* Quick Actions */}
-      <Card className="p-6 bg-gradient-to-br from-violet-50 to-purple-50">
+      <Card className="p-6 bg-gradient-to-br from-violet-500 to-purple-500">
         <h3 className="font-semibold mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <button onClick={() => navigateTo('/app/generate')} className="p-4 bg-white rounded-lg hover:shadow-md transition-shadow text-left">

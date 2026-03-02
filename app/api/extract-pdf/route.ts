@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { PDFParse } from "pdf-parse";
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabase();

@@ -328,7 +328,7 @@ export function AssetManager({
         <h2 className="text-3xl font-black bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
           Brand Assets
         </h2>
-        <p className="text-slate-500 mt-2 max-w-lg mx-auto">
+        <p className="text-gray-400 mt-2 max-w-lg mx-auto">
           Upload your logos and backgrounds, or let AI generate professional assets for you. These
           will be used in your LinkedIn posts.
         </p>
@@ -365,12 +365,12 @@ export function AssetManager({
         <TabsContent value="logos" className="mt-6 space-y-6">
           {/* Upload Zone */}
           <Card className="overflow-hidden">
-            <div className="p-5 bg-gradient-to-r from-cyan-50 to-blue-50 border-b">
+            <div className="p-5 bg-gradient-to-r from-cyan-500 to-blue-500 border-b">
               <div className="flex items-center gap-2">
                 <Upload className="w-5 h-5 text-cyan-600" />
                 <h3 className="font-semibold text-slate-800">Upload Logo</h3>
               </div>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-gray-400 mt-1">
                 PNG with transparent background recommended
               </p>
             </div>
@@ -381,18 +381,18 @@ export function AssetManager({
               onDrop={(e) => handleDrop(e, 'logo')}
               className={`p-8 text-center transition-all cursor-pointer ${
                 dragActive === 'logo'
-                  ? 'bg-cyan-50 border-2 border-dashed border-cyan-400'
+                  ? 'bg-cyan-500 border-2 border-dashed border-cyan-400'
                   : 'bg-white hover:bg-slate-50'
               }`}
               onClick={() => logoFileRef.current?.click()}
             >
               <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-slate-100 flex items-center justify-center">
-                <Camera className="w-8 h-8 text-slate-400" />
+                <Camera className="w-8 h-8 text-gray-500" />
               </div>
               <p className="text-sm text-slate-600 mb-1 font-medium">
                 Drop files here or click to browse
               </p>
-              <p className="text-xs text-slate-400">PNG, SVG, JPG • Max 5MB</p>
+              <p className="text-xs text-gray-500">PNG, SVG, JPG • Max 5MB</p>
               <input
                 ref={logoFileRef}
                 type="file"
@@ -406,7 +406,7 @@ export function AssetManager({
 
           {/* AI Logo Generator */}
           <Card className="overflow-hidden border-violet-200">
-            <div className="p-5 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-violet-100">
+            <div className="p-5 bg-gradient-to-r from-violet-500 to-purple-500 border-b border-violet-100">
               <div className="flex items-center gap-2">
                 <Wand2 className="w-5 h-5 text-violet-600" />
                 <h3 className="font-semibold text-violet-900">AI Logo Generator</h3>
@@ -429,7 +429,7 @@ export function AssetManager({
                       onClick={() => setSelectedLogoStyle(style.id)}
                       className={`p-3 rounded-xl border-2 text-left transition-all ${
                         selectedLogoStyle === style.id
-                          ? 'border-violet-500 bg-violet-50 shadow-md shadow-violet-100'
+                          ? 'border-violet-50 bg-violet-50 shadow-md shadow-violet-100'
                           : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50/50'
                       }`}
                     >
@@ -440,7 +440,7 @@ export function AssetManager({
                           <Check className="w-3.5 h-3.5 text-violet-600 ml-auto" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-500">{style.desc}</p>
+                      <p className="text-xs text-gray-400">{style.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -450,7 +450,7 @@ export function AssetManager({
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-2 block">
                   Additional details{' '}
-                  <span className="text-slate-400 font-normal">(optional)</span>
+                  <span className="text-gray-500 font-normal">(optional)</span>
                 </label>
                 <Input
                   placeholder="e.g., Include a lightning bolt, use blue tones, abstract mark..."
@@ -460,7 +460,7 @@ export function AssetManager({
                 />
                 {!logoPrompt && (
                   <div className="mt-2">
-                    <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
+                    <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1">
                       <Lightbulb className="w-3 h-3" /> Quick ideas — click to use
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -478,7 +478,7 @@ export function AssetManager({
                 )}
               </div>
               {brandColors.length > 0 && (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+                <div className="flex items-center gap-2 text-sm text-gray-400">
                   <span>Using brand colors:</span>
                   <div className="flex gap-1">
                     {brandColors.slice(0, 5).map((c, i) => (
@@ -568,12 +568,12 @@ export function AssetManager({
         <TabsContent value="backgrounds" className="mt-6 space-y-6">
           {/* Upload Zone */}
           <Card className="overflow-hidden">
-            <div className="p-5 bg-gradient-to-r from-purple-50 to-pink-50 border-b">
+            <div className="p-5 bg-gradient-to-r from-purple-500 to-pink-500 border-b">
               <div className="flex items-center gap-2">
                 <Upload className="w-5 h-5 text-purple-600" />
                 <h3 className="font-semibold text-slate-800">Upload Background</h3>
               </div>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-gray-400 mt-1">
                 Recommended: 1200×627px (LinkedIn post size)
               </p>
             </div>
@@ -584,18 +584,18 @@ export function AssetManager({
               onDrop={(e) => handleDrop(e, 'banner')}
               className={`p-8 text-center transition-all cursor-pointer ${
                 dragActive === 'banner'
-                  ? 'bg-purple-50 border-2 border-dashed border-purple-400'
+                  ? 'bg-purple-500 border-2 border-dashed border-purple-400'
                   : 'bg-white hover:bg-slate-50'
               }`}
               onClick={() => bannerFileRef.current?.click()}
             >
               <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-slate-100 flex items-center justify-center">
-                <Layers className="w-8 h-8 text-slate-400" />
+                <Layers className="w-8 h-8 text-gray-500" />
               </div>
               <p className="text-sm text-slate-600 mb-1 font-medium">
                 Drop files here or click to browse
               </p>
-              <p className="text-xs text-slate-400">PNG, JPG • Max 5MB</p>
+              <p className="text-xs text-gray-500">PNG, JPG • Max 5MB</p>
               <input
                 ref={bannerFileRef}
                 type="file"
@@ -609,7 +609,7 @@ export function AssetManager({
 
           {/* AI Background Generator */}
           <Card className="overflow-hidden border-purple-200">
-            <div className="p-5 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
+            <div className="p-5 bg-gradient-to-r from-purple-500 to-pink-500 border-b border-purple-100">
               <div className="flex items-center gap-2">
                 <Brush className="w-5 h-5 text-purple-600" />
                 <h3 className="font-semibold text-purple-900">AI Background Generator</h3>
@@ -632,7 +632,7 @@ export function AssetManager({
                       onClick={() => setSelectedBgStyle(style.id)}
                       className={`p-3 rounded-xl border-2 text-left transition-all ${
                         selectedBgStyle === style.id
-                          ? 'border-purple-500 bg-purple-50 shadow-md shadow-purple-100'
+                          ? 'border-purple-50 bg-purple-500 shadow-md shadow-purple-100'
                           : 'border-slate-200 hover:border-purple-300 hover:bg-purple-50/50'
                       }`}
                     >
@@ -642,7 +642,7 @@ export function AssetManager({
                           <Check className="w-3.5 h-3.5 text-purple-600" />
                         )}
                       </span>
-                      <p className="text-xs text-slate-500 mt-0.5">{style.desc}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{style.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -652,7 +652,7 @@ export function AssetManager({
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-2 block">
                   Additional details{' '}
-                  <span className="text-slate-400 font-normal">(optional)</span>
+                  <span className="text-gray-500 font-normal">(optional)</span>
                 </label>
                 <Input
                   placeholder="e.g., Dark theme, tech vibes, warm sunset tones..."
@@ -662,7 +662,7 @@ export function AssetManager({
                 />
                 {!bgPrompt && (
                   <div className="mt-2">
-                    <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
+                    <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1">
                       <Lightbulb className="w-3 h-3" /> Quick ideas — click to use
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -681,7 +681,7 @@ export function AssetManager({
               </div>
 
               {brandColors.length > 0 && (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+                <div className="flex items-center gap-2 text-sm text-gray-400">
                   <span>Using brand colors:</span>
                   <div className="flex gap-1">
                     {brandColors.slice(0, 5).map((c, i) => (
@@ -756,7 +756,7 @@ export function AssetManager({
       </Tabs>
 
       {/* Summary + Actions */}
-      <Card className="p-5 bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200">
+      <Card className="p-5 bg-gradient-to-r from-slate-500 to-slate-100 border-slate-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
@@ -783,7 +783,7 @@ export function AssetManager({
               variant="ghost"
               size="sm"
               onClick={onSkip}
-              className="text-slate-500 hover:text-slate-700"
+              className="text-gray-400 hover:text-slate-700"
             >
               Skip for now
               <SkipForward className="w-4 h-4 ml-1" />
@@ -802,7 +802,7 @@ export function AssetManager({
             <img
               src={previewImage}
               alt="Preview"
-              className="w-full h-full object-contain rounded-2xl shadow-2xl"
+              className="w-full h-full object-contain rounded-2xl shadow-lg"
             />
             <button
               onClick={() => setPreviewImage(null)}

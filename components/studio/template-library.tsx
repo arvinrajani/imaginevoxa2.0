@@ -285,7 +285,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+      <Card className="p-6 bg-gradient-to-br from-indigo-500 to-purple-500">
         <div className="flex items-center gap-2 mb-2">
           <LayoutTemplate className="w-5 h-5 text-indigo-600" />
           <h3 className="font-semibold text-indigo-900">Professional Post Templates</h3>
@@ -306,7 +306,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
               onClick={() => setSelectedCategory(cat.value)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 whitespace-nowrap transition-all ${
                 selectedCategory === cat.value
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  ? 'border-indigo-50 bg-indigo-50 text-indigo-700'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -323,7 +323,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
           <Card
             key={template.id}
             className={`overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
-              selectedTemplate?.id === template.id ? 'ring-2 ring-indigo-500' : ''
+              selectedTemplate?.id === template.id ? 'ring-2 ring-indigo-50' : ''
             }`}
             onClick={() => handleTemplateSelect(template)}
           >
@@ -340,7 +340,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
                 </Badge>
               )}
               {selectedTemplate?.id === template.id && (
-                <div className="absolute inset-0 bg-indigo-500 bg-opacity-20 flex items-center justify-center">
+                <div className="absolute inset-0 bg-indigo-50 bg-opacity-20 flex items-center justify-center">
                   <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
                     <svg className="w-6 h-6 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -377,7 +377,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
 
       {/* Selected Template Preview */}
       {selectedTemplate && (
-        <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50">
+        <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500">
           <div className="flex items-start gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-3">
@@ -410,7 +410,7 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
       )}
 
       {/* AI Custom Template */}
-      <Card className="p-6 bg-gradient-to-br from-violet-50 to-purple-50">
+      <Card className="p-6 bg-gradient-to-br from-violet-500 to-purple-500">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-violet-600 mt-1" />
           <div className="flex-1">
@@ -441,9 +441,9 @@ export function TemplateLibrary({ brandColors, onTemplateSelect }: TemplateLibra
               </Button>
             </div>
             {customError && (
-              <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
+              <div className="mt-3 p-3 bg-red-50/20 border border-red-200 rounded-lg flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-sm text-red-600 dark:text-red-400">{customError}</p>
+                <p className="text-sm text-red-600">{customError}</p>
               </div>
             )}
           </div>

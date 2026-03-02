@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { maybeTranscodeWithZencoder } from "@/lib/video";
 
 type ApproveRequest = {
   postId: string;
@@ -670,7 +671,14 @@ export async function POST(request: Request) {
 
       let videoUrn: string | null = null;
       if (videoFile) {
-        videoUrn = await uploadVideoToLinkedIn(videoFile, accessToken, targetUrn);
+        // optional preprocessing/transcoding (zencoder stub) before sending
+        try {
+          videoFile = await maybeTranscodeWithZencoder(videoFile);
+        } catch (err) {
+          console.warn("🛠️ video preprocessing error, continuing with original file", err);
+        }
+
+        videoUrn = await uploadVideoToLinkedIn(videoFile!, accessToken, targetUrn);
         if (!videoUrn) {
           console.warn("⚠️ Video upload failed, posting without video");
         }

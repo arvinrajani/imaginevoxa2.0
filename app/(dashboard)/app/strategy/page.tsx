@@ -191,7 +191,7 @@ export default function StrategyPage() {
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
       </div>
     );
   }
@@ -199,18 +199,18 @@ export default function StrategyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs uppercase tracking-wide text-cyan-300">Strategy Lab</p>
-        <h1 className="text-3xl font-bold text-white mt-1">Optimization + 30-Day Calendar</h1>
-        <p className="text-slate-400 mt-2">
+        <p className="text-xs uppercase tracking-wide text-cyan-600">Strategy Lab</p>
+        <h1 className="text-3xl font-bold text-gray-900 mt-1">Optimization + 30-Day Calendar</h1>
+        <p className="text-gray-500 mt-2">
           Improve content decisions from real performance data, then generate a practical campaign sequence.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="bg-[#0b1234] border-white/10 p-6 text-white">
+        <Card className="bg-white border-gray-200/60 p-6 text-gray-900">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-cyan-200" />
+              <TrendingUp className="h-5 w-5 text-cyan-600" />
               <h2 className="text-lg font-semibold">Closed-Loop Optimization</h2>
             </div>
             <Button
@@ -218,7 +218,7 @@ export default function StrategyPage() {
               size="sm"
               onClick={() => void fetchOptimization()}
               disabled={optimizationLoading}
-              className="border-white/15 text-slate-200"
+              className="border-gray-200/60 text-gray-700"
             >
               {optimizationLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
             </Button>
@@ -231,12 +231,12 @@ export default function StrategyPage() {
           {optimization ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <p className="text-xs text-slate-400">Posts analyzed</p>
+                <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Posts analyzed</p>
                   <p className="text-xl font-semibold">{optimization.postsAnalyzed}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <p className="text-xs text-slate-400">Avg score</p>
+                <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Avg score</p>
                   <p className="text-xl font-semibold">{optimization.baseline.averageScore}</p>
                 </div>
               </div>
@@ -251,14 +251,14 @@ export default function StrategyPage() {
                 <p className="text-sm font-semibold mb-2">Recommendations</p>
                 <div className="space-y-2">
                   {optimization.recommendations.map((item) => (
-                    <div key={item} className="text-sm text-slate-200 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                    <div key={item} className="text-sm text-gray-700 rounded-lg border border-gray-200/60 bg-gray-50 px-3 py-2">
                       {item}
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 p-3">
+              <div className="rounded-xl border border-cyan-400/30 bg-cyan-500 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-cyan-100">Prompt Booster</p>
                   <Button size="sm" variant="ghost" onClick={handleCopyBooster} className="text-cyan-100 hover:bg-cyan-400/20">
@@ -270,23 +270,23 @@ export default function StrategyPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No optimization data yet.</p>
+            <p className="text-sm text-gray-500">No optimization data yet.</p>
           )}
         </Card>
 
-        <Card className="bg-[#0b1234] border-white/10 p-6 text-white">
+        <Card className="bg-white border-gray-200/60 p-6 text-gray-900">
           <div className="flex items-center gap-2 mb-4">
-            <CalendarDays className="h-5 w-5 text-cyan-200" />
+            <CalendarDays className="h-5 w-5 text-cyan-600" />
             <h2 className="text-lg font-semibold">AI 30-Day Calendar</h2>
           </div>
 
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-slate-400">Brand</label>
+              <label className="text-xs text-gray-500">Brand</label>
               <select
                 value={selectedBrandId}
                 onChange={(event) => setSelectedBrandId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101a46] px-3 py-2 text-sm text-white"
+                className="mt-1 w-full rounded-xl border border-gray-200/60 bg-gray-50 px-3 py-2 text-sm text-gray-900"
               >
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
@@ -298,47 +298,47 @@ export default function StrategyPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-400">Duration (days)</label>
+                <label className="text-xs text-gray-500">Duration (days)</label>
                 <Input
                   type="number"
                   min={7}
                   max={60}
                   value={durationDays}
                   onChange={(event) => setDurationDays(Math.max(7, Math.min(60, Number(event.target.value) || 30)))}
-                  className="mt-1 bg-[#101a46] border-white/10 text-white"
+                  className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400">Posts / week</label>
+                <label className="text-xs text-gray-500">Posts / week</label>
                 <Input
                   type="number"
                   min={1}
                   max={10}
                   value={postsPerWeek}
                   onChange={(event) => setPostsPerWeek(Math.max(1, Math.min(10, Number(event.target.value) || 3)))}
-                  className="mt-1 bg-[#101a46] border-white/10 text-white"
+                  className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs text-slate-400">Goal</label>
-              <Input value={brief.goal} onChange={(event) => handleBriefChange('goal', event.target.value)} className="mt-1 bg-[#101a46] border-white/10 text-white" />
+              <label className="text-xs text-gray-500">Goal</label>
+              <Input value={brief.goal} onChange={(event) => handleBriefChange('goal', event.target.value)} className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900" />
             </div>
             <div>
-              <label className="text-xs text-slate-400">Audience</label>
-              <Input value={brief.audience} onChange={(event) => handleBriefChange('audience', event.target.value)} className="mt-1 bg-[#101a46] border-white/10 text-white" />
+              <label className="text-xs text-gray-500">Audience</label>
+              <Input value={brief.audience} onChange={(event) => handleBriefChange('audience', event.target.value)} className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900" />
             </div>
             <div>
-              <label className="text-xs text-slate-400">Pain Point</label>
-              <Textarea value={brief.painPoint} onChange={(event) => handleBriefChange('painPoint', event.target.value)} className="mt-1 bg-[#101a46] border-white/10 text-white min-h-[72px]" />
+              <label className="text-xs text-gray-500">Pain Point</label>
+              <Textarea value={brief.painPoint} onChange={(event) => handleBriefChange('painPoint', event.target.value)} className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900 min-h-[72px]" />
             </div>
             <div>
-              <label className="text-xs text-slate-400">Solution Angle</label>
-              <Textarea value={brief.solution} onChange={(event) => handleBriefChange('solution', event.target.value)} className="mt-1 bg-[#101a46] border-white/10 text-white min-h-[72px]" />
+              <label className="text-xs text-gray-500">Solution Angle</label>
+              <Textarea value={brief.solution} onChange={(event) => handleBriefChange('solution', event.target.value)} className="mt-1 bg-gray-50 border-gray-200/60 text-gray-900 min-h-[72px]" />
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
               <input
                 type="checkbox"
                 checked={createDrafts}
@@ -368,12 +368,12 @@ export default function StrategyPage() {
       </div>
 
       {planResult && (
-        <Card className="bg-[#0b1234] border-white/10 p-6 text-white">
+        <Card className="bg-white border-gray-200/60 p-6 text-gray-900">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <p className="text-xs uppercase tracking-wide text-emerald-300">Plan Ready</p>
               <h3 className="text-xl font-semibold mt-1">{planResult.plan.campaign_name}</h3>
-              <p className="text-sm text-slate-400 mt-1">{planResult.plan.summary}</p>
+              <p className="text-sm text-gray-500 mt-1">{planResult.plan.summary}</p>
             </div>
             {createDrafts && planResult.draftPosts.length > 0 && (
               <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -387,11 +387,11 @@ export default function StrategyPage() {
 
           <div className="grid gap-2">
             {planResult.plan.posts.slice(0, 10).map((post, index) => (
-              <div key={`${post.headline}-${index}`} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                <p className="text-sm font-medium text-white">
+              <div key={`${post.headline}-${index}`} className="rounded-xl border border-gray-200/60 bg-gray-50 px-3 py-2">
+                <p className="text-sm font-medium text-gray-900">
                   Day {post.day_offset + 1}: {post.headline}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-gray-500 mt-1">
                   Objective: {post.objective} • Experiment: {post.experiment_tag}
                 </p>
               </div>
@@ -399,19 +399,19 @@ export default function StrategyPage() {
           </div>
 
           {planResult.plan.posts.length > 10 && (
-            <p className="text-xs text-slate-500 mt-3">
+            <p className="text-xs text-gray-400 mt-3">
               Showing first 10 posts out of {planResult.plan.posts.length} planned posts.
             </p>
           )}
         </Card>
       )}
 
-      <Card className="bg-[#0b1234] border-white/10 p-5 text-white">
+      <Card className="bg-white border-gray-200/60 p-5 text-gray-900">
         <div className="flex items-center gap-2 mb-2">
-          <Target className="h-4 w-4 text-cyan-200" />
+          <Target className="h-4 w-4 text-cyan-600" />
           <p className="font-semibold">Execution Tip</p>
         </div>
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-gray-600">
           Run optimization weekly, regenerate the calendar monthly, and keep the best-performing hook style as your default baseline.
         </p>
       </Card>

@@ -22,6 +22,9 @@ SUPABASE_STORAGE_BUCKET=brand-assets
 # OpenAI
 OPENAI_API_KEY=sk-proj-your-key-here
 
+# Video processing (optional)
+ZENCODER_API_KEY=your-zencoder-api-key   # used for transcoding/captions when implemented
+
 # LinkedIn (optional - for publishing)
 LINKEDIN_CLIENT_ID=your-client-id
 LINKEDIN_CLIENT_SECRET=your-client-secret

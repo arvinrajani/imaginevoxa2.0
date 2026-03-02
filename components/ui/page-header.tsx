@@ -1,4 +1,4 @@
-﻿import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
   title: React.ReactNode;
@@ -12,23 +12,23 @@ export function PageHeader({ title, subtitle, actions, eyebrow, className }: Pag
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-3xl border border-white/10 bg-[#0b1234]/80 px-6 py-5 shadow-voxa",
+        "relative overflow-hidden rounded-3xl border border-gray-200/60 bg-white/80 px-6 py-5 shadow-sm backdrop-blur-sm",
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(420px_140px_at_12%_10%,rgba(34,211,238,0.18),transparent_65%),radial-gradient(360px_160px_at_88%_0%,rgba(99,102,241,0.16),transparent_70%)]" />
-      <div className="pointer-events-none absolute inset-x-12 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(420px_140px_at_12%_10%,rgba(6,182,212,0.08),transparent_65%),radial-gradient(360px_160px_at_88%_0%,rgba(139,92,246,0.06),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-x-12 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent" />
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           {eyebrow && (
-            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.32em] text-cyan-200/80">
+            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.32em] text-cyan-600/70">
               {eyebrow}
             </span>
           )}
-          <h1 className="text-2xl sm:text-3xl font-display font-semibold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-display font-semibold text-gray-900 tracking-tight">
             {title}
           </h1>
-          {subtitle && <p className="text-sm text-slate-300">{subtitle}</p>}
+          {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>

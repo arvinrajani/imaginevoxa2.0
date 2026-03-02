@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -20,17 +21,20 @@ import {
   Copy,
   Plus,
   Loader2,
-  Check
+  Check,
+  RefreshCw,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
+import { useWorkspace } from '@/lib/context/workspace-context';
 
 type PostStatus = 'draft' | 'posted' | 'failed' | 'scheduled' | 'approved';
 
 interface Post {
   id: string;
+  brand_id?: string | null;
   post_content: string;
   image_url?: string;
   status: PostStatus;
@@ -46,38 +50,40 @@ const statusConfig: Record<PostStatus, { label: string; icon: React.ElementType;
   draft: {
     label: 'Draft',
     icon: Clock,
-    className: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50',
+    className: 'text-amber-600 bg-amber-100/50',
   },
   approved: {
     label: 'Ready',
     icon: CheckCircle,
-    className: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50',
+    className: 'text-blue-600 bg-blue-100/50',
   },
   posted: {
     label: 'Published',
     icon: CheckCircle,
-    className: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50',
+    className: 'text-green-600 bg-green-100/50',
   },
   scheduled: {
     label: 'Scheduled',
     icon: Clock,
-    className: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50',
+    className: 'text-blue-600 bg-blue-100/50',
   },
   failed: {
     label: 'Failed',
     icon: XCircle,
-    className: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50',
+    className: 'text-red-600 bg-red-100/50',
   },
 };
 
 function PostCard({ 
   post, 
   onDelete, 
-  onCopy 
+  onCopy,
+  onRegenerate,
 }: { 
   post: Post; 
   onDelete: (id: string) => void;
   onCopy: (content: string) => void;
+  onRegenerate: (content: string) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -115,7 +121,7 @@ function PostCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-violet-300 dark:hover:border-violet-700 transition-all overflow-hidden"
+      className="bg-white rounded-xl border border-gray-200 hover:border-violet-300 transition-all overflow-hidden"
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
@@ -130,13 +136,13 @@ function PostCard({
             </div>
             
             {/* Content Preview */}
-            <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 mb-3">
+            <p className="text-sm text-gray-700 line-clamp-3 mb-3">
               {post.post_content}
             </p>
 
             {/* Error Message */}
             {post.status === 'failed' && post.error_message && (
-              <div className="flex items-start gap-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-xs text-red-600 dark:text-red-400 mb-3">
+              <div className="flex items-start gap-2 p-2 bg-red-50/20 rounded-lg text-xs text-red-600 mb-3">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{post.error_message}</span>
               </div>
@@ -154,7 +160,7 @@ function PostCard({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -164,6 +170,16 @@ function PostCard({
             >
               <Copy className="h-4 w-4 mr-1" />
               Copy
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRegenerate(post.post_content)}
+              className="text-gray-500 hover:text-cyan-600"
+              title="Open this post in Studio to regenerate"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Regenerate
             </Button>
             {post.linkedin_post_urn && (
               <a
@@ -201,13 +217,13 @@ function PostCard({
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="absolute right-0 bottom-full mb-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden z-20"
+                    className="absolute right-0 bottom-full mb-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-20"
                   >
                     <button
                       onClick={() => {
                         setShowDeleteConfirm(true);
                       }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50/20"
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete
@@ -222,16 +238,16 @@ function PostCard({
               {showDeleteConfirm && (
                 <>
                   <div
-                    className="fixed inset-0 z-20 bg-black/50"
+                    className="fixed inset-0 z-20 bg-gray-900/20"
                     onClick={() => setShowDeleteConfirm(false)}
                   />
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-6 z-30"
+                    className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-xl shadow-xl border border-gray-200 p-6 z-30"
                   >
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
                       Delete Post?
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">
@@ -273,9 +289,12 @@ export default function PostsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
+  const { selectedBrand } = useWorkspace();
+  const router = useRouter();
+  const postsQueryKey = ['posts', selectedBrand?.id ?? 'all'] as const;
 
   const postsQuery = useQuery({
-    queryKey: ['posts'],
+    queryKey: postsQueryKey,
     queryFn: async () => {
       const supabase = createClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -283,11 +302,16 @@ export default function PostsPage() {
         return [] as Post[];
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('posts')
         .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('user_id', user.id);
+
+      if (selectedBrand?.id) {
+        query = query.eq('brand_id', selectedBrand.id);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         throw error;
@@ -308,7 +332,7 @@ export default function PostsPage() {
       .eq('id', postId);
 
     if (!error) {
-      queryClient.setQueryData<Post[]>(['posts'], (current) =>
+      queryClient.setQueryData<Post[]>(postsQueryKey, (current) =>
         (current ?? []).filter(p => p.id !== postId)
       );
     }
@@ -318,6 +342,12 @@ export default function PostsPage() {
     navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRegenerate = (content: string) => {
+    // Take first 200 chars as the topic seed
+    const topic = content.slice(0, 200).replace(/\n+/g, ' ').trim();
+    router.push(`/app/studio?step=0&direct=true&topic=${encodeURIComponent(topic)}`);
   };
 
   const filteredPosts = posts.filter(post => {
@@ -358,7 +388,7 @@ export default function PostsPage() {
         subtitle="Manage and track your LinkedIn content"
         actions={
           <Link href="/app/generate">
-            <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white">
+            <Button className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white">
               <Plus className="h-4 w-4 mr-2" />
               New Post
             </Button>
@@ -386,19 +416,19 @@ export default function PostsPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center p-12 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700"
+          className="text-center p-12 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200"
         >
-          <div className="h-16 w-16 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center mx-auto mb-4">
+          <div className="h-16 w-16 rounded-full bg-violet-100/50 flex items-center justify-center mx-auto mb-4">
             <FileText className="h-8 w-8 text-violet-500" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
             No posts yet
           </h3>
           <p className="text-gray-500 mb-6 max-w-sm mx-auto">
             Create your first AI-powered LinkedIn post and start building your professional presence.
           </p>
           <Link href="/app/generate">
-            <Button className="bg-gradient-to-r from-violet-600 to-blue-600">
+            <Button className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500">
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Post
             </Button>
@@ -416,8 +446,8 @@ export default function PostsPage() {
                   onClick={() => setFilter(status)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                     filter === status
-                      ? 'bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400'
-                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ? 'bg-violet-100/50 text-violet-600'
+                      : 'text-gray-500 hover:bg-gray-100'
                   }`}
                 >
                   {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -436,7 +466,7 @@ export default function PostsPage() {
                 placeholder="Search posts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                className="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-violet-50 focus:border-transparent"
               />
             </div>
           </div>
@@ -451,6 +481,7 @@ export default function PostsPage() {
                     post={post}
                     onDelete={handleDelete}
                     onCopy={handleCopy}
+                    onRegenerate={handleRegenerate}
                   />
                 ))
               ) : (

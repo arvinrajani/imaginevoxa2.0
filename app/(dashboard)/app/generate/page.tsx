@@ -32,6 +32,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
+import { useWorkspace } from '@/lib/context/workspace-context';
 
 const tones = [
   { id: 'professional', label: 'Professional', description: 'Business-appropriate and polished' },
@@ -67,6 +68,14 @@ type LinkedInConnection = {
   org_access_token?: string | null;
 };
 
+type BrandIntelligence = {
+  products: string[];
+  offerings: string[];
+  targetAudience: string | null;
+  businessFocus: string | null;
+  tagline: string | null;
+};
+
 const LENGTH_OPTIONS: Array<{ id: 'short' | 'standard' | 'long'; label: string; hint: string }> = [
   { id: 'short', label: 'Short', hint: '600-900 characters' },
   { id: 'standard', label: 'Standard', hint: '900-1400 characters' },
@@ -79,6 +88,19 @@ const STOP_WORDS = new Set([
   'the', 'their', 'there', 'they', 'this', 'to', 'was', 'we', 'were', 'what',
   'when', 'where', 'who', 'why', 'with', 'you', 'your'
 ]);
+
+const asTrimmedString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const asStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+};
 
 const extractHashtags = (content: string) => {
   const matches = content.match(/#[A-Za-z0-9_]+/g) || [];
@@ -163,11 +185,29 @@ const getPostMetrics = (content: string) => {
   };
 };
 
+const suggestToneForContext = (industry?: string | null, businessFocus?: string | null) => {
+  const context = `${industry || ''} ${businessFocus || ''}`.toLowerCase();
+
+  if (/(nonprofit|education|healthcare|community|coaching)/.test(context)) {
+    return 'inspirational';
+  }
+  if (/(marketing|ecommerce|retail|media|consumer|sales)/.test(context)) {
+    return 'bold';
+  }
+  if (/(technology|saas|software|startup|product)/.test(context)) {
+    return 'storytelling';
+  }
+
+  return 'professional';
+};
+
 export default function GeneratePage() {
+  const { selectedBrand } = useWorkspace();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const defaultsAppliedBrandIdRef = useRef<string | null>(null);
   
   // Content source
   const [contentSource, setContentSource] = useState<ContentSource>('text');
@@ -210,6 +250,7 @@ export default function GeneratePage() {
   const [copied, setCopied] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [brandIntelligence, setBrandIntelligence] = useState<BrandIntelligence | null>(null);
   
   // User data
   const [loading, setLoading] = useState(true);
@@ -225,6 +266,15 @@ export default function GeneratePage() {
   const [organizations, setOrganizations] = useState<Array<{ id: string; name: string; urn: string }>>([]);
   const [selectedOrgUrn, setSelectedOrgUrn] = useState<string>('');
   const [memberUrn, setMemberUrn] = useState<string>('');
+
+  const recommendedTone = useMemo(
+    () => suggestToneForContext(selectedBrand?.industry, brandIntelligence?.businessFocus),
+    [selectedBrand?.industry, brandIntelligence?.businessFocus]
+  );
+  const recommendedToneLabel = useMemo(
+    () => tones.find((entry) => entry.id === recommendedTone)?.label || 'Professional',
+    [recommendedTone]
+  );
 
   const readImageAsDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -294,6 +344,57 @@ export default function GeneratePage() {
 
     fetchUserData();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBrandContext() {
+      if (!selectedBrand?.id) {
+        defaultsAppliedBrandIdRef.current = null;
+        setBrandIntelligence(null);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('marketing_dna')
+        .select('evidence, created_at')
+        .eq('brand_id', selectedBrand.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      const evidence = error || !data ? {} : ((data.evidence || {}) as Record<string, unknown>);
+      const nextIntelligence: BrandIntelligence = {
+        products: asStringList(evidence.products),
+        offerings: asStringList(evidence.key_offerings),
+        targetAudience: asTrimmedString(evidence.target_audience),
+        businessFocus: asTrimmedString(evidence.business_focus),
+        tagline: asTrimmedString(evidence.tagline),
+      };
+
+      setBrandIntelligence(
+        error || !data
+          ? null
+          : nextIntelligence
+      );
+
+      if (defaultsAppliedBrandIdRef.current !== selectedBrand.id) {
+        setTargetAudience(nextIntelligence.targetAudience || '');
+        setPostGoal(nextIntelligence.businessFocus || '');
+        setTone(suggestToneForContext(selectedBrand.industry, nextIntelligence.businessFocus));
+        defaultsAppliedBrandIdRef.current = selectedBrand.id;
+      }
+    }
+
+    void loadBrandContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBrand?.id, selectedBrand?.industry]);
 
   const canPostToLinkedIn = PLAN_LIMITS[userPlan].canPostToLinkedIn;
   const canGenerateImages = userPlan !== 'starter';
@@ -498,6 +599,32 @@ export default function GeneratePage() {
       return;
     }
 
+    const brandContextParts: string[] = [];
+    if (selectedBrand?.name) {
+      brandContextParts.push(`Brand name: ${selectedBrand.name}.`);
+    }
+    if (selectedBrand?.industry) {
+      brandContextParts.push(`Industry: ${selectedBrand.industry}.`);
+    }
+    if (selectedBrand?.description) {
+      brandContextParts.push(`Brand description: ${selectedBrand.description}.`);
+    }
+    if (brandIntelligence?.businessFocus) {
+      brandContextParts.push(`Business focus: ${brandIntelligence.businessFocus}.`);
+    }
+    if (brandIntelligence?.targetAudience) {
+      brandContextParts.push(`Known audience: ${brandIntelligence.targetAudience}.`);
+    }
+    if (brandIntelligence?.tagline) {
+      brandContextParts.push(`Tagline: ${brandIntelligence.tagline}.`);
+    }
+    if (brandIntelligence?.products?.length) {
+      brandContextParts.push(`Products: ${brandIntelligence.products.slice(0, 5).join(', ')}.`);
+    }
+    if (brandIntelligence?.offerings?.length) {
+      brandContextParts.push(`Offerings: ${brandIntelligence.offerings.slice(0, 5).join(', ')}.`);
+    }
+
     const guidanceParts: string[] = [];
     if (targetAudience.trim()) {
       guidanceParts.push(`Target audience: ${targetAudience.trim()}.`);
@@ -512,6 +639,8 @@ export default function GeneratePage() {
     } else {
       guidanceParts.push('Length: standard (about 900 to 1400 characters).');
     }
+    const brandContextNote =
+      brandContextParts.length > 0 ? `\n\nBrand context: ${brandContextParts.join(' ')}` : '';
     const guidanceNote = guidanceParts.length > 0 ? `\n\nAdditional guidance: ${guidanceParts.join(' ')}` : '';
     
     setIsGenerating(true);
@@ -521,9 +650,12 @@ export default function GeneratePage() {
       const formData = new FormData();
       formData.append('tone', tone);
       formData.append('contentSource', contentSource);
+      if (selectedBrand?.id) {
+        formData.append('brandId', selectedBrand.id);
+      }
       
       if (contentSource === 'text') {
-        formData.append('prompt', `${topic}${guidanceNote}`);
+        formData.append('prompt', `${topic}${brandContextNote}${guidanceNote}`);
         formData.append('wantImage', canGenerateImages ? 'true' : 'false');
       } else if (contentSource === 'pdf') {
         // Check if we have extracted text or need to use manual description
@@ -536,11 +668,11 @@ export default function GeneratePage() {
           ? `\n\nAdditional context from user: ${topic}` 
           : '';
         
-        formData.append('prompt', `Create a LinkedIn post based on this document content:\n\n${pdfContent}${additionalContext}${guidanceNote}`);
+        formData.append('prompt', `Create a LinkedIn post based on this document content:\n\n${pdfContent}${additionalContext}${brandContextNote}${guidanceNote}`);
         formData.append('pdfText', pdfContent);
         formData.append('wantImage', canGenerateImages ? 'true' : 'false');
       } else if (contentSource === 'image') {
-        formData.append('prompt', `Create a LinkedIn post about these personal images. Context from user: ${imagePrompt}${guidanceNote}`);
+        formData.append('prompt', `Create a LinkedIn post about these personal images. Context from user: ${imagePrompt}${brandContextNote}${guidanceNote}`);
         formData.append('imageContext', imagePrompt);
         formData.append('wantImage', 'false'); // User has their own images
         // Attach images
@@ -548,9 +680,13 @@ export default function GeneratePage() {
           formData.append(`image_${i}`, img);
         });
       } else if (contentSource === 'video') {
-        formData.append('prompt', `Create a LinkedIn post about this personal video. Context from user: ${videoPrompt}${guidanceNote}`);
+        formData.append('prompt', `Create a LinkedIn post about this personal video. Context from user: ${videoPrompt}${brandContextNote}${guidanceNote}`);
         formData.append('videoContext', videoPrompt);
         formData.append('wantImage', 'false');
+        // attach video file for optional transcription/processing on server
+        if (uploadedVideo) {
+          formData.append('video', uploadedVideo);
+        }
       }
       
       formData.append('approvalRequired', 'false');
@@ -711,7 +847,7 @@ export default function GeneratePage() {
     if (urls.length === 1) {
       return (
         <div className="mt-4 -mx-4">
-          <div className="aspect-[4/3] bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
             <img
               src={urls[0]}
               alt="Post image"
@@ -728,7 +864,7 @@ export default function GeneratePage() {
 
     return (
       <div className="mt-4 -mx-4">
-        <div className={`${gridClass} aspect-[4/3] bg-gray-100 dark:bg-gray-800 overflow-hidden`}>
+        <div className={`${gridClass} aspect-[4/3] bg-gray-100 overflow-hidden`}>
           {urls.slice(0, 4).map((url, index) => (
             <div
               key={`${url}-${index}`}
@@ -776,21 +912,21 @@ export default function GeneratePage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center p-12 bg-gradient-to-br from-violet-50 to-blue-50 dark:from-violet-900/20 dark:to-blue-900/20 rounded-3xl border border-violet-200 dark:border-violet-800"
+          className="text-center p-12 bg-gradient-to-br from-violet-50 to-blue-50/20 rounded-3xl border border-violet-200"
         >
           <div className="h-20 w-20 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center mx-auto mb-6">
             <Zap className="h-10 w-10 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
             You have used all your credits!
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
             You have created {creditsTotal} posts this month on the {PLAN_LIMITS[userPlan].name} plan.
             Upgrade to Pro or Pro+ for more posts and direct LinkedIn publishing.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/pricing">
-              <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white px-8">
+              <Button className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white px-8">
                 <Crown className="h-5 w-5 mr-2" />
                 See Plans
               </Button>
@@ -819,30 +955,47 @@ export default function GeneratePage() {
             <span className="text-voxa-gradient">Generate</span> Post
           </>
         }
-        subtitle="Create engaging LinkedIn content with AI"
+        subtitle={
+          selectedBrand
+            ? `Create engaging LinkedIn content for ${selectedBrand.name}`
+            : 'Create engaging LinkedIn content with AI'
+        }
       />
 
+      {selectedBrand && (
+        <div className="mb-6 rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-4 py-3 text-sm">
+          <p className="font-medium text-cyan-900">
+            Active brand: {selectedBrand.name}
+          </p>
+          <p className="mt-1 text-cyan-800">
+            {selectedBrand.industry ? `${selectedBrand.industry} · ` : ''}
+            Tone suggestion: {recommendedToneLabel}
+            {brandIntelligence?.targetAudience ? ` · Audience: ${brandIntelligence.targetAudience}` : ''}
+          </p>
+        </div>
+      )}
+
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border-2 border-violet-200 dark:border-violet-800 bg-gradient-to-br from-violet-50 to-white dark:from-violet-900/20 dark:to-gray-900 p-4 shadow-sm">
+        <div className="rounded-xl border-2 border-violet-200 bg-gradient-to-br from-violet-500 to-white/20 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-full bg-violet-600 text-white flex items-center justify-center text-xs font-bold">1</div>
-            <p className="text-sm font-bold text-violet-900 dark:text-violet-100">Choose Your Content</p>
+            <p className="text-sm font-bold text-violet-900">Choose Your Content</p>
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400">Start with text ideas, upload a PDF, add photos, or share a video</p>
+          <p className="text-xs text-gray-600">Start with text ideas, upload a PDF, add photos, or share a video</p>
         </div>
-        <div className="rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 p-4 shadow-sm">
+        <div className="rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-500 to-white/20 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">2</div>
-            <p className="text-sm font-bold text-blue-900 dark:text-blue-100">Set Tone & Goals</p>
+            <p className="text-sm font-bold text-blue-900">Set Tone & Goals</p>
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400">Tell us who you're talking to and what tone to use</p>
+          <p className="text-xs text-gray-600">Tell us who you're talking to and what tone to use</p>
         </div>
-        <div className="rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-gray-900 p-4 shadow-sm">
+        <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-500 to-white/20 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">3</div>
-            <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Review & Share</p>
+            <p className="text-sm font-bold text-emerald-900">Review & Share</p>
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400">Edit the AI draft, then publish directly or copy to LinkedIn</p>
+          <p className="text-xs text-gray-600">Edit the AI draft, then publish directly or copy to LinkedIn</p>
         </div>
       </div>
 
@@ -855,18 +1008,18 @@ export default function GeneratePage() {
             animate={{ opacity: 1, y: 0 }}
             className={`flex items-center justify-between p-4 rounded-xl border ${
               creditsRemaining <= 1 
-                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
-                : 'bg-gradient-to-r from-violet-100 to-blue-100 dark:from-violet-900/30 dark:to-blue-900/30 border-violet-200 dark:border-violet-800'
+                ? 'bg-amber-50/20 border-amber-200'
+                : 'bg-gradient-to-r from-violet-100 to-blue-100/30 border-violet-200'
             }`}
           >
             <div className="flex items-center gap-3">
-              <Zap className={`h-5 w-5 ${creditsRemaining <= 1 ? 'text-amber-600' : 'text-violet-600 dark:text-violet-400'}`} />
-              <span className={`text-sm font-medium ${creditsRemaining <= 1 ? 'text-amber-900 dark:text-amber-100' : 'text-violet-900 dark:text-violet-100'}`}>
+              <Zap className={`h-5 w-5 ${creditsRemaining <= 1 ? 'text-amber-600' : 'text-violet-600'}`} />
+              <span className={`text-sm font-medium ${creditsRemaining <= 1 ? 'text-amber-900' : 'text-violet-900'}`}>
                 {creditsRemaining} / {creditsTotal} credits remaining
               </span>
             </div>
             <Link href="/pricing">
-              <Button variant="ghost" size="sm" className="text-violet-600 dark:text-violet-400">
+              <Button variant="ghost" size="sm" className="text-violet-600">
                 {creditsRemaining <= 1 ? 'Upgrade Now' : 'Get More'}
               </Button>
             </Link>
@@ -877,15 +1030,15 @@ export default function GeneratePage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl"
+              className="p-4 bg-blue-50/20 border border-blue-200 rounded-xl"
             >
               <div className="flex items-start gap-3">
                 <Lock className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  <p className="text-sm font-medium text-blue-900">
                     Starter Plan - Manual Publishing
                   </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  <p className="text-xs text-blue-700 mt-1">
                     Upload PDFs, images, and videos, then copy your post to LinkedIn.
                     <Link href="/pricing" className="underline ml-1 font-medium">
                       See Plans
@@ -898,7 +1051,7 @@ export default function GeneratePage() {
 
           {/* Content Source Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
               Content Source
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -907,12 +1060,12 @@ export default function GeneratePage() {
                 className={`p-4 rounded-xl text-center transition-all ${
                   contentSource === 'text'
                     ? 'bg-violet-600 text-white'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <FileText className="h-6 w-6 mx-auto mb-2" />
                 <p className="font-medium text-sm">Text</p>
-                <p className={`text-xs mt-0.5 ${contentSource === 'text' ? 'text-violet-200' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-0.5 ${contentSource === 'text' ? 'text-violet-600' : 'text-gray-500'}`}>
                   Write a prompt
                 </p>
               </button>
@@ -921,12 +1074,12 @@ export default function GeneratePage() {
                 className={`p-4 rounded-xl text-center transition-all ${
                   contentSource === 'pdf'
                     ? 'bg-violet-600 text-white'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <File className="h-6 w-6 mx-auto mb-2" />
                 <p className="font-medium text-sm">PDF</p>
-                <p className={`text-xs mt-0.5 ${contentSource === 'pdf' ? 'text-violet-200' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-0.5 ${contentSource === 'pdf' ? 'text-violet-600' : 'text-gray-500'}`}>
                   Upload document
                 </p>
               </button>
@@ -935,12 +1088,12 @@ export default function GeneratePage() {
                 className={`p-4 rounded-xl text-center transition-all ${
                   contentSource === 'image'
                     ? 'bg-violet-600 text-white'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <ImageIcon className="h-6 w-6 mx-auto mb-2" />
                 <p className="font-medium text-sm">Image</p>
-                <p className={`text-xs mt-0.5 ${contentSource === 'image' ? 'text-violet-200' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-0.5 ${contentSource === 'image' ? 'text-violet-600' : 'text-gray-500'}`}>
                   Your photos
                 </p>
               </button>
@@ -949,12 +1102,12 @@ export default function GeneratePage() {
                 className={`p-4 rounded-xl text-center transition-all ${
                   contentSource === 'video'
                     ? 'bg-violet-600 text-white'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <Video className="h-6 w-6 mx-auto mb-2" />
                 <p className="font-medium text-sm">Video</p>
-                <p className={`text-xs mt-0.5 ${contentSource === 'video' ? 'text-violet-200' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-0.5 ${contentSource === 'video' ? 'text-violet-600' : 'text-gray-500'}`}>
                   Your video
                 </p>
               </button>
@@ -962,16 +1115,16 @@ export default function GeneratePage() {
             
             {/* Pro Features Upgrade Banner for Starter */}
             {userPlan === 'starter' && (
-              <div className="mt-3 p-3 bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-900/20 dark:to-blue-900/20 border border-violet-200 dark:border-violet-800 rounded-xl">
+              <div className="mt-3 p-3 bg-gradient-to-r from-violet-50 to-blue-50/20 border border-violet-200 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Crown className="h-4 w-4 text-violet-600" />
-                    <span className="text-sm text-violet-900 dark:text-violet-100">
+                    <span className="text-sm text-violet-900">
                       Unlock Voxa image generation and direct publishing with Pro or Pro+
                     </span>
                   </div>
                   <Link href="/pricing">
-                    <Button size="sm" variant="ghost" className="text-violet-600 dark:text-violet-400 h-7 text-xs">
+                    <Button size="sm" variant="ghost" className="text-violet-600 h-7 text-xs">
                       Upgrade <ArrowRight className="h-3 w-3 ml-1" />
                     </Button>
                   </Link>
@@ -985,7 +1138,7 @@ export default function GeneratePage() {
             <>
               {/* Topic Input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   What would you like to post about? *
                 </label>
                 <textarea
@@ -993,9 +1146,9 @@ export default function GeneratePage() {
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder="Type your topic or idea here...\n\nExamples:\n• Share 3 lessons I learned from failing at my first startup\n• Explain why AI won't replace developers, but will change how we work\n• Announce our company's new sustainability initiative\n• Tell the story of how I landed my dream job\n• Give 5 actionable tips for better LinkedIn engagement\n\nThe more detail you provide, the better your AI-generated post will be!"
                   rows={4}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
                   <span>Tip: Be specific! Instead of "productivity tips", try "5 time management techniques that helped me finish work by 3pm"</span>
                 </p>
@@ -1003,7 +1156,7 @@ export default function GeneratePage() {
 
               {/* Quick Templates */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Quick Template (optional)
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -1016,8 +1169,8 @@ export default function GeneratePage() {
                       }}
                       className={`p-3 rounded-xl text-left text-sm transition-all ${
                         template === t.id
-                          ? 'bg-violet-100 dark:bg-violet-900/50 border-2 border-violet-500'
-                          : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700'
+                          ? 'bg-violet-100/50 border-2 border-violet-50'
+                          : 'bg-gray-50 border border-gray-200 hover:border-violet-300'
                       }`}
                     >
                       {t.label}
@@ -1032,17 +1185,17 @@ export default function GeneratePage() {
           {contentSource === 'pdf' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Upload PDF Document
                 </label>
                 
                 {!pdfFile ? (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+                    className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-violet-400 transition-colors"
                   >
                     <Upload className="h-10 w-10 mx-auto text-gray-400 mb-3" />
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <p className="text-sm font-medium text-gray-700">
                       Click to upload PDF
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
@@ -1060,12 +1213,12 @@ export default function GeneratePage() {
                     />
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                  <div className="bg-gray-50 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <File className="h-8 w-8 text-red-500" />
                         <div>
-                          <p className="font-medium text-gray-900 dark:text-white text-sm">
+                          <p className="font-medium text-gray-900 text-sm">
                             {pdfFile.name}
                           </p>
                           <p className="text-xs text-gray-500">
@@ -1086,15 +1239,15 @@ export default function GeneratePage() {
                     ) : pdfText ? (
                       <div>
                         {pdfText.includes('Could not extract') || pdfText.includes('image-based') ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                          <p className="text-xs text-amber-600 mb-2">
                             ⚠️ This PDF is image-based. Please describe the content below.
                           </p>
                         ) : (
                           <>
-                            <p className="text-xs text-green-600 dark:text-green-400 mb-2">
+                            <p className="text-xs text-green-600 mb-2">
                               ✓ Text extracted successfully
                             </p>
-                            <div className="max-h-32 overflow-y-auto text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 p-3 rounded-lg">
+                            <div className="max-h-32 overflow-y-auto text-xs text-gray-600 bg-white p-3 rounded-lg">
                               {pdfText.substring(0, 500)}...
                             </div>
                           </>
@@ -1107,7 +1260,7 @@ export default function GeneratePage() {
               
               {/* Manual description for image-based PDFs or additional context */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Describe the PDF content {pdfText && !pdfText.includes('Could not extract') ? '(optional)' : '*'}
                 </label>
                 <textarea
@@ -1117,9 +1270,9 @@ export default function GeneratePage() {
                     ? "Add context or angle for the post...\n\nExamples:\n• Highlight the 3 most important insights from this report\n• Focus on the cost-saving benefits mentioned in the document\n• Create a post that asks for feedback on these findings"
                     : "Describe the main points from your PDF...\n\nExamples:\n• This product catalog covers our new smart capacitors with energy-saving features\n• Whitepaper about AI trends in 2026, focusing on practical business applications\n• Case study showing how our client increased sales by 40% in 6 months"}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                <p className="text-xs text-gray-500 mt-2">
                   {pdfText && !pdfText.includes('Could not extract') 
                     ? '✓ We extracted the text - add any extra context or focus areas here'
                     : '⚠️ Couldn\'t extract text automatically - please summarize the key points from your PDF'}
@@ -1133,14 +1286,14 @@ export default function GeneratePage() {
             <>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="block text-sm font-medium text-gray-700">
                     Upload Your Images (up to 4)
                   </label>
                   {imagePreviewUrls.length > 0 && (
                     <button
                       type="button"
                       onClick={clearImages}
-                      className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                      className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
                     >
                       Clear all
                     </button>
@@ -1150,7 +1303,7 @@ export default function GeneratePage() {
                 <div className="grid grid-cols-2 gap-3">
                   {/* Image Previews */}
                   {imagePreviewUrls.map((url, index) => (
-                    <div key={index} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
+                    <div key={index} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
                       <img src={url} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
                       <button
                         onClick={() => removeImage(index)}
@@ -1165,7 +1318,7 @@ export default function GeneratePage() {
                   {uploadedImages.length < 4 && (
                     <div
                       onClick={() => imageInputRef.current?.click()}
-                      className="aspect-square border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+                      className="aspect-square border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-400 transition-colors"
                     >
                       <Upload className="h-8 w-8 text-gray-400 mb-2" />
                       <p className="text-xs text-gray-500">Select Images</p>
@@ -1186,7 +1339,7 @@ export default function GeneratePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   What is this post about? *
                 </label>
                 <textarea
@@ -1194,9 +1347,9 @@ export default function GeneratePage() {
                   onChange={(e) => setImagePrompt(e.target.value)}
                   placeholder="Tell us what story these images tell...\n\nExamples:\n• Just wrapped our best team offsite yet! These moments show what makes our culture special\n• Proud to unveil our new product. Here's what 6 months of work looks like\n• Behind the scenes of how we solve customer problems every day\n• Last week at the conference - met incredible people and learned so much"
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <ImageIcon className="w-3 h-3 mt-0.5 shrink-0" />
                   <span>AI will create engaging text to complement your images - be descriptive about what they show and why they matter</span>
                 </p>
@@ -1209,14 +1362,14 @@ export default function GeneratePage() {
             <>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="block text-sm font-medium text-gray-700">
                     Upload Your Video
                   </label>
                   {uploadedVideo && (
                     <button
                       type="button"
                       onClick={clearVideo}
-                      className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                      className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
                     >
                       Clear
                     </button>
@@ -1226,10 +1379,10 @@ export default function GeneratePage() {
                 {!uploadedVideo ? (
                   <div
                     onClick={() => videoInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+                    className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-violet-400 transition-colors"
                   >
                     <Upload className="h-10 w-10 mx-auto text-gray-400 mb-3" />
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <p className="text-sm font-medium text-gray-700">
                       Click to upload video
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
@@ -1247,7 +1400,7 @@ export default function GeneratePage() {
                     />
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
                     <div className="aspect-video bg-black">
                       <video
                         src={videoPreviewUrl}
@@ -1257,7 +1410,7 @@ export default function GeneratePage() {
                     </div>
                     <div className="p-3 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <p className="text-sm font-medium text-gray-700">
                           {uploadedVideo.name}
                         </p>
                         <p className="text-xs text-gray-500">
@@ -1277,7 +1430,7 @@ export default function GeneratePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   What is this post about? *
                 </label>
                 <textarea
@@ -1285,9 +1438,9 @@ export default function GeneratePage() {
                   onChange={(e) => setVideoPrompt(e.target.value)}
                   placeholder="Describe your video content...\n\nExamples:\n• Quick demo of our new feature that saves users 2 hours a week\n• Recap of last week's industry event with key takeaways\n• Behind-the-scenes look at how we build our products\n• Customer testimonial showing real results from our solution"
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-start gap-1">
+                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <Video className="w-3 h-3 mt-0.5 shrink-0" />
                   <span>We'll write a compelling caption that drives engagement with your video content</span>
                 </p>
@@ -1297,9 +1450,14 @@ export default function GeneratePage() {
 
           {/* Tone Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Tone
             </label>
+            {selectedBrand && (
+              <p className="mb-2 text-xs text-gray-500">
+                Suggested for {selectedBrand.name}: <span className="font-medium">{recommendedToneLabel}</span>
+              </p>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {tones.map((t) => (
                 <button
@@ -1308,11 +1466,11 @@ export default function GeneratePage() {
                   className={`p-3 rounded-xl text-left transition-all ${
                     tone === t.id
                       ? 'bg-violet-600 text-white'
-                      : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   <p className="font-medium text-sm">{t.label}</p>
-                  <p className={`text-xs mt-0.5 ${tone === t.id ? 'text-violet-200' : 'text-gray-500'}`}>
+                  <p className={`text-xs mt-0.5 ${tone === t.id ? 'text-violet-600' : 'text-gray-500'}`}>
                     {t.description}
                   </p>
                 </button>
@@ -1322,7 +1480,7 @@ export default function GeneratePage() {
 
           {/* Audience & Goal */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Audience and Goal (Optional but Recommended)
             </label>
             <div className="space-y-3">
@@ -1331,21 +1489,21 @@ export default function GeneratePage() {
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
                   placeholder="Who are you writing for? (e.g., Marketing managers, Tech entrepreneurs, Job seekers)"
-                  className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent text-sm"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">This helps the AI write in a way that resonates with your readers</p>
+                <p className="text-xs text-gray-500 mt-1.5">This helps the AI write in a way that resonates with your readers</p>
               </div>
               <div>
                 <input
                   value={postGoal}
                   onChange={(e) => setPostGoal(e.target.value)}
                   placeholder="What do you want readers to do? (e.g., Visit our website, Comment their thoughts, Book a call)"
-                  className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent text-sm"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">We'll create a compelling call-to-action based on your goal</p>
+                <p className="text-xs text-gray-500 mt-1.5">We'll create a compelling call-to-action based on your goal</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                <p className="text-sm text-gray-600 mb-2">
                   Length preference
                 </p>
                 <div className="grid grid-cols-3 gap-2">
@@ -1356,8 +1514,8 @@ export default function GeneratePage() {
                       onClick={() => setLengthPreference(option.id)}
                       className={`p-3 rounded-xl text-center transition-all border ${
                         lengthPreference === option.id
-                          ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-200'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-violet-300 dark:hover:border-violet-700'
+                          ? 'border-violet-50 bg-violet-50/30 text-violet-700'
+                          : 'border-gray-200 text-gray-600 hover:border-violet-300'
                       }`}
                     >
                       <p className="text-sm font-medium">{option.label}</p>
@@ -1372,7 +1530,7 @@ export default function GeneratePage() {
           {/* Posting Target Selector - Only for Pro/Business users with LinkedIn connected */}
           {canPostToLinkedIn && linkedinConnected && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Post As
               </label>
               <div className="space-y-3">
@@ -1383,7 +1541,7 @@ export default function GeneratePage() {
                     className={`p-4 rounded-xl text-center transition-all flex items-center justify-center gap-2 ${
                       postingTarget === 'person'
                         ? 'bg-violet-600 text-white'
-                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 flex items-center justify-center text-white font-bold text-xs">
@@ -1391,7 +1549,7 @@ export default function GeneratePage() {
                     </div>
                     <div className="text-left">
                       <p className="font-medium text-sm">Personal</p>
-                      <p className={`text-xs ${postingTarget === 'person' ? 'text-violet-200' : 'text-gray-500'}`}>
+                      <p className={`text-xs ${postingTarget === 'person' ? 'text-violet-600' : 'text-gray-500'}`}>
                         {userName}
                       </p>
                     </div>
@@ -1403,8 +1561,8 @@ export default function GeneratePage() {
                       postingTarget === 'organization'
                         ? 'bg-violet-600 text-white'
                         : (!orgAppConnected || organizations.length === 0)
-                        ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                        : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        ? 'bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white">
@@ -1414,7 +1572,7 @@ export default function GeneratePage() {
                     </div>
                     <div className="text-left">
                       <p className="font-medium text-sm">Organization</p>
-                      <p className={`text-xs ${postingTarget === 'organization' ? 'text-violet-200' : 'text-gray-500'}`}>
+                      <p className={`text-xs ${postingTarget === 'organization' ? 'text-violet-600' : 'text-gray-500'}`}>
                         {!orgAppConnected ? 'Org app not connected' : organizations.length === 0 ? 'No pages found' : 'Company page'}
                       </p>
                     </div>
@@ -1427,7 +1585,7 @@ export default function GeneratePage() {
                     <select
                       value={selectedOrgUrn}
                       onChange={(e) => setSelectedOrgUrn(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all text-sm"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent transition-all text-sm"
                     >
                       {organizations.map((org) => (
                         <option key={org.urn} value={org.urn}>
@@ -1435,8 +1593,8 @@ export default function GeneratePage() {
                         </option>
                       ))}
                     </select>
-                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                    <div className="p-3 bg-amber-50/20 border border-amber-200 rounded-lg">
+                      <p className="text-xs text-amber-700">
                         ⚠️ <strong>Note:</strong> Posting as organization requires LinkedIn Marketing Developer Platform approval. 
                         If posting fails, try posting as your personal profile instead.
                       </p>
@@ -1445,18 +1603,18 @@ export default function GeneratePage() {
                 )}
                 
                 {!orgAppConnected && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500">
                     Connect the organization LinkedIn app to enable company posting.
-                    <Link href="/app/linkedin" className="text-violet-600 dark:text-violet-400 ml-1 hover:underline">
+                    <Link href="/app/linkedin" className="text-violet-600 ml-1 hover:underline">
                       Connect now
                     </Link>
                   </p>
                 )}
 
                 {orgAppConnected && organizations.length === 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500">
                     ?? To post as an organization, you need to be an admin of a LinkedIn Company Page. 
-                    <a href="https://www.linkedin.com/company/setup/new/" target="_blank" rel="noopener noreferrer" className="text-violet-600 dark:text-violet-400 ml-1 hover:underline">
+                    <a href="https://www.linkedin.com/company/setup/new/" target="_blank" rel="noopener noreferrer" className="text-violet-600 ml-1 hover:underline">
                       Create a page
                     </a>
                   </p>
@@ -1472,11 +1630,11 @@ export default function GeneratePage() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-3"
+                className="p-4 bg-red-50/20 border border-red-200 rounded-xl flex items-start gap-3"
               >
                 <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-red-600 dark:text-red-400">{publishError}</p>
+                  <p className="text-sm text-red-600">{publishError}</p>
                 </div>
                 <button onClick={() => setPublishError(null)} className="ml-auto">
                   <X className="h-4 w-4 text-red-400" />
@@ -1489,7 +1647,7 @@ export default function GeneratePage() {
           <Button
             onClick={handleGenerate}
             disabled={isGenerating || creditsRemaining <= 0}
-            className="w-full h-14 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white font-semibold text-lg shadow-lg shadow-violet-500/25"
+            className="w-full h-14 bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white font-semibold text-lg shadow-lg shadow-cyan-50/20"
           >
             {isGenerating ? (
               <motion.div
@@ -1512,24 +1670,24 @@ export default function GeneratePage() {
         {/* Right: Preview */}
         <div>
           <div className="sticky top-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Preview
             </h2>
             
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               {generatedPost ? (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                 >
                   {/* LinkedIn-style header */}
-                  <div className="p-4 border-b border-gray-100 dark:border-gray-800">
+                  <div className="p-4 border-b border-gray-100">
                     <div className="flex items-center gap-3">
                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 flex items-center justify-center text-white font-bold">
                         {userName.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{userName}</p>
+                        <p className="font-semibold text-gray-900">{userName}</p>
                         <p className="text-xs text-gray-500">Just now • 🌐</p>
                       </div>
                     </div>
@@ -1537,7 +1695,7 @@ export default function GeneratePage() {
                   
                   {/* Post content */}
                   <div className="p-4">
-                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap text-sm leading-relaxed">
+                    <p className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed">
                       {previewContent}
                     </p>
                     
@@ -1552,7 +1710,7 @@ export default function GeneratePage() {
                   </div>
                   
                   {/* Engagement bar */}
-                  <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-6 text-gray-500">
+                  <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-6 text-gray-500">
                     <button className="flex items-center gap-1.5 hover:text-blue-600 transition-colors">
                       <Heart className="h-5 w-5" />
                       <span className="text-sm">Like</span>
@@ -1564,7 +1722,7 @@ export default function GeneratePage() {
                   </div>
                   
                   {/* Action buttons */}
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                  <div className="p-4 bg-gray-50/50 border-t border-gray-200 space-y-3">
                     <div className="flex gap-3">
                       <Button
                         onClick={handleCopy}
@@ -1613,15 +1771,15 @@ export default function GeneratePage() {
                     </Button>
                   </div>
 
-                  <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                  <div className="border-t border-gray-200 bg-white">
                     <div className="p-4 space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">Edit Post</p>
+                          <p className="text-sm font-semibold text-gray-900">Edit Post</p>
                           <button
                             type="button"
                             onClick={resetDraft}
-                            className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                            className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
                           >
                             Reset
                           </button>
@@ -1630,20 +1788,20 @@ export default function GeneratePage() {
                           value={draftContent}
                           onChange={(e) => setDraftContent(e.target.value)}
                           rows={6}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none text-sm"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none text-sm"
                         />
                       </div>
 
                       {hookSuggestions.length > 0 && (
                         <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Hook Options</p>
+                          <p className="text-sm font-semibold text-gray-900 mb-2">Hook Options</p>
                           <div className="grid gap-2">
                             {hookSuggestions.map((hook) => (
                               <button
                                 key={hook}
                                 type="button"
                                 onClick={() => setDraftContent(prev => replaceFirstLine(prev, hook))}
-                                className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-violet-400 dark:hover:border-violet-500 text-sm text-gray-700 dark:text-gray-200 transition-colors"
+                                className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-violet-400 text-sm text-gray-700 transition-colors"
                               >
                                 {hook}
                               </button>
@@ -1654,7 +1812,7 @@ export default function GeneratePage() {
 
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">Hashtag Helper</p>
+                          <p className="text-sm font-semibold text-gray-900">Hashtag Helper</p>
                           <label className="flex items-center gap-2 text-xs text-gray-500">
                             <input
                               type="checkbox"
@@ -1677,8 +1835,8 @@ export default function GeneratePage() {
                                     onClick={() => toggleHashtag(tag)}
                                     className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
                                       isSelected
-                                        ? 'border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200'
-                                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-violet-400 dark:hover:border-violet-500'
+                                        ? 'border-violet-50 bg-violet-50 text-violet-700/40'
+                                        : 'border-gray-200 text-gray-600 hover:border-violet-400'
                                     }`}
                                   >
                                     {tag}
@@ -1707,7 +1865,7 @@ export default function GeneratePage() {
                       </div>
 
                       <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Post Health</p>
+                        <p className="text-sm font-semibold text-gray-900 mb-2">Post Health</p>
                         {lengthHint && (
                           <p className="text-xs text-gray-500 mb-2">Target length: {lengthHint}</p>
                         )}
@@ -1721,27 +1879,27 @@ export default function GeneratePage() {
                             {postMetrics.readingTime} min read
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.lengthStatus === 'Good' ? 'bg-green-500' : postMetrics.lengthStatus === 'Short' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.lengthStatus === 'Good' ? 'bg-green-50' : postMetrics.lengthStatus === 'Short' ? 'bg-amber-50' : 'bg-red-50'}`} />
                             {postMetrics.lengthStatus} length
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasCta ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasCta ? 'bg-green-50' : 'bg-amber-50'}`} />
                             CTA {postMetrics.hasCta ? 'present' : 'missing'}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasQuestion ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasQuestion ? 'bg-green-50' : 'bg-amber-50'}`} />
                             Question {postMetrics.hasQuestion ? 'present' : 'missing'}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasHashtags ? 'bg-green-500' : 'bg-amber-500'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasHashtags ? 'bg-green-50' : 'bg-amber-50'}`} />
                             Hashtags {postMetrics.hasHashtags ? 'present' : 'missing'}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasEmoji ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasEmoji ? 'bg-green-50' : 'bg-gray-300'}`} />
                             Emoji {postMetrics.hasEmoji ? 'present' : 'optional'}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasLink ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className={`h-2 w-2 rounded-full ${postMetrics.hasLink ? 'bg-green-50' : 'bg-gray-300'}`} />
                             Link {postMetrics.hasLink ? 'present' : 'optional'}
                           </div>
                         </div>
@@ -1751,7 +1909,7 @@ export default function GeneratePage() {
                 </motion.div>
               ) : (
                 <div className="p-12 text-center">
-                  <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                  <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="h-8 w-8 text-gray-400" />
                   </div>
                   <p className="text-gray-500">

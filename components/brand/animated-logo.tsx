@@ -4,28 +4,28 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface AnimatedLogoProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
   className?: string;
 }
 
 export function AnimatedLogo({ size = 'md', showText = false, className = '' }: AnimatedLogoProps) {
   const sizes = {
-    sm: { logo: 'h-10 w-28', text: 'text-lg', font: 'text-sm' },
-    md: { logo: 'h-12 w-32', text: 'text-xl', font: 'text-base' },
-    lg: { logo: 'h-16 w-44', text: 'text-2xl', font: 'text-lg' },
+    sm: { logo: 'h-10 w-auto', text: 'text-lg', font: 'text-sm' },
+    md: { logo: 'h-12 w-auto', text: 'text-xl', font: 'text-base' },
+    lg: { logo: 'h-16 w-auto', text: 'text-2xl', font: 'text-lg' },
+    xl: { logo: 'h-20 w-auto', text: 'text-3xl', font: 'text-xl' },
   };
 
-  const s = sizes[size];
-  const [logoSrc, setLogoSrc] = useState('/voxa-logo.png');
-  const handleLogoError = () => setLogoSrc('/voxa-logo.svg');
+  const s = sizes[size as keyof typeof sizes] || sizes.md;
+  const [logoSrc, setLogoSrc] = useState('/voxa-logo.svg');
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <motion.div
-        className={`${s.logo} rounded-2xl overflow-hidden bg-[#060B27] ring-1 ring-white/10 shadow-voxa`}
-        whileHover={{ scale: 1.02, rotate: 0.5 }}
-        whileTap={{ scale: 0.98 }}
+        className={`${s.logo} overflow-hidden bg-transparent`}
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -33,8 +33,7 @@ export function AnimatedLogo({ size = 'md', showText = false, className = '' }: 
         <motion.img
           src={logoSrc}
           alt="Voxa logo"
-          className="h-full w-full object-contain"
-          onError={handleLogoError}
+          className="h-full w-auto object-contain drop-shadow-[0_0_16px_rgba(34,211,238,0.3)]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.15 }}
@@ -43,7 +42,7 @@ export function AnimatedLogo({ size = 'md', showText = false, className = '' }: 
       
       {showText && (
         <motion.span
-          className={`font-semibold ${s.text} text-gray-900 dark:text-white`}
+          className={`font-semibold ${s.text} text-gradient`}
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
@@ -58,27 +57,25 @@ export function AnimatedLogo({ size = 'md', showText = false, className = '' }: 
 // Simple version without animation for static contexts
 export function Logo({ size = 'md', showText = false, className = '' }: AnimatedLogoProps) {
   const sizes = {
-    sm: { logo: 'h-10 w-28', text: 'text-lg', font: 'text-sm' },
-    md: { logo: 'h-12 w-32', text: 'text-xl', font: 'text-base' },
-    lg: { logo: 'h-16 w-44', text: 'text-2xl', font: 'text-lg' },
+    sm: { logo: 'h-10 w-auto', text: 'text-lg', font: 'text-sm' },
+    md: { logo: 'h-12 w-auto', text: 'text-xl', font: 'text-base' },
+    lg: { logo: 'h-16 w-auto', text: 'text-2xl', font: 'text-lg' },
+    xl: { logo: 'h-20 w-auto', text: 'text-3xl', font: 'text-xl' },
   };
 
-  const s = sizes[size];
-  const [logoSrc, setLogoSrc] = useState('/voxa-logo.png');
-  const handleLogoError = () => setLogoSrc('/voxa-logo.svg');
+  const s = sizes[size as keyof typeof sizes] || sizes.md;
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      <div className={`${s.logo} rounded-2xl overflow-hidden bg-[#060B27] ring-1 ring-white/10 shadow-voxa`}>
+      <div className={`${s.logo} overflow-hidden bg-transparent`}>
         <img
-          src={logoSrc}
+          src="/voxa-logo.svg"
           alt="Voxa logo"
-          className="h-full w-full object-contain"
-          onError={handleLogoError}
+          className="h-full w-auto object-contain drop-shadow-[0_0_16px_rgba(34,211,238,0.3)]"
         />
       </div>
       {showText && (
-        <span className={`font-semibold ${s.text} text-gray-900 dark:text-white`}>
+        <span className={`font-semibold ${s.text} text-gradient`}>
           Imaginevoxa
         </span>
       )}

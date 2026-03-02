@@ -114,10 +114,6 @@ interface ImageEditorProps {
   allowedImageStyles?: string[];
   /** Font personality from the wizard e.g. 'modern-professional' */
   fontPersonality?: string;
-  /** Optional post headline to prefill as editable text layer */
-  initialHeadline?: string;
-  /** Optional post CTA/tagline to prefill as editable text layer */
-  initialTagline?: string;
   onExport: (imageData: string) => void;
   /** Called when the user confirms the image and wants to move to next step */
   onImageConfirmed?: (imageDataUrl: string) => void;
@@ -232,67 +228,6 @@ function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
 
-function normalizeOverlayText(value: string | undefined, maxLen: number) {
-  if (!value) return "";
-  return value
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLen);
-}
-
-/**
- * Measure text and progressively reduce font size until it fits within the
- * given width Ã— height container.  Uses an off-screen canvas for measurement.
- */
-function fitTextFontSize(
-  text: string,
-  maxWidth: number,
-  maxHeight: number,
-  fontFamily: string,
-  fontWeight: string,
-  startSize: number,
-  minSize = 16,
-): number {
-  if (typeof document === 'undefined') return startSize;
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return startSize;
-
-  for (let size = startSize; size >= minSize; size -= 2) {
-    ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
-    const metrics = ctx.measureText(text);
-    const lineHeight = size * 1.35;
-    const lines = Math.ceil(metrics.width / maxWidth);
-    if (lines * lineHeight <= maxHeight) return size;
-  }
-  return minSize;
-}
-
-/** Map font-personality tokens (from brand kit) to concrete font families. */
-const PERSONALITY_FONT_MAP: Record<string, string> = {
-  'modern-clean': 'Inter, sans-serif',
-  'bold-impact': 'Oswald, sans-serif',
-  'elegant-serif': 'Playfair Display, serif',
-  'friendly-rounded': 'Nunito, sans-serif',
-  'tech-geometric': 'Space Grotesk, sans-serif',
-  'classic-professional': 'Merriweather, serif',
-  'minimalist': 'DM Sans, sans-serif',
-  'expressive': 'Poppins, sans-serif',
-  'corporate': 'Roboto, sans-serif',
-  'editorial': 'Raleway, sans-serif',
-};
-
-function resolveBrandFont(personality?: string): string {
-  if (!personality) return FONT_OPTIONS[0];
-  // Try exact match first, then partial match
-  const exact = PERSONALITY_FONT_MAP[personality.toLowerCase()];
-  if (exact) return exact;
-  const key = Object.keys(PERSONALITY_FONT_MAP).find((k) =>
-    personality.toLowerCase().includes(k)
-  );
-  return key ? PERSONALITY_FONT_MAP[key] : FONT_OPTIONS[0];
-}
-
 function drawImageLayer(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -384,8 +319,6 @@ export function ImageEditor({
   toneGuidelines = [],
   allowedImageStyles = [],
   fontPersonality,
-  initialHeadline,
-  initialTagline,
   onExport,
   onImageConfirmed,
 }: ImageEditorProps) {
@@ -442,7 +375,6 @@ export function ImageEditor({
   const [generating, setGenerating] = useState(false);
   const [lastExportUrl, setLastExportUrl] = useState<string | null>(null);
   const [aiAsBackground, setAiAsBackground] = useState(true);
-  const autoTextSeedKeyRef = useRef<string | null>(null);
   const autoLogoSeedKeyRef = useRef<string | null>(null);
 
   // Style reference
@@ -879,31 +811,10 @@ export function ImageEditor({
     [layers]
   );
 
-  const autoTextLayerIds = useMemo(
-    () =>
-      layers
-        .filter((layer) => layer.type === 'text' && layer.name.startsWith('[Auto Text]'))
-        .map((layer) => layer.id),
-    [layers]
-  );
-
   const textLayerIds = useMemo(
     () => layers.filter((layer) => layer.type === 'text').map((layer) => layer.id),
     [layers]
   );
-
-  const removeAutoTextLayers = useCallback(() => {
-    if (!autoTextLayerIds.length) {
-      toast.message('No auto text layers to remove');
-      return;
-    }
-
-    updateLayers((prev) => prev.filter((layer) => !autoTextLayerIds.includes(layer.id)));
-    if (selectedId && autoTextLayerIds.includes(selectedId)) {
-      setSelectedId(null);
-    }
-    toast.success('Auto text removed');
-  }, [autoTextLayerIds, updateLayers, selectedId]);
 
   const removeAllTextLayers = useCallback(() => {
     if (!textLayerIds.length) {
@@ -952,31 +863,6 @@ export function ImageEditor({
     toast.success('Base image color reset');
   }, [primaryImageLayer, patchLayer]);
 
-  const addTopCleanupBand = useCallback(() => {
-    const cleanupBand: Layer = {
-      id: uid('shape'),
-      type: 'shape',
-      name: '[Cleanup] Header Mask',
-      x: Math.round(canvasW * 0.06),
-      y: Math.round(canvasH * 0.05),
-      width: Math.round(canvasW * 0.88),
-      height: Math.round(canvasH * 0.24),
-      rotation: 0,
-      opacity: 0.75,
-      visible: true,
-      locked: false,
-      shapeType: 'rect',
-      fill: '#0f172a',
-      stroke: '#1e293b',
-      strokeWidth: 1,
-    };
-
-    updateLayers((prev) => [...prev, cleanupBand]);
-    setSelectedId(cleanupBand.id);
-    setSidePanel('properties');
-    toast.success('Cleanup band added (you can resize or delete it)');
-  }, [canvasW, canvasH, updateLayers]);
-
   const addTextLayer = useCallback(() => {
     if (!newText.trim()) return;
     const layer: Layer = {
@@ -1007,105 +893,8 @@ export function ImageEditor({
     setSidePanel('properties');
   }, [newText, newFontSize, newFontFamily, newFontWeight, newTextAlign, newTextColor, newTextShadow, newTextOutline, newTextBgHighlight, canvasW, canvasH, updateLayers]);
 
-  // Auto-add editable text layers from the confirmed post so text can be changed in-editor.
-  useEffect(() => {
-    if (!baseImageUrl) return;
-
-    const headlineText = normalizeOverlayText(initialHeadline, 90);
-    const taglineText = normalizeOverlayText(initialTagline, 140);
-    const seedKey = `${baseImageUrl}|${headlineText}|${taglineText}`;
-
-    if (autoTextSeedKeyRef.current === seedKey) return;
-
-    const brandFont = resolveBrandFont(fontPersonality);
-
-    // Headline container dimensions
-    const hlW = Math.round(canvasW * 0.84);
-    const hlH = Math.round(canvasH * 0.2);
-    const hlStartSize = Math.max(36, Math.round(canvasW * 0.05));
-    const hlFontSize = headlineText
-      ? fitTextFontSize(headlineText, hlW, hlH, brandFont, '700', hlStartSize)
-      : hlStartSize;
-
-    const headingLayer: Layer | null = headlineText
-      ? {
-        id: uid("txt"),
-        type: "text",
-        name: "[Auto Text] Headline",
-        x: Math.round(canvasW * 0.08),
-        y: Math.round(canvasH * 0.06),
-        width: hlW,
-        height: hlH,
-        rotation: 0,
-        opacity: 1,
-        visible: true,
-        locked: false,
-        text: headlineText,
-        fontSize: hlFontSize,
-        fontFamily: brandFont,
-        fontWeight: "700",
-        textAlign: "left",
-        color: "#FFFFFF",
-      }
-      : null;
-
-    // Tagline container dimensions
-    const tlW = Math.round(canvasW * 0.8);
-    const tlH = Math.round(canvasH * 0.12);
-    const tlStartSize = Math.max(24, Math.round(canvasW * 0.026));
-    const tlFontSize = taglineText
-      ? fitTextFontSize(taglineText, tlW, tlH, brandFont, '600', tlStartSize)
-      : tlStartSize;
-
-    const subLayer: Layer | null = taglineText
-      ? {
-        id: uid("txt"),
-        type: "text",
-        name: "[Auto Text] Tagline",
-        x: Math.round(canvasW * 0.08),
-        y: Math.round(canvasH * 0.28),
-        width: tlW,
-        height: tlH,
-        rotation: 0,
-        opacity: 1,
-        visible: true,
-        locked: false,
-        text: taglineText,
-        fontSize: tlFontSize,
-        fontFamily: brandFont,
-        fontWeight: "600",
-        textAlign: "left",
-        color: "#FFFFFF",
-      }
-      : null;
-
-    updateLayers((prev) => {
-      const withoutOldAutoText = prev.filter(
-        (layer) => !(layer.type === "text" && layer.name.startsWith("[Auto Text]"))
-      );
-      return [
-        ...withoutOldAutoText,
-        ...(headingLayer ? [headingLayer] : []),
-        ...(subLayer ? [subLayer] : []),
-      ];
-    });
-
-    const focusLayerId = subLayer?.id || headingLayer?.id || null;
-    if (focusLayerId) {
-      setSelectedId(focusLayerId);
-      setSidePanel("properties");
-    }
-
-    autoTextSeedKeyRef.current = seedKey;
-  }, [
-    baseImageUrl,
-    initialHeadline,
-    initialTagline,
-    canvasW,
-    canvasH,
-    fontPersonality,
-    updateLayers,
-  ]);
+  // No auto-text layers — the AI image already has text baked in.
+  // Users can manually add text via the Text panel if needed.
 
   const deleteLayer = useCallback(
     (id: string) => {
@@ -1641,59 +1430,59 @@ export function ImageEditor({
   return (
     <div className="flex flex-col h-full min-h-[700px]">
       {/* â”€â”€â”€ Top Toolbar â”€â”€â”€ */}
-      <div className="flex items-center gap-2 p-3 bg-slate-900 rounded-t-2xl border-b border-slate-700">
-        <div className="flex items-center gap-1 bg-slate-800 rounded-xl p-1">
+      <div className="flex items-center gap-2 p-3 bg-white rounded-t-2xl border-b border-gray-200">
+        <div className="flex items-center gap-1 bg-gray-50 rounded-xl p-1">
           <button
             onClick={() => setTool('select')}
-            className={`p-2 rounded-lg transition-colors ${tool === 'select' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            className={`p-2 rounded-lg transition-colors ${tool === 'select' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
             title="Select & Move"
           >
             <MousePointer2 className="w-4 h-4" />
           </button>
           <button
             onClick={() => { setTool('text'); setSidePanel('text'); }}
-            className={`p-2 rounded-lg transition-colors ${tool === 'text' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            className={`p-2 rounded-lg transition-colors ${tool === 'text' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
             title="Text"
           >
             <Type className="w-4 h-4" />
           </button>
           <button
             onClick={() => { setTool('shape'); setSidePanel('shapes'); }}
-            className={`p-2 rounded-lg transition-colors ${tool === 'shape' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            className={`p-2 rounded-lg transition-colors ${tool === 'shape' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
             title="Shapes"
           >
             <Square className="w-4 h-4" />
           </button>
           <button
             onClick={() => { setTool('crop'); setSidePanel('crop'); setCropActive(true); setCropRect({ x: 0, y: 0, w: canvasW, h: canvasH }); }}
-            className={`p-2 rounded-lg transition-colors ${tool === 'crop' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+            className={`p-2 rounded-lg transition-colors ${tool === 'crop' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
             title="Crop"
           >
             <Crop className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="w-px h-6 bg-slate-700" />
+        <div className="w-px h-6 bg-gray-200" />
 
-        <button onClick={undo} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg" title="Undo">
+        <button onClick={undo} className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg" title="Undo">
           <Undo2 className="w-4 h-4" />
         </button>
-        <button onClick={redo} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg" title="Redo">
+        <button onClick={redo} className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg" title="Redo">
           <Redo2 className="w-4 h-4" />
         </button>
 
-        <div className="w-px h-6 bg-slate-700" />
+        <div className="w-px h-6 bg-gray-200" />
 
-        <button onClick={() => setZoom((z) => clamp(z - 0.1, MIN_ZOOM, MAX_ZOOM))} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg">
+        <button onClick={() => setZoom((z) => clamp(z - 0.1, MIN_ZOOM, MAX_ZOOM))} className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">
           <ZoomOut className="w-4 h-4" />
         </button>
-        <span className="text-xs text-slate-400 w-12 text-center font-mono">{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom((z) => clamp(z + 0.1, MIN_ZOOM, MAX_ZOOM))} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg">
+        <span className="text-xs text-gray-500 w-12 text-center font-mono">{Math.round(zoom * 100)}%</span>
+        <button onClick={() => setZoom((z) => clamp(z + 0.1, MIN_ZOOM, MAX_ZOOM))} className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">
           <ZoomIn className="w-4 h-4" />
         </button>
         <button
           onClick={fitCanvasToViewport}
-          className="px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700"
+          className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg border border-gray-200"
           title="Fit canvas to viewport"
         >
           <span className="inline-flex items-center gap-1">
@@ -1703,7 +1492,7 @@ export function ImageEditor({
         </button>
         <button
           onClick={() => setZoom(1)}
-          className="px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700"
+          className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg border border-gray-200"
           title="Set zoom to 100%"
         >
           100%
@@ -1711,15 +1500,15 @@ export function ImageEditor({
 
         <div className="flex-1" />
 
-        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/70">
-          <span className="text-[11px] text-slate-400">Canvas</span>
-          <span className="text-xs text-slate-200 font-medium">{canvasW} x {canvasH}</span>
-          <span className="text-[11px] text-slate-500">({activeCanvasPreset})</span>
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50/70">
+          <span className="text-[11px] text-gray-500">Canvas</span>
+          <span className="text-xs text-gray-700 font-medium">{canvasW} x {canvasH}</span>
+          <span className="text-[11px] text-gray-400">({activeCanvasPreset})</span>
         </div>
 
         {/* Brand indicator */}
         {hasBrandContext && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50/10 border border-emerald-50/30">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-xs text-emerald-300 font-medium">Brand Kit Active</span>
           </div>
@@ -1731,7 +1520,7 @@ export function ImageEditor({
             const preset = PRESET_SIZES.find((ps) => ps.label === e.target.value);
             if (preset) smartResize(preset.w, preset.h);
           }}
-          className="h-8 min-w-[150px] rounded-lg border border-slate-700 bg-slate-800 px-2 text-xs text-slate-200"
+          className="h-8 min-w-[150px] rounded-lg border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700"
           title="Canvas size presets"
         >
           {activeCanvasPreset === 'Custom' && (
@@ -1744,9 +1533,9 @@ export function ImageEditor({
           ))}
         </select>
 
-        <div className="w-px h-6 bg-slate-700" />
+        <div className="w-px h-6 bg-gray-200" />
 
-        <Button size="sm" onClick={exportImage} className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white">
+        <Button size="sm" onClick={exportImage} className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-5000 hover:to-emerald-500 text-white">
           <Download className="w-4 h-4 mr-1" />
           Export PNG
         </Button>
@@ -1802,18 +1591,18 @@ export function ImageEditor({
         )}
 
         {/* Keyboard shortcut hints */}
-        <div className="hidden xl:flex items-center gap-1.5 text-[10px] text-slate-500">
-          <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-400">Del</kbd>
-          <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-400">âŒ˜Z</kbd>
-          <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-400">âŒ˜D</kbd>
-          <kbd className="px-1 py-0.5 bg-slate-700 rounded text-slate-400">â†‘â†“â†â†’</kbd>
+        <div className="hidden xl:flex items-center gap-1.5 text-[10px] text-gray-400">
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">Del</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">âŒ˜Z</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">âŒ˜D</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">â†‘â†“â†â†’</kbd>
         </div>
       </div>
 
       {/* â”€â”€â”€ Main Area â”€â”€â”€ */}
-      <div className="flex flex-1 overflow-hidden bg-slate-800 rounded-b-2xl">
+      <div className="flex flex-1 overflow-hidden bg-gray-50">
         {/* â”€â”€â”€ Left icon bar â”€â”€â”€ */}
-        <div className="w-12 flex flex-col items-center py-3 gap-1 bg-slate-900 border-r border-slate-700">
+        <div className="w-12 flex flex-col items-center py-3 gap-1 bg-white border-r border-gray-200">
           {([
             { key: 'layers' as const, icon: Layers, label: 'Layers' },
             { key: 'properties' as const, icon: Palette, label: 'Properties' },
@@ -1829,7 +1618,7 @@ export function ImageEditor({
               key={key}
               onClick={() => setSidePanel(key)}
               title={label}
-              className={`p-2.5 rounded-xl transition-colors ${sidePanel === key ? 'bg-cyan-600 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-700'}`}
+              className={`p-2.5 rounded-xl transition-colors ${sidePanel === key ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'}`}
             >
               <Icon className="w-4 h-4" />
             </button>
@@ -1837,25 +1626,25 @@ export function ImageEditor({
 
           <div className="flex-1" />
 
-          <label title="Upload image" className="p-2.5 rounded-xl text-slate-500 hover:text-white hover:bg-slate-700 cursor-pointer transition-colors">
+          <label title="Upload image" className="p-2.5 rounded-xl text-gray-400 hover:text-gray-900 hover:bg-gray-100 cursor-pointer transition-colors">
             <Upload className="w-4 h-4" />
             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e)} />
           </label>
         </div>
 
         {/* â”€â”€â”€ Side Panel â”€â”€â”€ */}
-        <div className="w-80 border-r border-slate-700 overflow-y-auto bg-slate-900/50 backdrop-blur-sm">
+        <div className="w-80 border-r border-gray-200 overflow-y-auto bg-white/50 backdrop-blur-sm">
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• AI GENERATE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'ai' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Sparkles className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Sparkles className="w-4 h-4 text-cyan-600" />
                 AI Image Generator
               </div>
 
               {/* Brand context info */}
               {hasBrandContext && (
-                <div className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20">
+                <div className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-50/10 to-cyan-50/10 border border-emerald-50/20">
                   <div className="flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
                     <div>
@@ -1864,21 +1653,21 @@ export function ImageEditor({
                       </p>
                       <div className="space-y-0.5">
                         {brandName && (
-                          <p className="text-[11px] text-slate-400">Brand: <span className="text-slate-300">{brandName}</span></p>
+                          <p className="text-[11px] text-gray-500">Brand: <span className="text-gray-600">{brandName}</span></p>
                         )}
                         {brandColors.length > 0 && (
                           <div className="flex items-center gap-1">
-                            <span className="text-[11px] text-slate-400">Colors:</span>
+                            <span className="text-[11px] text-gray-500">Colors:</span>
                             {brandColors.slice(0, 5).map((c, i) => (
-                              <div key={i} className="w-3 h-3 rounded-sm border border-white/20" style={{ backgroundColor: c }} />
+                              <div key={i} className="w-3 h-3 rounded-sm border border-gray-200" style={{ backgroundColor: c }} />
                             ))}
                           </div>
                         )}
                         {toneGuidelines.length > 0 && (
-                          <p className="text-[11px] text-slate-400">Tone: <span className="text-slate-300">{toneGuidelines.slice(0, 3).join(', ')}</span></p>
+                          <p className="text-[11px] text-gray-500">Tone: <span className="text-gray-600">{toneGuidelines.slice(0, 3).join(', ')}</span></p>
                         )}
                         {allowedImageStyles.length > 0 && (
-                          <p className="text-[11px] text-slate-400">Style: <span className="text-slate-300">{allowedImageStyles.slice(0, 3).join(', ')}</span></p>
+                          <p className="text-[11px] text-gray-500">Style: <span className="text-gray-600">{allowedImageStyles.slice(0, 3).join(', ')}</span></p>
                         )}
                       </div>
                     </div>
@@ -1891,19 +1680,19 @@ export function ImageEditor({
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 rows={4}
-                className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                className="bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400 resize-none text-sm"
               />
 
               {/* Quick prompt ideas â€” click to fill */}
               {!aiPrompt.trim() && (
                 <div>
-                  <label className="text-xs text-slate-400 mb-2 block">ðŸ’¡ Quick Ideas â€” click to use</label>
+                  <label className="text-xs text-gray-500 mb-2 block">ðŸ’¡ Quick Ideas â€” click to use</label>
                   <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
                     {AI_PROMPT_IDEAS.map((idea) => (
                       <button
                         key={idea.label}
                         onClick={() => setAiPrompt(idea.prompt)}
-                        className="px-2 py-1.5 rounded-lg text-[11px] bg-slate-800 border border-slate-700 text-slate-300 hover:border-cyan-500 hover:bg-cyan-600/10 hover:text-cyan-300 transition-all whitespace-nowrap"
+                        className="px-2 py-1.5 rounded-lg text-[11px] bg-gray-50 border border-gray-200 text-gray-600 hover:border-cyan-300 hover:bg-cyan-600/10 hover:text-cyan-600 transition-all whitespace-nowrap"
                       >
                         {idea.emoji} {idea.label}
                       </button>
@@ -1914,15 +1703,15 @@ export function ImageEditor({
 
               {/* Style presets */}
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Style</label>
+                <label className="text-xs text-gray-500 mb-2 block">Style</label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {AI_STYLE_PRESETS.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setAiStyle(s.id)}
                       className={`px-2 py-2 rounded-lg text-xs text-left transition-all ${aiStyle === s.id
-                          ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300'
-                          : 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-slate-500'
+                          ? 'bg-cyan-600/30 border border-cyan-300 text-cyan-600'
+                          : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-slate-50'
                         }`}
                     >
                       {s.label}
@@ -1935,13 +1724,13 @@ export function ImageEditor({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setAiAsBackground(true)}
-                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${aiAsBackground ? 'bg-cyan-600/30 border-cyan-500 text-cyan-300' : 'border-slate-600 text-slate-400'}`}
+                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${aiAsBackground ? 'bg-cyan-600/30 border-cyan-300 text-cyan-600' : 'border-gray-300 text-gray-500'}`}
                 >
                   As Background
                 </button>
                 <button
                   onClick={() => setAiAsBackground(false)}
-                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${!aiAsBackground ? 'bg-cyan-600/30 border-cyan-500 text-cyan-300' : 'border-slate-600 text-slate-400'}`}
+                  className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${!aiAsBackground ? 'bg-cyan-600/30 border-cyan-300 text-cyan-600' : 'border-gray-300 text-gray-500'}`}
                 >
                   As Layer
                 </button>
@@ -1949,38 +1738,38 @@ export function ImageEditor({
 
               {/* Style Reference */}
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Style Reference (optional)</label>
+                <label className="text-xs text-gray-500 mb-2 block">Style Reference (optional)</label>
                 <div className="flex gap-1.5">
                   <input
                     type="text"
                     placeholder="Paste image URL..."
                     value={styleRefUrl}
                     onChange={(e) => setStyleRefUrl(e.target.value)}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none"
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-600 placeholder:text-slate-600 focus:border-cyan-300 focus:outline-none"
                   />
                   <button
                     onClick={() => analyzeStyleReference(styleRefUrl)}
                     disabled={analyzingStyle || !styleRefUrl.trim()}
-                    className="px-2 py-1.5 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:border-cyan-500 hover:text-cyan-300 disabled:opacity-50 transition-colors"
+                    className="px-2 py-1.5 rounded-lg text-xs bg-gray-50 border border-gray-200 text-gray-500 hover:border-cyan-300 hover:text-cyan-600 disabled:opacity-50 transition-colors"
                   >
                     {analyzingStyle ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Analyze'}
                   </button>
                 </div>
                 {styleRef && (
-                  <div className="mt-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <p className="text-[11px] text-cyan-300 mb-1.5">{styleRef.style_summary}</p>
+                  <div className="mt-2 p-2 bg-gray-50/50 rounded-lg border border-gray-200">
+                    <p className="text-[11px] text-cyan-600 mb-1.5">{styleRef.style_summary}</p>
                     <div className="flex gap-1">
                       {styleRef.palette.map((c, i) => (
                         <div
                           key={i}
-                          className="h-4 w-4 rounded border border-slate-600"
+                          className="h-4 w-4 rounded border border-gray-300"
                           style={{ backgroundColor: c }}
                           title={c}
                         />
                       ))}
                       <button
                         onClick={() => { setStyleRef(null); setStyleRefUrl(''); }}
-                        className="ml-auto text-[10px] text-slate-500 hover:text-red-400"
+                        className="ml-auto text-[10px] text-gray-400 hover:text-red-400"
                       >
                         Clear
                       </button>
@@ -1992,7 +1781,7 @@ export function ImageEditor({
               <Button
                 onClick={generateAIImage}
                 disabled={generating || !aiPrompt.trim()}
-                className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white"
+                className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-100 hover:to-purple-100 text-gray-700"
               >
                 {generating ? (
                   <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Generating with {aiStyle === 'brand' ? 'Brand Style' : 'AI'}...</>
@@ -2002,15 +1791,15 @@ export function ImageEditor({
               </Button>
 
               {/* Quick upload & add logo */}
-              <div className="pt-3 border-t border-slate-700 space-y-3">
-                <div className="text-xs text-slate-400 font-semibold flex items-center gap-1.5">
+              <div className="pt-3 border-t border-gray-200 space-y-3">
+                <div className="text-xs text-gray-500 font-semibold flex items-center gap-1.5">
                   <Stamp className="w-3.5 h-3.5 text-amber-400" />
                   Logo & Images
                 </div>
 
                 {/* Upload Logo */}
                 <label className="block">
-                  <Button size="sm" variant="outline" className="w-full justify-start border-amber-500/30 bg-amber-500/5 text-amber-300 hover:bg-amber-500/15 hover:border-amber-500/50" asChild>
+                  <Button size="sm" variant="outline" className="w-full justify-start border-amber-50/30 bg-amber-50/5 text-amber-300 hover:bg-amber-50/15 hover:border-amber-50/50" asChild>
                     <span><Upload className="w-4 h-4 mr-2" />Upload My Logo</span>
                   </Button>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} />
@@ -2019,18 +1808,18 @@ export function ImageEditor({
                 {/* Show existing logos as small clickable thumbnails */}
                 {allLogos.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-slate-500 mb-1.5">Your logos â€” click to add to canvas:</p>
+                    <p className="text-[11px] text-gray-400 mb-1.5">Your logos â€” click to add to canvas:</p>
                     <div className="flex flex-wrap gap-1.5">
                       {allLogos.map((logo, idx) => (
                         <button
                           key={`ai-logo-${idx}`}
                           onClick={() => addLogoLayer(logo.url, logo.name || `Logo ${idx + 1}`)}
-                          className="w-12 h-12 rounded-lg border-2 border-slate-700 hover:border-cyan-500 bg-slate-800 p-1.5 transition-all hover:scale-105 group relative"
+                          className="w-12 h-12 rounded-lg border-2 border-gray-200 hover:border-cyan-300 bg-gray-50 p-1.5 transition-all hover:scale-105 group relative"
                           title={`Add ${logo.name || 'logo'} to canvas`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={logo.url} alt={logo.name || 'Logo'} className="w-full h-full object-contain" />
-                          <Plus className="w-3 h-3 text-cyan-400 opacity-0 group-hover:opacity-100 absolute bottom-0.5 right-0.5 transition-opacity" />
+                          <Plus className="w-3 h-3 text-cyan-600 opacity-0 group-hover:opacity-100 absolute bottom-0.5 right-0.5 transition-opacity" />
                         </button>
                       ))}
                     </div>
@@ -2039,7 +1828,7 @@ export function ImageEditor({
 
                 {/* Upload plain image */}
                 <label className="block">
-                  <Button size="sm" variant="outline" className="w-full justify-start border-slate-600 text-slate-300 hover:bg-slate-700" asChild>
+                  <Button size="sm" variant="outline" className="w-full justify-start border-gray-300 text-gray-600 hover:bg-gray-100" asChild>
                     <span><Upload className="w-4 h-4 mr-2" />Upload Base Image</span>
                   </Button>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e)} />
@@ -2067,20 +1856,20 @@ export function ImageEditor({
               </div>
 
               {/* Background */}
-              <div className="pt-2 border-t border-slate-700 space-y-3">
-                <div className="text-xs text-slate-500 font-medium">Canvas Background</div>
+              <div className="pt-2 border-t border-gray-200 space-y-3">
+                <div className="text-xs text-gray-400 font-medium">Canvas Background</div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setBgGradient(true)} className={`flex-1 py-1.5 text-xs rounded-lg border ${bgGradient ? 'bg-cyan-600/30 border-cyan-500 text-cyan-300' : 'border-slate-600 text-slate-400'}`}>Gradient</button>
-                  <button onClick={() => setBgGradient(false)} className={`flex-1 py-1.5 text-xs rounded-lg border ${!bgGradient ? 'bg-cyan-600/30 border-cyan-500 text-cyan-300' : 'border-slate-600 text-slate-400'}`}>Solid</button>
+                  <button onClick={() => setBgGradient(true)} className={`flex-1 py-1.5 text-xs rounded-lg border ${bgGradient ? 'bg-cyan-600/30 border-cyan-300 text-cyan-600' : 'border-gray-300 text-gray-500'}`}>Gradient</button>
+                  <button onClick={() => setBgGradient(false)} className={`flex-1 py-1.5 text-xs rounded-lg border ${!bgGradient ? 'bg-cyan-600/30 border-cyan-300 text-cyan-600' : 'border-gray-300 text-gray-500'}`}>Solid</button>
                 </div>
                 {bgGradient ? (
                   <div className="flex gap-2">
                     <div className="flex-1 space-y-1">
-                      <label className="text-xs text-slate-500">Start</label>
+                      <label className="text-xs text-gray-400">Start</label>
                       <input type="color" value={bgGradientA} onChange={(e) => setBgGradientA(e.target.value)} className="w-full h-8 rounded bg-transparent cursor-pointer" />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <label className="text-xs text-slate-500">End</label>
+                      <label className="text-xs text-gray-400">End</label>
                       <input type="color" value={bgGradientB} onChange={(e) => setBgGradientB(e.target.value)} className="w-full h-8 rounded bg-transparent cursor-pointer" />
                     </div>
                   </div>
@@ -2092,7 +1881,7 @@ export function ImageEditor({
                     <button
                       key={i}
                       onClick={() => bgGradient ? setBgGradientA(c) : setBgColor(c)}
-                      className="w-7 h-7 rounded-lg border-2 border-slate-600 hover:border-white transition-colors"
+                      className="w-7 h-7 rounded-lg border-2 border-gray-300 hover:border-white transition-colors"
                       style={{ backgroundColor: c }}
                       title={`Brand: ${c}`}
                     />
@@ -2105,20 +1894,20 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• LOGOS PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'logos' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
                 <Stamp className="w-4 h-4 text-amber-400" />
                 Brand Logos
               </div>
 
               {allLogos.length === 0 ? (
                 <div className="text-center py-10 space-y-3">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto">
                     <ImageIcon className="w-8 h-8 text-slate-600" />
                   </div>
-                  <p className="text-sm text-slate-500">No logos in your brand kit yet</p>
+                  <p className="text-sm text-gray-400">No logos in your brand kit yet</p>
                   <p className="text-xs text-slate-600">Upload a logo or generate one in the Assets tab</p>
                   <label className="block">
-                    <Button size="sm" variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700" asChild>
+                    <Button size="sm" variant="outline" className="border-gray-300 text-gray-600 hover:bg-gray-100" asChild>
                       <span><Upload className="w-4 h-4 mr-2" />Upload Logo</span>
                     </Button>
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} />
@@ -2126,13 +1915,13 @@ export function ImageEditor({
                 </div>
               ) : (
                 <>
-                  <p className="text-xs text-slate-500">Click a logo to add it to your canvas. Drag to position it anywhere.</p>
+                  <p className="text-xs text-gray-400">Click a logo to add it to your canvas. Drag to position it anywhere.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {allLogos.map((logo, idx) => (
                       <button
                         key={`logo-${idx}`}
                         onClick={() => addLogoLayer(logo.url, logo.name || `Logo ${idx + 1}`)}
-                        className="group relative aspect-square bg-slate-800 rounded-xl border-2 border-slate-700 hover:border-cyan-500 transition-all overflow-hidden p-3 flex items-center justify-center"
+                        className="group relative aspect-square bg-gray-50 rounded-xl border-2 border-gray-200 hover:border-cyan-300 transition-all overflow-hidden p-3 flex items-center justify-center"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -2140,29 +1929,29 @@ export function ImageEditor({
                           alt={logo.name || 'Logo'}
                           className="max-w-full max-h-full object-contain"
                         />
-                        <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 transition-colors flex items-center justify-center">
-                          <Plus className="w-6 h-6 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-cyan-50/0 group-hover:bg-cyan-50 transition-colors flex items-center justify-center">
+                          <Plus className="w-6 h-6 text-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                         {logo.name && (
-                          <span className="absolute bottom-1 left-1 right-1 text-[10px] text-slate-400 truncate text-center">{logo.name}</span>
+                          <span className="absolute bottom-1 left-1 right-1 text-[10px] text-gray-500 truncate text-center">{logo.name}</span>
                         )}
                       </button>
                     ))}
                   </div>
 
-                  <div className="pt-3 border-t border-slate-700">
+                  <div className="pt-3 border-t border-gray-200">
                     <label className="block">
-                      <Button size="sm" variant="outline" className="w-full justify-start border-slate-600 text-slate-300 hover:bg-slate-700" asChild>
+                      <Button size="sm" variant="outline" className="w-full justify-start border-gray-300 text-gray-600 hover:bg-gray-100" asChild>
                         <span><Upload className="w-4 h-4 mr-2" />Upload Another Logo</span>
                       </Button>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} />
                     </label>
                   </div>
 
-                  <div className="px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
+                  <div className="px-3 py-2 rounded-lg bg-gray-50/50 border border-gray-200">
                     <div className="flex items-start gap-2">
-                      <Info className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-[11px] text-slate-500">
+                      <Info className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-gray-400">
                         Logos are placed in the bottom-right corner by default. Drag to reposition or resize using the handles.
                       </p>
                     </div>
@@ -2175,8 +1964,8 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TEXT PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'text' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Type className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Type className="w-4 h-4 text-cyan-600" />
                 Add Text
               </div>
 
@@ -2185,24 +1974,24 @@ export function ImageEditor({
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
                 rows={3}
-                className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                className="bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400 resize-none text-sm"
               />
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Font</label>
-                <select value={newFontFamily} onChange={(e) => setNewFontFamily(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="text-xs text-gray-500 mb-1 block">Font</label>
+                <select value={newFontFamily} onChange={(e) => setNewFontFamily(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900">
                   {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f.split(',')[0]}</option>)}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Size</label>
-                  <Input type="number" value={newFontSize} onChange={(e) => setNewFontSize(Number(e.target.value))} min={12} max={200} className="bg-slate-800 border-slate-600 text-white" />
+                  <label className="text-xs text-gray-500 mb-1 block">Size</label>
+                  <Input type="number" value={newFontSize} onChange={(e) => setNewFontSize(Number(e.target.value))} min={12} max={200} className="bg-gray-50 border-gray-300 text-gray-900" />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Weight</label>
-                  <select value={newFontWeight} onChange={(e) => setNewFontWeight(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+                  <label className="text-xs text-gray-500 mb-1 block">Weight</label>
+                  <select value={newFontWeight} onChange={(e) => setNewFontWeight(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900">
                     <option value="normal">Regular</option>
                     <option value="bold">Bold</option>
                     <option value="900">Black</option>
@@ -2211,13 +2000,13 @@ export function ImageEditor({
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Align</label>
+                <label className="text-xs text-gray-500 mb-1 block">Align</label>
                 <div className="flex gap-1">
                   {(['left', 'center', 'right'] as const).map((a) => (
                     <button
                       key={a}
                       onClick={() => setNewTextAlign(a)}
-                      className={`flex-1 p-2 rounded-lg transition-colors ${newTextAlign === a ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                      className={`flex-1 p-2 rounded-lg transition-colors ${newTextAlign === a ? 'bg-cyan-600 text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-900'}`}
                     >
                       {a === 'left' ? <AlignLeft className="w-4 h-4 mx-auto" /> : a === 'center' ? <AlignCenter className="w-4 h-4 mx-auto" /> : <AlignRight className="w-4 h-4 mx-auto" />}
                     </button>
@@ -2226,14 +2015,14 @@ export function ImageEditor({
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Color</label>
+                <label className="text-xs text-gray-500 mb-1 block">Color</label>
                 <div className="flex gap-2 items-center flex-wrap">
                   <input type="color" value={newTextColor} onChange={(e) => setNewTextColor(e.target.value)} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
                   {['#ffffff', '#000000', ...brandColors].map((c, i) => (
                     <button
                       key={`${c}-${i}`}
                       onClick={() => setNewTextColor(c)}
-                      className={`w-7 h-7 rounded-lg border-2 transition-colors ${newTextColor === c ? 'border-cyan-400' : 'border-slate-600 hover:border-white'}`}
+                      className={`w-7 h-7 rounded-lg border-2 transition-colors ${newTextColor === c ? 'border-cyan-400' : 'border-gray-300 hover:border-white'}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -2241,26 +2030,26 @@ export function ImageEditor({
               </div>
 
               {/* Text Effects */}
-              <div className="pt-2 border-t border-slate-700 space-y-2">
-                <label className="text-xs text-slate-400 block">Text Effects</label>
+              <div className="pt-2 border-t border-gray-200 space-y-2">
+                <label className="text-xs text-gray-500 block">Text Effects</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     onClick={() => setNewTextShadow(!newTextShadow)}
-                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextShadow ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300' : 'bg-slate-800 border border-slate-700 text-slate-400'
+                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextShadow ? 'bg-cyan-600/30 border border-cyan-300 text-cyan-600' : 'bg-gray-50 border border-gray-200 text-gray-500'
                       }`}
                   >
                     Shadow
                   </button>
                   <button
                     onClick={() => setNewTextOutline(!newTextOutline)}
-                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextOutline ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300' : 'bg-slate-800 border border-slate-700 text-slate-400'
+                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextOutline ? 'bg-cyan-600/30 border border-cyan-300 text-cyan-600' : 'bg-gray-50 border border-gray-200 text-gray-500'
                       }`}
                   >
                     Outline
                   </button>
                   <button
                     onClick={() => setNewTextBgHighlight(!newTextBgHighlight)}
-                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextBgHighlight ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300' : 'bg-slate-800 border border-slate-700 text-slate-400'
+                    className={`p-2 rounded-lg text-xs text-center transition-colors ${newTextBgHighlight ? 'bg-cyan-600/30 border border-cyan-300 text-cyan-600' : 'bg-gray-50 border border-gray-200 text-gray-500'
                       }`}
                   >
                     Highlight
@@ -2278,8 +2067,8 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• SHAPES PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'shapes' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Square className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Square className="w-4 h-4 text-cyan-600" />
                 Shapes
               </div>
 
@@ -2289,8 +2078,8 @@ export function ImageEditor({
                     key={id}
                     onClick={() => setNewShapeType(id as 'rect' | 'circle' | 'line')}
                     className={`p-3 rounded-xl border-2 text-center transition-all ${newShapeType === id
-                        ? 'border-cyan-500 bg-cyan-600/20 text-cyan-300'
-                        : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                        ? 'border-cyan-300 bg-cyan-600/20 text-cyan-600'
+                        : 'border-gray-200 text-gray-500 hover:border-slate-50'
                       }`}
                   >
                     <ShapeIcon className="w-5 h-5 mx-auto mb-1" />
@@ -2300,25 +2089,25 @@ export function ImageEditor({
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Fill Color</label>
+                <label className="text-xs text-gray-500 mb-1 block">Fill Color</label>
                 <div className="flex gap-2 items-center flex-wrap">
                   <input type="color" value={newShapeFill} onChange={(e) => setNewShapeFill(e.target.value)} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
                   {brandColors.map((c, i) => (
-                    <button key={i} onClick={() => setNewShapeFill(c)} className={`w-6 h-6 rounded border-2 ${newShapeFill === c ? 'border-cyan-400' : 'border-slate-600'}`} style={{ backgroundColor: c }} />
+                    <button key={i} onClick={() => setNewShapeFill(c)} className={`w-6 h-6 rounded border-2 ${newShapeFill === c ? 'border-cyan-400' : 'border-gray-300'}`} style={{ backgroundColor: c }} />
                   ))}
                   {['#ffffff', '#000000', 'transparent'].map((c, i) => (
-                    <button key={`s-${i}`} onClick={() => setNewShapeFill(c)} className={`w-6 h-6 rounded border-2 ${newShapeFill === c ? 'border-cyan-400' : 'border-slate-600'} ${c === 'transparent' ? 'bg-[repeating-conic-gradient(#808080_0%_25%,transparent_0%_50%)_50%/16px_16px]' : ''}`} style={c !== 'transparent' ? { backgroundColor: c } : {}} title={c} />
+                    <button key={`s-${i}`} onClick={() => setNewShapeFill(c)} className={`w-6 h-6 rounded border-2 ${newShapeFill === c ? 'border-cyan-400' : 'border-gray-300'} ${c === 'transparent' ? 'bg-[repeating-conic-gradient(#808080_0%_25%,transparent_0%_50%)_50%/16px_16px]' : ''}`} style={c !== 'transparent' ? { backgroundColor: c } : {}} title={c} />
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Stroke Color</label>
+                <label className="text-xs text-gray-500 mb-1 block">Stroke Color</label>
                 <input type="color" value={newShapeStroke} onChange={(e) => setNewShapeStroke(e.target.value)} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Stroke Width: {newShapeStrokeWidth}px</label>
+                <label className="text-xs text-gray-500 mb-1 block">Stroke Width: {newShapeStrokeWidth}px</label>
                 <input type="range" min={0} max={20} value={newShapeStrokeWidth} onChange={(e) => setNewShapeStrokeWidth(Number(e.target.value))} className="w-full accent-cyan-500" />
               </div>
 
@@ -2332,61 +2121,61 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• FILTERS PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'canvas' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Maximize2 className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Maximize2 className="w-4 h-4 text-cyan-600" />
                 Canvas & Sizing
               </div>
 
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3 space-y-2">
-                <p className="text-xs text-slate-400">Current canvas</p>
+              <div className="rounded-xl border border-gray-200 bg-white/50 p-3 space-y-2">
+                <p className="text-xs text-gray-500">Current canvas</p>
                 <div className="flex items-end justify-between">
-                  <p className="text-lg font-semibold text-white">{canvasW} x {canvasH}</p>
-                  <Badge className="bg-slate-700 text-slate-200 text-[10px]">{canvasAspectLabel}</Badge>
+                  <p className="text-lg font-semibold text-gray-900">{canvasW} x {canvasH}</p>
+                  <Badge className="bg-gray-100 text-gray-700 text-[10px]">{canvasAspectLabel}</Badge>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Presets</label>
+                <label className="text-xs text-gray-500 mb-2 block">Presets</label>
                 <div className="grid grid-cols-2 gap-2">
                   {PRESET_SIZES.map((ps) => (
                     <button
                       key={`canvas-${ps.label}`}
                       onClick={() => smartResize(ps.w, ps.h)}
                       className={`px-2 py-2 rounded-lg border text-xs transition-colors ${canvasW === ps.w && canvasH === ps.h
-                          ? 'border-cyan-500 bg-cyan-600/20 text-cyan-300'
-                          : 'border-slate-700 text-slate-300 hover:border-slate-500'
+                          ? 'border-cyan-300 bg-cyan-600/20 text-cyan-600'
+                          : 'border-gray-200 text-gray-600 hover:border-slate-50'
                         }`}
                     >
                       <span className="block font-medium">{ps.label}</span>
-                      <span className="text-[10px] text-slate-500">{ps.w}x{ps.h}</span>
+                      <span className="text-[10px] text-gray-400">{ps.w}x{ps.h}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Custom size</label>
+                <label className="text-xs text-gray-500 mb-2 block">Custom size</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[11px] text-slate-500 mb-1 block">Width</label>
+                    <label className="text-[11px] text-gray-400 mb-1 block">Width</label>
                     <Input
                       type="number"
                       min={MIN_CANVAS_SIZE}
                       max={MAX_CANVAS_SIZE}
                       value={customCanvasW}
                       onChange={(e) => setCustomCanvasW(Number(e.target.value))}
-                      className="bg-slate-800 border-slate-600 text-white text-sm"
+                      className="bg-gray-50 border-gray-300 text-gray-900 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-500 mb-1 block">Height</label>
+                    <label className="text-[11px] text-gray-400 mb-1 block">Height</label>
                     <Input
                       type="number"
                       min={MIN_CANVAS_SIZE}
                       max={MAX_CANVAS_SIZE}
                       value={customCanvasH}
                       onChange={(e) => setCustomCanvasH(Number(e.target.value))}
-                      className="bg-slate-800 border-slate-600 text-white text-sm"
+                      className="bg-gray-50 border-gray-300 text-gray-900 text-sm"
                     />
                   </div>
                 </div>
@@ -2402,7 +2191,7 @@ export function ImageEditor({
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
-                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                  className="border-gray-300 text-gray-600 hover:bg-gray-100"
                   size="sm"
                   onClick={fitCanvasToViewport}
                 >
@@ -2410,7 +2199,7 @@ export function ImageEditor({
                 </Button>
                 <Button
                   variant="outline"
-                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                  className="border-gray-300 text-gray-600 hover:bg-gray-100"
                   size="sm"
                   onClick={() => setZoom(1)}
                 >
@@ -2421,46 +2210,46 @@ export function ImageEditor({
           )}
           {sidePanel === 'filters' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <SlidersHorizontal className="w-4 h-4 text-cyan-600" />
                 Image Filters
               </div>
 
               {!selected || (selected.type !== 'image' && selected.type !== 'logo') ? (
-                <p className="text-xs text-slate-500 text-center py-8">Select an image layer to apply filters</p>
+                <p className="text-xs text-gray-400 text-center py-8">Select an image layer to apply filters</p>
               ) : (
                 <>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Brightness: {filterBrightness}%</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Brightness: {filterBrightness}%</label>
                     <input type="range" min={0} max={200} value={filterBrightness} onChange={(e) => setFilterBrightness(Number(e.target.value))} className="w-full accent-cyan-500" />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Contrast: {filterContrast}%</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Contrast: {filterContrast}%</label>
                     <input type="range" min={0} max={200} value={filterContrast} onChange={(e) => setFilterContrast(Number(e.target.value))} className="w-full accent-cyan-500" />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Saturation: {filterSaturation}%</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Saturation: {filterSaturation}%</label>
                     <input type="range" min={0} max={200} value={filterSaturation} onChange={(e) => setFilterSaturation(Number(e.target.value))} className="w-full accent-cyan-500" />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Blur: {filterBlur}px</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Blur: {filterBlur}px</label>
                     <input type="range" min={0} max={20} value={filterBlur} onChange={(e) => setFilterBlur(Number(e.target.value))} className="w-full accent-cyan-500" />
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={() => applyFiltersToLayer(selected.id)} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white" size="sm">
                       Apply Filters
                     </Button>
-                    <Button onClick={() => { setFilterBrightness(100); setFilterContrast(100); setFilterSaturation(100); setFilterBlur(0); }} variant="outline" className="border-slate-600 text-slate-300" size="sm">
+                    <Button onClick={() => { setFilterBrightness(100); setFilterContrast(100); setFilterSaturation(100); setFilterBlur(0); }} variant="outline" className="border-gray-300 text-gray-600" size="sm">
                       Reset
                     </Button>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-700">
+                  <div className="pt-3 border-t border-gray-200">
                     <Button
                       onClick={() => removeBackground(selected.id)}
                       disabled={removingBg}
                       variant="outline"
-                      className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
+                      className="w-full border-gray-300 text-gray-600 hover:bg-gray-100"
                       size="sm"
                     >
                       {removingBg ? (
@@ -2478,13 +2267,13 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• CROP PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'crop' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Crop className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Crop className="w-4 h-4 text-cyan-600" />
                 Crop Canvas
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Aspect Ratio</label>
+                <label className="text-xs text-gray-500 mb-2 block">Aspect Ratio</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {CROP_PRESETS.map((cp) => (
                     <button
@@ -2499,7 +2288,7 @@ export function ImageEditor({
                           setCropRect({ x: 0, y: 0, w: canvasW, h: canvasH });
                         }
                       }}
-                      className={`p-2 rounded-lg text-xs text-center transition-colors ${cropRatio === cp.ratio ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300' : 'bg-slate-800 border border-slate-700 text-slate-400'
+                      className={`p-2 rounded-lg text-xs text-center transition-colors ${cropRatio === cp.ratio ? 'bg-cyan-600/30 border border-cyan-300 text-cyan-600' : 'bg-gray-50 border border-gray-200 text-gray-500'
                         }`}
                     >
                       {cp.label}
@@ -2509,17 +2298,17 @@ export function ImageEditor({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="text-xs text-slate-400 mb-1 block">X</label><Input type="number" value={Math.round(cropRect.x)} onChange={(e) => setCropRect(r => ({ ...r, x: Number(e.target.value) }))} className="bg-slate-800 border-slate-600 text-white text-sm" /></div>
-                <div><label className="text-xs text-slate-400 mb-1 block">Y</label><Input type="number" value={Math.round(cropRect.y)} onChange={(e) => setCropRect(r => ({ ...r, y: Number(e.target.value) }))} className="bg-slate-800 border-slate-600 text-white text-sm" /></div>
-                <div><label className="text-xs text-slate-400 mb-1 block">Width</label><Input type="number" value={Math.round(cropRect.w)} onChange={(e) => setCropRect(r => ({ ...r, w: Number(e.target.value) }))} className="bg-slate-800 border-slate-600 text-white text-sm" /></div>
-                <div><label className="text-xs text-slate-400 mb-1 block">Height</label><Input type="number" value={Math.round(cropRect.h)} onChange={(e) => setCropRect(r => ({ ...r, h: Number(e.target.value) }))} className="bg-slate-800 border-slate-600 text-white text-sm" /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block">X</label><Input type="number" value={Math.round(cropRect.x)} onChange={(e) => setCropRect(r => ({ ...r, x: Number(e.target.value) }))} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block">Y</label><Input type="number" value={Math.round(cropRect.y)} onChange={(e) => setCropRect(r => ({ ...r, y: Number(e.target.value) }))} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block">Width</label><Input type="number" value={Math.round(cropRect.w)} onChange={(e) => setCropRect(r => ({ ...r, w: Number(e.target.value) }))} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block">Height</label><Input type="number" value={Math.round(cropRect.h)} onChange={(e) => setCropRect(r => ({ ...r, h: Number(e.target.value) }))} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" /></div>
               </div>
 
               <div className="flex gap-2">
                 <Button onClick={applyCrop} className="flex-1 bg-green-600 hover:bg-green-500 text-white" size="sm">
                   <Crop className="w-4 h-4 mr-2" />Apply Crop
                 </Button>
-                <Button onClick={() => { setCropActive(false); setTool('select'); }} variant="outline" className="border-slate-600 text-slate-300" size="sm">
+                <Button onClick={() => { setCropActive(false); setTool('select'); }} variant="outline" className="border-gray-300 text-gray-600" size="sm">
                   Cancel
                 </Button>
               </div>
@@ -2529,18 +2318,18 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• LAYERS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'layers' && (
             <div className="p-4 space-y-3">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Layers className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Layers className="w-4 h-4 text-cyan-600" />
                 Layers
-                <Badge className="bg-slate-700 text-slate-300 text-xs ml-auto">{layers.length}</Badge>
+                <Badge className="bg-gray-100 text-gray-600 text-xs ml-auto">{layers.length}</Badge>
               </div>
 
               {baseImageUrl && layers.length > 0 && (
-                <div className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+                <div className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-cyan-50/10 to-blue-50/10 border border-cyan-50/20">
                   <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-[11px] text-slate-300 space-y-1">
-                      <p className="font-medium text-cyan-300">Editing your generated image</p>
+                    <Info className="w-4 h-4 text-cyan-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-[11px] text-gray-600 space-y-1">
+                      <p className="font-medium text-cyan-600">Editing your generated image</p>
                       <p>Add text, logos, shapes or adjust filters. Select any layer to edit its properties.</p>
                     </div>
                   </div>
@@ -2548,36 +2337,39 @@ export function ImageEditor({
               )}
 
               {baseImageUrl && layers.length > 0 && (
-                <div className="px-3 py-3 rounded-xl bg-slate-800/70 border border-slate-700 space-y-2.5">
-                  <p className="text-[11px] text-slate-300 font-medium">Quick Clean Up</p>
+                <div className="px-3 py-3 rounded-xl bg-gray-50/70 border border-gray-200 space-y-2.5">
+                  <p className="text-[11px] text-gray-600 font-medium flex items-center gap-1.5">
+                    <Wand2 className="w-3 h-3 text-cyan-600" />
+                    Quick Actions
+                  </p>
 
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={removeAutoTextLayers}
-                      disabled={autoTextLayerIds.length === 0}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
+                      onClick={() => primaryImageLayer && fitLayerToCanvas(primaryImageLayer.id, 'cover')}
+                      disabled={!primaryImageLayer}
+                      className="h-8 border-gray-300 text-gray-700 hover:bg-gray-100 text-[11px] justify-start"
                     >
-                      <Type className="w-3.5 h-3.5 mr-1.5" />
-                      Remove Auto Text
+                      <Maximize2 className="w-3.5 h-3.5 mr-1.5" />
+                      Fill Canvas
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={removeAllTextLayers}
-                      disabled={textLayerIds.length === 0}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
+                      onClick={() => primaryImageLayer && fitLayerToCanvas(primaryImageLayer.id, 'contain')}
+                      disabled={!primaryImageLayer}
+                      className="h-8 border-gray-300 text-gray-700 hover:bg-gray-100 text-[11px] justify-start"
                     >
-                      <ImageOff className="w-3.5 h-3.5 mr-1.5" />
-                      Remove All Text
+                      <ImageIcon className="w-3.5 h-3.5 mr-1.5" />
+                      Fit in Canvas
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={reduceBlueTint}
                       disabled={!primaryImageLayer}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
+                      className="h-8 border-gray-300 text-gray-700 hover:bg-gray-100 text-[11px] justify-start"
                     >
                       <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5" />
                       Reduce Blue Tint
@@ -2587,39 +2379,35 @@ export function ImageEditor({
                       variant="outline"
                       onClick={resetBaseImageColor}
                       disabled={!primaryImageLayer}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
+                      className="h-8 border-gray-300 text-gray-700 hover:bg-gray-100 text-[11px] justify-start"
                     >
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                       Reset Colors
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  {textLayerIds.length > 0 && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={addTopCleanupBand}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
+                      onClick={removeAllTextLayers}
+                      className="w-full h-8 border-gray-300 text-gray-700 hover:bg-gray-100 text-[11px] justify-start"
                     >
-                      <Eraser className="w-3.5 h-3.5 mr-1.5" />
-                      Add Text Cover Band
+                      <ImageOff className="w-3.5 h-3.5 mr-1.5" />
+                      Remove All Text Layers
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => primaryImageLayer && fitLayerToCanvas(primaryImageLayer.id, 'cover')}
-                      disabled={!primaryImageLayer}
-                      className="h-8 border-slate-600 text-slate-200 hover:bg-slate-700 text-[11px] justify-start"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5 mr-1.5" />
-                      Fill Canvas
-                    </Button>
-                  </div>
+                  )}
                 </div>
               )}
 
               {layers.length === 0 && (
-                <p className="text-xs text-slate-500 text-center py-8">No layers yet. Generate an AI image or upload to get started.</p>
+                <div className="text-center py-10 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto">
+                    <Layers className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <p className="text-xs text-gray-400">No layers yet</p>
+                  <p className="text-[11px] text-slate-600">Generate an AI image or upload to get started</p>
+                </div>
               )}
 
               <div className="space-y-1">
@@ -2627,22 +2415,25 @@ export function ImageEditor({
                   <div
                     key={layer.id}
                     onClick={() => { setSelectedId(layer.id); setSidePanel('properties'); }}
-                    className={`group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors ${selectedId === layer.id ? 'bg-cyan-600/20 border border-cyan-500/50' : 'hover:bg-slate-800 border border-transparent'
+                    className={`group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors ${selectedId === layer.id ? 'bg-cyan-600/20 border border-cyan-50/50' : 'hover:bg-gray-50 border border-transparent'
                       }`}
                   >
-                    <div className="w-6 h-6 rounded bg-slate-700 flex items-center justify-center flex-shrink-0">
-                      {layer.type === 'text' ? <Type className="w-3 h-3 text-slate-300" /> : layer.type === 'logo' ? <Stamp className="w-3 h-3 text-amber-400" /> : <ImageIcon className="w-3 h-3 text-slate-300" />}
+                    <div className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
+                      layer.type === 'text' ? 'bg-purple-50/20' : layer.type === 'logo' ? 'bg-amber-50/20' : layer.type === 'shape' ? 'bg-blue-50/20' : 'bg-gray-200'
+                    }`}>
+                      {layer.type === 'text' ? <Type className="w-3 h-3 text-purple-400" /> : layer.type === 'logo' ? <Stamp className="w-3 h-3 text-amber-400" /> : layer.type === 'shape' ? <Square className="w-3 h-3 text-blue-400" /> : <ImageIcon className="w-3 h-3 text-gray-600" />}
                     </div>
-                    <span className="text-xs text-slate-300 truncate flex-1">{layer.name}</span>
+                    <span className="text-xs text-gray-600 truncate flex-1">{layer.name}</span>
+                    {!layer.visible && <EyeOff className="w-3 h-3 text-slate-600 flex-shrink-0" />}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); patchLayer(layer.id, { visible: !layer.visible }); }} className="p-1 rounded hover:bg-slate-700 text-slate-500" title={layer.visible ? 'Hide' : 'Show'}>
+                      <button onClick={(e) => { e.stopPropagation(); patchLayer(layer.id, { visible: !layer.visible }); }} className={`p-1 rounded hover:bg-gray-100 ${layer.visible ? 'text-gray-500' : 'text-slate-600'}`} title={layer.visible ? 'Hide' : 'Show'}>
                         {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); patchLayer(layer.id, { locked: !layer.locked }); }} className="p-1 rounded hover:bg-slate-700 text-slate-500" title={layer.locked ? 'Unlock' : 'Lock'}>
+                      <button onClick={(e) => { e.stopPropagation(); patchLayer(layer.id, { locked: !layer.locked }); }} className={`p-1 rounded hover:bg-gray-100 ${layer.locked ? 'text-amber-400' : 'text-gray-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
                         {layer.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); moveLayerOrder(layer.id, 'up'); }} className="p-1 rounded hover:bg-slate-700 text-slate-500"><ChevronUp className="w-3 h-3" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); moveLayerOrder(layer.id, 'down'); }} className="p-1 rounded hover:bg-slate-700 text-slate-500"><ChevronDown className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); moveLayerOrder(layer.id, 'up'); }} className="p-1 rounded hover:bg-gray-100 text-gray-400"><ChevronUp className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); moveLayerOrder(layer.id, 'down'); }} className="p-1 rounded hover:bg-gray-100 text-gray-400"><ChevronDown className="w-3 h-3" /></button>
                       <button onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }} className="p-1 rounded hover:bg-red-600/50 text-red-400"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   </div>
@@ -2654,52 +2445,58 @@ export function ImageEditor({
           {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• PROPERTIES â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {sidePanel === 'properties' && (
             <div className="p-4 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Palette className="w-4 h-4 text-cyan-400" />
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
+                <Palette className="w-4 h-4 text-cyan-600" />
                 Properties
               </div>
 
               {!selected ? (
-                <p className="text-xs text-slate-500 text-center py-8">Select a layer to edit its properties</p>
+                <div className="text-center py-10 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto">
+                    <MousePointer2 className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <p className="text-xs text-gray-400">Select a layer to edit its properties</p>
+                  <p className="text-[11px] text-slate-600">Click on the canvas or layers panel</p>
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Name</label>
-                    <Input value={selected.name} onChange={(e) => patchLayer(selected.id, { name: e.target.value })} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                    <label className="text-xs text-gray-500 mb-1 block">Name</label>
+                    <Input value={selected.name} onChange={(e) => patchLayer(selected.id, { name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">X</label>
-                      <Input type="number" value={selected.x} onChange={(e) => patchLayer(selected.id, { x: Number(e.target.value) })} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                      <label className="text-xs text-gray-500 mb-1 block">X</label>
+                      <Input type="number" value={selected.x} onChange={(e) => patchLayer(selected.id, { x: Number(e.target.value) })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Y</label>
-                      <Input type="number" value={selected.y} onChange={(e) => patchLayer(selected.id, { y: Number(e.target.value) })} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                      <label className="text-xs text-gray-500 mb-1 block">Y</label>
+                      <Input type="number" value={selected.y} onChange={(e) => patchLayer(selected.id, { y: Number(e.target.value) })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Width</label>
-                      <Input type="number" value={selected.width} onChange={(e) => patchLayer(selected.id, { width: Number(e.target.value) })} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                      <label className="text-xs text-gray-500 mb-1 block">Width</label>
+                      <Input type="number" value={selected.width} onChange={(e) => patchLayer(selected.id, { width: Number(e.target.value) })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Height</label>
-                      <Input type="number" value={selected.height} onChange={(e) => patchLayer(selected.id, { height: Number(e.target.value) })} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                      <label className="text-xs text-gray-500 mb-1 block">Height</label>
+                      <Input type="number" value={selected.height} onChange={(e) => patchLayer(selected.id, { height: Number(e.target.value) })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Opacity: {Math.round(selected.opacity * 100)}%</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Opacity: {Math.round(selected.opacity * 100)}%</label>
                     <input type="range" min={0} max={100} value={Math.round(selected.opacity * 100)} onChange={(e) => patchLayer(selected.id, { opacity: Number(e.target.value) / 100 })} className="w-full accent-cyan-500" />
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Rotation: {selected.rotation}Â°</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Rotation: {selected.rotation}Â°</label>
                     <div className="flex items-center gap-2">
                       <input type="range" min={-180} max={180} value={selected.rotation} onChange={(e) => patchLayer(selected.id, { rotation: Number(e.target.value) })} className="flex-1 accent-cyan-500" />
-                      <button onClick={() => patchLayer(selected.id, { rotation: 0 })} className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white" title="Reset rotation">
+                      <button onClick={() => patchLayer(selected.id, { rotation: 0 })} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:text-gray-900" title="Reset rotation">
                         <RotateCw className="w-3 h-3" />
                       </button>
                     </div>
@@ -2709,29 +2506,29 @@ export function ImageEditor({
                   {selected.type === 'shape' && (
                     <>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Fill</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Fill</label>
                         <div className="flex gap-2 items-center flex-wrap">
                           <input type="color" value={selected.fill || '#0A66C2'} onChange={(e) => patchLayer(selected.id, { fill: e.target.value })} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
                           {brandColors.map((c, i) => (
-                            <button key={`sf-${i}`} onClick={() => patchLayer(selected.id, { fill: c })} className={`w-6 h-6 rounded border-2 ${selected.fill === c ? 'border-cyan-400' : 'border-slate-600'}`} style={{ backgroundColor: c }} />
+                            <button key={`sf-${i}`} onClick={() => patchLayer(selected.id, { fill: c })} className={`w-6 h-6 rounded border-2 ${selected.fill === c ? 'border-cyan-400' : 'border-gray-300'}`} style={{ backgroundColor: c }} />
                           ))}
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Stroke</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Stroke</label>
                         <input type="color" value={selected.stroke || '#ffffff'} onChange={(e) => patchLayer(selected.id, { stroke: e.target.value })} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Stroke Width: {selected.strokeWidth || 0}px</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Stroke Width: {selected.strokeWidth || 0}px</label>
                         <input type="range" min={0} max={20} value={selected.strokeWidth || 0} onChange={(e) => patchLayer(selected.id, { strokeWidth: Number(e.target.value) })} className="w-full accent-cyan-500" />
                       </div>
                     </>
                   )}
 
                   {(selected.type === 'image' || selected.type === 'logo') && (
-                    <div className="pt-2 border-t border-slate-700 space-y-3">
+                    <div className="pt-2 border-t border-gray-200 space-y-3">
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Image Fit</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Image Fit</label>
                         <div className="grid grid-cols-3 gap-1">
                           {(['contain', 'cover', 'fill'] as const).map((fit) => (
                             <button
@@ -2739,7 +2536,7 @@ export function ImageEditor({
                               onClick={() => patchLayer(selected.id, { objectFit: fit })}
                               className={`p-2 rounded-lg text-xs capitalize transition-colors ${(selected.objectFit || 'contain') === fit
                                   ? 'bg-cyan-600 text-white'
-                                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                                 }`}
                             >
                               {fit}
@@ -2752,7 +2549,7 @@ export function ImageEditor({
                         <Button
                           onClick={() => fitLayerToCanvas(selected.id, 'contain')}
                           variant="outline"
-                          className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                          className="border-gray-300 text-gray-600 hover:bg-gray-100"
                           size="sm"
                         >
                           Fit in Canvas
@@ -2760,7 +2557,7 @@ export function ImageEditor({
                         <Button
                           onClick={() => fitLayerToCanvas(selected.id, 'cover')}
                           variant="outline"
-                          className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                          className="border-gray-300 text-gray-600 hover:bg-gray-100"
                           size="sm"
                         >
                           Fill Canvas
@@ -2771,7 +2568,7 @@ export function ImageEditor({
                         onClick={() => removeBackground(selected.id)}
                         disabled={removingBg}
                         variant="outline"
-                        className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
+                        className="w-full border-gray-300 text-gray-600 hover:bg-gray-100"
                         size="sm"
                       >
                         {removingBg ? (
@@ -2787,17 +2584,17 @@ export function ImageEditor({
                   {selected.type === 'text' && (
                     <>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Text</label>
-                        <Textarea value={selected.text || ''} onChange={(e) => patchLayer(selected.id, { text: e.target.value, name: e.target.value.slice(0, 20) || 'Text' })} rows={3} className="bg-slate-800 border-slate-600 text-white text-sm resize-none" />
+                        <label className="text-xs text-gray-500 mb-1 block">Text</label>
+                        <Textarea value={selected.text || ''} onChange={(e) => patchLayer(selected.id, { text: e.target.value, name: e.target.value.slice(0, 20) || 'Text' })} rows={3} className="bg-gray-50 border-gray-300 text-gray-900 text-sm resize-none" />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-xs text-slate-400 mb-1 block">Font Size</label>
-                          <Input type="number" value={selected.fontSize || 48} onChange={(e) => patchLayer(selected.id, { fontSize: Number(e.target.value) })} min={12} max={200} className="bg-slate-800 border-slate-600 text-white text-sm" />
+                          <label className="text-xs text-gray-500 mb-1 block">Font Size</label>
+                          <Input type="number" value={selected.fontSize || 48} onChange={(e) => patchLayer(selected.id, { fontSize: Number(e.target.value) })} min={12} max={200} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                         </div>
                         <div>
-                          <label className="text-xs text-slate-400 mb-1 block">Weight</label>
-                          <select value={selected.fontWeight || 'bold'} onChange={(e) => patchLayer(selected.id, { fontWeight: e.target.value })} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+                          <label className="text-xs text-gray-500 mb-1 block">Weight</label>
+                          <select value={selected.fontWeight || 'bold'} onChange={(e) => patchLayer(selected.id, { fontWeight: e.target.value })} className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900">
                             <option value="normal">Regular</option>
                             <option value="bold">Bold</option>
                             <option value="900">Black</option>
@@ -2805,25 +2602,25 @@ export function ImageEditor({
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Color</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Color</label>
                         <div className="flex gap-2 items-center flex-wrap">
                           <input type="color" value={selected.color || '#fff'} onChange={(e) => patchLayer(selected.id, { color: e.target.value })} className="w-8 h-8 rounded bg-transparent cursor-pointer" />
                           {['#ffffff', '#000000', ...brandColors].map((c, i) => (
-                            <button key={`prop-${c}-${i}`} onClick={() => patchLayer(selected.id, { color: c })} className={`w-6 h-6 rounded border-2 ${selected.color === c ? 'border-cyan-400' : 'border-slate-600'}`} style={{ backgroundColor: c }} />
+                            <button key={`prop-${c}-${i}`} onClick={() => patchLayer(selected.id, { color: c })} className={`w-6 h-6 rounded border-2 ${selected.color === c ? 'border-cyan-400' : 'border-gray-300'}`} style={{ backgroundColor: c }} />
                           ))}
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Font</label>
-                        <select value={selected.fontFamily || FONT_OPTIONS[0]} onChange={(e) => patchLayer(selected.id, { fontFamily: e.target.value })} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+                        <label className="text-xs text-gray-500 mb-1 block">Font</label>
+                        <select value={selected.fontFamily || FONT_OPTIONS[0]} onChange={(e) => patchLayer(selected.id, { fontFamily: e.target.value })} className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900">
                           {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f.split(',')[0]}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-slate-400 mb-1 block">Align</label>
+                        <label className="text-xs text-gray-500 mb-1 block">Align</label>
                         <div className="flex gap-1">
                           {(['left', 'center', 'right'] as const).map((a) => (
-                            <button key={a} onClick={() => patchLayer(selected.id, { textAlign: a })} className={`flex-1 p-2 rounded-lg ${selected.textAlign === a ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                            <button key={a} onClick={() => patchLayer(selected.id, { textAlign: a })} className={`flex-1 p-2 rounded-lg ${selected.textAlign === a ? 'bg-cyan-600 text-white' : 'bg-gray-50 text-gray-500'}`}>
                               {a === 'left' ? <AlignLeft className="w-3 h-3 mx-auto" /> : a === 'center' ? <AlignCenter className="w-3 h-3 mx-auto" /> : <AlignRight className="w-3 h-3 mx-auto" />}
                             </button>
                           ))}
@@ -2832,8 +2629,8 @@ export function ImageEditor({
                     </>
                   )}
 
-                  <div className="flex gap-2 pt-2 border-t border-slate-700">
-                    <Button size="sm" variant="outline" className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700" onClick={() => duplicateLayer(selected.id)}>
+                  <div className="flex gap-2 pt-2 border-t border-gray-200">
+                    <Button size="sm" variant="outline" className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100" onClick={() => duplicateLayer(selected.id)}>
                       <Copy className="w-3 h-3 mr-1" />Duplicate
                     </Button>
                     <Button size="sm" variant="outline" className="border-red-800 text-red-400 hover:bg-red-900/50" onClick={() => deleteLayer(selected.id)}>
@@ -2847,14 +2644,15 @@ export function ImageEditor({
         </div>
 
         {/* â”€â”€â”€ Canvas Viewport â”€â”€â”€ */}
-        <div ref={viewportRef} className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[#2a2a2e]">
+        <div ref={viewportRef} className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[#1e1e22]" style={{ backgroundImage: 'radial-gradient(circle, #333 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
           <div
             ref={containerRef}
-            className="relative bg-white shadow-2xl"
+            className="relative bg-white shadow-lg ring-1 ring-black/20"
             style={{
               width: canvasW * zoom,
               height: canvasH * zoom,
               cursor: tool === 'select' ? (dragging ? 'grabbing' : 'default') : 'crosshair',
+              borderRadius: '2px',
             }}
             onMouseDown={onPointerDown}
             onMouseMove={onPointerMove}
@@ -2970,7 +2768,7 @@ export function ImageEditor({
                 ] as const).map((h) => (
                   <div
                     key={h.key}
-                    className="absolute w-3 h-3 bg-white border-2 border-cyan-500 rounded-sm shadow-md"
+                    className="absolute w-3 h-3 bg-white border-2 border-cyan-300 rounded-sm shadow-md"
                     style={{ left: h.x * zoom - 6, top: h.y * zoom - 6, cursor: h.cursor, zIndex: 999 }}
                   />
                 ))}
@@ -3012,6 +2810,25 @@ export function ImageEditor({
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* — Bottom Status Bar — */}
+      <div className="flex items-center justify-between px-4 py-1.5 bg-white border-t border-gray-200 rounded-b-2xl">
+        <div className="flex items-center gap-3 text-[11px] text-gray-400">
+          <span>{layers.length} layer{layers.length !== 1 ? 's' : ''}</span>
+          {selected && (
+            <>
+              <span className="w-px h-3 bg-gray-200" />
+              <span className="text-gray-500">{selected.name}</span>
+              <span className="text-slate-600">{selected.width} × {selected.height}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-gray-400">
+          <span>{canvasW} × {canvasH}</span>
+          <span className="w-px h-3 bg-gray-200" />
+          <span>{Math.round(zoom * 100)}%</span>
         </div>
       </div>
     </div>

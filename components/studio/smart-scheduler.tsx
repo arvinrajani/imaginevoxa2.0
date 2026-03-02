@@ -256,7 +256,7 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50">
+      <Card className="p-6 bg-gradient-to-br from-blue-500 to-cyan-500">
         <div className="flex items-center gap-2 mb-2">
           <Zap className="w-5 h-5 text-blue-600" />
           <h3 className="font-semibold text-blue-900">AI Smart Scheduler</h3>
@@ -354,7 +354,7 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
                     >
                       {cd.day}
                       {isRecommended && !isSelected && (
-                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-green-500" />
+                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-green-50" />
                       )}
                     </button>
                   );
@@ -364,11 +364,11 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
               {insights && (
                 <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className="w-2 h-2 rounded-full bg-green-50" />
                     AI Recommended
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="w-2 h-2 rounded-full bg-blue-50" />
                     Today
                   </span>
                 </div>
@@ -469,7 +469,7 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
                     onClick={() => selectRecommendedSlot(slot)}
                     className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${
                       isSelected
-                        ? 'border-green-500 bg-green-50'
+                        ? 'border-green-50 bg-green-50'
                         : 'border-gray-200 hover:border-green-300'
                     }`}
                   >
@@ -534,7 +534,7 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
                 {insights.competitorGaps.map((gap, idx) => (
                   <div
                     key={idx}
-                    className="p-3 bg-purple-50 rounded-lg cursor-pointer hover:bg-purple-100 transition-colors"
+                    className="p-3 bg-purple-500 rounded-lg cursor-pointer hover:bg-purple-100 transition-colors"
                     onClick={() => selectRecommendedSlot({ day: gap.day, time: gap.time })}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -549,7 +549,7 @@ export function SmartScheduler({ brandId, onSchedule, postId }: SmartSchedulerPr
           </div>
 
           {/* Recommendations */}
-          <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50">
+          <Card className="p-6 bg-gradient-to-br from-amber-500 to-orange-500">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-5 h-5 text-amber-600" />
               <h4 className="font-semibold text-amber-900">AI Recommendations</h4>

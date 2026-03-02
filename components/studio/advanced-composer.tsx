@@ -527,7 +527,7 @@ export function AdvancedComposer({ brandId, brandColors, logoUrl, onExport }: Ad
       </Tabs>
 
       {/* Pro Features Highlight */}
-      <Card className="p-6 bg-gradient-to-br from-yellow-50 to-amber-50">
+      <Card className="p-6 bg-gradient-to-br from-yellow-50 to-amber-500">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-amber-600 mt-1" />
           <div>

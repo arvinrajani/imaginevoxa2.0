@@ -1,12 +1,13 @@
 ﻿import { createServerSupabase } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { generateImageBase } from '@/lib/ai/openai';
+import { generateImageBase, generateImageEdit } from '@/lib/ai/openai';
 import sharp from 'sharp';
 
 type CreateImageRequest = {
   brandId?: string;
   brandName?: string;
+  productName?: string;
   brandColors?: string[];
   headline?: string;
   tagline?: string;
@@ -18,6 +19,7 @@ type CreateImageRequest = {
   customPrompt?: string;
   generationNonce?: number;
   imageAspect?: 'landscape' | 'square' | 'portrait';
+  referenceImageUrl?: string;
 };
 
 type ParsedSize = {
@@ -90,10 +92,11 @@ function deriveWordingFromPost(postText?: string) {
 
 function deriveSceneBrief(options: {
   brandName?: string;
+  productName?: string;
   headline?: string;
   postText?: string;
 }) {
-  const raw = `${options.headline || ''} ${options.postText || ''}`.toLowerCase();
+  const raw = `${options.productName || ''} ${options.headline || ''} ${options.postText || ''}`.toLowerCase();
 
   const sceneByKeyword: Array<{ keywords: string[]; scene: string }> = [
     {
@@ -132,7 +135,7 @@ function deriveSceneBrief(options: {
     sceneByKeyword.find((entry) => entry.keywords.some((keyword) => raw.includes(keyword)))?.scene ||
     'A realistic professional business scene with a clear subject, purposeful environment context, and strong visual depth.';
 
-  return `${matched} Keep the scene concrete and identifiable, never abstract-only. ${options.brandName ? `Reflect ${options.brandName} brand personality.` : ''}`.trim();
+  return `${matched} Keep the scene concrete and identifiable, never abstract-only. ${options.brandName ? `Reflect ${options.brandName} brand personality.` : ''} ${options.productName ? `Highlight product context: ${options.productName}.` : ''}`.trim();
 }
 
 function buildVariationDirective(nonce: number) {
@@ -219,6 +222,7 @@ export async function POST(request: Request) {
 
     const brandId = body.brandId?.trim() || '';
     const brandName = body.brandName?.trim() || '';
+    const productName = body.productName?.trim() || '';
     const brandColors = Array.isArray(body.brandColors) ? body.brandColors.filter(Boolean) : [];
     const tone = body.tone?.trim() || 'professional';
     const style = body.style?.trim() || 'text-overlay';
@@ -230,6 +234,7 @@ export async function POST(request: Request) {
     const generationNonce = Number.isFinite(body.generationNonce)
       ? Math.max(1, Math.floor(body.generationNonce as number))
       : 1;
+    const referenceImageUrl = body.referenceImageUrl?.trim() || '';
 
     const derived = deriveWordingFromPost(postText);
     const displayHeadline = (body.headline?.trim() || derived.headline || '').slice(0, 80);
@@ -348,9 +353,14 @@ export async function POST(request: Request) {
 
     const styleDirection = styleMap[style] || styleMap['text-overlay'];
     const semanticAnchor =
-      displayHeadline || postText.replace(/\s+/g, ' ').trim().slice(0, 220) || brandName || 'professional business growth';
+      productName ||
+      displayHeadline ||
+      postText.replace(/\s+/g, ' ').trim().slice(0, 220) ||
+      brandName ||
+      'professional business growth';
     const sceneBrief = deriveSceneBrief({
       brandName,
+      productName,
       headline: displayHeadline,
       postText,
     });
@@ -370,9 +380,10 @@ This is the most important instruction - follow it closely while maintaining qua
 POST CONTEXT:
 ${postContext || 'Use the provided headline and tagline as the post message.'}
 
-MESSAGE FOCUS (semantic guidance only, never rendered as text):
+MESSAGE FOCUS (semantic guidance only):
 ${displayHeadline ? `- Headline concept: ${displayHeadline}` : ''}
 ${displayTagline ? `- Subtitle concept: ${displayTagline}` : ''}
+${productName ? `- Product focus: ${productName}` : ''}
 SUBJECT ANCHOR:
 - The visual must clearly relate to: "${semanticAnchor}"
 
@@ -381,20 +392,12 @@ SCENE BRIEF (MANDATORY):
 - Include at least one clear focal subject plus one supporting contextual element tied to the post topic.
 - No gradient-only or abstract-only outputs unless style is "abstract-brand".
 
-${shouldInfuseLogo ? `LOGO INTEGRATION (CRITICAL):
-- The brand has a logo. Design the image with a prominent, intentional space for a logo mark.
-- Create a clean logo-friendly zone (top-left corner, or centered-top, or bottom-right) with a subtle contrasting background area (e.g., a white or semi-transparent rounded rectangle, badge, or clean negative space).
-- The logo zone should feel DESIGNED-IN, not pasted on - like the logo is a natural part of the composition.
-- Leave this zone clean and uncluttered so the logo can be composited onto it cleanly after generation.
-- Brand name: "${brandName || 'Brand'}"
-` : ''}
-${shouldOverlayLogo ? 'Do NOT draw a logo in the AI generation. Logo will be composited as an overlay after generation. Leave one clean, uncluttered logo-safe zone with subtle contrast.' : ''}
 ${logoPlacement === 'none' ? 'No logo needed in this image.' : ''}
 
-EDITOR-FIRST COMPOSITION RULES:
-- Do NOT render readable words, letters, sentences, logos, or numbers directly in the generated image. No glyphs, no pseudo-text, no typographic artifacts.
+COMPOSITION RULES:
 - Create clean text-safe zones with strong contrast so editable text can be added in the editor.
-- Keep visual hierarchy obvious using shapes, depth, and spacing instead of baked typography. Keep all key visual elements inside an 85% central safe-area so LinkedIn crops stay balanced.
+- Keep visual hierarchy obvious using shapes, depth, and spacing.
+- Keep all key visual elements inside an 85% central safe-area so LinkedIn crops stay balanced.
 
 VISUAL STYLE: ${styleDirection}
 TONE: ${toneDirection}
@@ -421,15 +424,15 @@ QUALITY REQUIREMENTS:
 - Clean visual hierarchy with intentional whitespace
 - Immediately eye-catching in a LinkedIn feed
 - Should look like it was designed by a top creative agency
-- No stock photo feel - every element should feel intentional. Image must be crisp and sharp (no blur, no haze, no low-detail mush)
+- No stock photo feel - every element should feel intentional
+- Image must be crisp and sharp (no blur, no haze, no low-detail mush)
 
 AVOID:
 - Blurry or low-quality visuals
-- Garbled, misspelled, or unreadable text
 - Watermarks or placeholder artifacts
 - Overly cluttered compositions
 - Generic clip-art style elements
-- Soft-focus backgrounds, intentional gaussian blur, or foggy haze that makes the image look out of focus
+- Soft-focus backgrounds, intentional gaussian blur, or foggy haze
 - Large abstract blur blobs that hide detail
 `.trim();
 
@@ -437,19 +440,103 @@ AVOID:
     const renderSize = sizeMap[imageAspect] || sizeMap.landscape;
     const render = parseSize(renderSize);
 
+    // ── Resolve reference images (logo + optional URL reference) ──
+    const referenceImages: Array<{ buffer: Buffer; filename: string; role: string }> = [];
+
+    // Resolve logo buffer for baking into the AI image
+    if (hasLogo && logoPlacement !== 'none') {
+      const logoBuffer = await resolveImageBufferFromSource(effectiveLogoUrl);
+      if (logoBuffer) {
+        // Ensure the logo is a clean PNG for the API
+        const logoPng = await sharp(logoBuffer)
+          .resize({ width: 512, height: 512, fit: 'contain', withoutEnlargement: true, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .png()
+          .toBuffer();
+        referenceImages.push({ buffer: logoPng, filename: 'logo.png', role: 'logo' });
+      }
+    }
+
+    // Resolve reference image from URL (e.g. product photo from website)
+    if (referenceImageUrl) {
+      const refBuffer = await resolveImageBufferFromSource(referenceImageUrl);
+      if (refBuffer) {
+        const refPng = await sharp(refBuffer)
+          .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        referenceImages.push({ buffer: refPng, filename: 'reference.png', role: 'reference' });
+      }
+    }
+
+    const useEditEndpoint = referenceImages.length > 0 && model.startsWith('gpt-image');
+
+    // Augment prompt with logo/reference instructions for the edit endpoint
+    let editPrompt = imagePrompt;
+    if (useEditEndpoint) {
+      const hasLogoRef = referenceImages.some((r) => r.role === 'logo');
+      const hasImageRef = referenceImages.some((r) => r.role === 'reference');
+
+      const logoInstruction = hasLogoRef
+        ? `\n\nLOGO INTEGRATION — THIS IS THE #1 PRIORITY:
+You have been given the brand's logo as a reference image. You MUST faithfully reproduce this exact logo inside the generated image as a core, beautiful element of the design.
+
+CRITICAL LOGO RULES:
+1. REPRODUCE THE LOGO EXACTLY as provided — same shape, same colors, same proportions, same details. Do not redesign, simplify, or alter it.
+2. Make the logo a PROMINENT, LARGE, visually important element — it should be one of the first things viewers notice.
+3. The logo must be DESIGNED INTO the composition, not floating randomly. Give it:
+   - Proper visual weight and sizing (at least 15-20% of the image area)
+   - A clean background area or contrasting zone behind it so it reads perfectly
+   - Professional integration: subtle drop shadow, clean edges, or a complementary backdrop
+4. ${logoPlacement === 'infuse' 
+    ? 'INFUSE MODE: Make the logo a central, hero element of the design. It can be large and commanding — centered or prominently placed. It should feel like the image was designed AROUND the logo. Think of it like a brand-launch hero banner where the logo is the star.' 
+    : 'OVERLAY MODE: Place the logo in a premium corner position (top-right or top-left preferred) with a clean backing — a subtle white/frosted card, clean negative space, or a contrasting panel. It should look like a professional watermark/brand stamp that belongs there by design.'}
+5. The logo should be CRISP and SHARP — high fidelity rendering with clean edges.
+6. Brand name: "${brandName || 'Brand'}"
+
+DO NOT:
+- Replace the logo with text spelling out the brand name
+- Draw a different/simplified version of the logo  
+- Make the logo tiny or hard to see
+- Put the logo in a cluttered area where it gets lost`
+        : '';
+
+      const refInstruction = hasImageRef
+        ? `\n\nREFERENCE / PRODUCT IMAGE (MUST USE):
+- I have provided a reference or product image. You MUST incorporate the visual subject, product, or scene from this reference prominently in the generated image.
+- The generated image should clearly feature and showcase the referenced subject as a key visual element.
+- Match the reference's colors, style, and characteristics faithfully while integrating it into a professional, polished composition.
+- The reference subject should be recognizable and prominent, not abstracted away.`
+        : '';
+
+      // Build the final edit prompt with logo as highest priority
+      editPrompt = imagePrompt + logoInstruction + refInstruction + `\n\nFINAL PRIORITY ORDER: 1) Reproduce the logo exactly and prominently. 2) Match the visual style and scene description. 3) Integrate reference images naturally.`;
+    }
+
     let base64: string;
     let generationPass = 1;
 
-    const firstPass = await generateImageBase({
-      model,
-      prompt: imagePrompt,
-      size: renderSize,
-      quality: 'high',
-      outputFormat: 'png',
-      background: 'opaque',
-    });
-
-    base64 = firstPass.base64;
+    if (useEditEndpoint) {
+      // Use the edit endpoint to bake logo/reference into the AI image
+      const editResult = await generateImageEdit({
+        model,
+        prompt: editPrompt,
+        images: referenceImages.map((r) => ({ buffer: r.buffer, filename: r.filename })),
+        size: renderSize,
+        quality: 'high',
+      });
+      base64 = editResult.base64;
+    } else {
+      // Standard generation without reference images
+      const firstPass = await generateImageBase({
+        model,
+        prompt: imagePrompt,
+        size: renderSize,
+        quality: 'high',
+        outputFormat: 'png',
+        background: 'opaque',
+      });
+      base64 = firstPass.base64;
+    }
 
     // Guardrail: if the output is too low-detail/compressed for photo-led layouts,
     // retry once with an explicit sharpness override.
@@ -463,7 +550,7 @@ AVOID:
       style === 'photo-blend' ||
       ((style === 'split-layout' || style === 'cinematic') && base64.length < lowDetailThreshold);
 
-    if (shouldRetryForDetail) {
+    if (shouldRetryForDetail && !useEditEndpoint) {
       const sharpnessOverridePrompt = `${imagePrompt}
 
 CLARITY OVERRIDE (MANDATORY):
@@ -490,7 +577,7 @@ CLARITY OVERRIDE (MANDATORY):
 
     // Final guard for photo-blend: if output still looks low-detail by payload size,
     // fallback to a cleaner split-layout composition that tends to be sharper.
-    if (style === 'photo-blend' && base64.length < lowDetailThreshold) {
+    if (style === 'photo-blend' && base64.length < lowDetailThreshold && !useEditEndpoint) {
       const fallbackPrompt = imagePrompt
         .replace(
           `VISUAL STYLE: ${styleDirection}`,
@@ -517,6 +604,7 @@ CLARITY OVERRIDE (MANDATORY):
 
     // Final safety fallback: if still too low-detail, force a concrete non-abstract composition.
     if (
+      !useEditEndpoint &&
       (style === 'photo-blend' || style === 'split-layout' || style === 'cinematic') &&
       base64.length < baseLowDetailThreshold
     ) {
@@ -561,9 +649,11 @@ FINAL QUALITY FALLBACK (MANDATORY):
     const baseUrl = basePublicUrl || `data:image/png;base64,${base64}`;
 
     let finalUrl = baseUrl;
-    let logoApplied = false;
+    let logoApplied = useEditEndpoint && hasLogo && logoPlacement !== 'none';
 
-    if (shouldOverlayLogo || shouldInfuseLogo) {
+    // Only do sharp-based overlay if we did NOT use the edit endpoint
+    // (edit endpoint already baked the logo into the AI image)
+    if (!useEditEndpoint && (shouldOverlayLogo || shouldInfuseLogo)) {
       const logoBuffer = await resolveImageBufferFromSource(effectiveLogoUrl);
 
       if (logoBuffer) {
@@ -660,6 +750,8 @@ FINAL QUALITY FALLBACK (MANDATORY):
               type: 'linkedin-image-creator',
               logo_applied: logoApplied,
               logo_placement: logoPlacement,
+              logo_baked_by_ai: useEditEndpoint && hasLogo,
+              reference_image_url: referenceImageUrl || null,
               logo_source: providedLogoUrl ? 'uploaded' : brandKitLogoUrl ? 'brand-kit' : 'none',
               logo_url_used: effectiveLogoUrl || null,
               base_image_url: baseUrl,

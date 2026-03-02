@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -20,7 +20,8 @@ import {
   Loader2,
   Target,
   Layers,
-  CalendarDays
+  CalendarDays,
+  Save
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -41,6 +42,8 @@ type Post = {
   status: string;
   created_at: string;
   posted_at: string | null;
+  image_url?: string | null;
+  brand_id?: string | null;
 };
 
 type DashboardData = {
@@ -62,39 +65,39 @@ type DashboardData = {
 
 const quickActions = [
   {
-    title: 'Generate Post',
-    description: 'Create AI-powered content',
+    title: 'Write Post',
+    description: 'AI post generator in Studio',
     icon: Sparkles,
-    href: '/app/generate',
-    gradient: 'from-violet-500 to-purple-600',
+    href: '/app/studio?step=0',
+    gradient: 'from-violet-500 to-purple-500',
   },
   {
-    title: 'View Posts',
-    description: 'Manage your content',
+    title: 'Create Image',
+    description: 'Generate brand visuals',
     icon: FileText,
-    href: '/app/posts',
-    gradient: 'from-blue-500 to-cyan-600',
+    href: '/app/studio?step=1',
+    gradient: 'from-cyan-500 to-blue-500',
   },
   {
-    title: 'LinkedIn Status',
-    description: 'Check connection',
+    title: 'Publish',
+    description: 'Preview & post to LinkedIn',
     icon: Linkedin,
-    href: '/app/linkedin',
-    gradient: 'from-sky-500 to-blue-600',
+    href: '/app/studio?step=3',
+    gradient: 'from-blue-500 to-indigo-500',
   },
   {
     title: 'Metrics',
     description: 'Track engagement insights',
     icon: TrendingUp,
     href: '/app/metrics',
-    gradient: 'from-emerald-500 to-teal-600',
+    gradient: 'from-emerald-500 to-cyan-500',
   },
   {
     title: 'Strategy Lab',
     description: 'Optimize + plan 30 days',
     icon: CalendarDays,
     href: '/app/strategy',
-    gradient: 'from-cyan-500 to-blue-600',
+    gradient: 'from-purple-500 to-violet-500',
   },
 ];
 
@@ -114,10 +117,10 @@ function StatCard({
   loading?: boolean;
 }) {
   const colorClasses = {
-    violet: 'bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400',
-    blue: 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400',
-    green: 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400',
-    amber: 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400',
+    violet: 'bg-violet-100 text-violet-600',
+    blue: 'bg-blue-100 text-blue-600',
+    green: 'bg-green-100 text-green-600',
+    amber: 'bg-amber-100 text-amber-600',
   };
 
   return (
@@ -125,7 +128,7 @@ function StatCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
-      className="bg-[#0b1234] rounded-2xl p-6 border border-white/10 shadow-sm hover:shadow-lg transition-all"
+      className="bg-white/80 rounded-2xl p-6 border border-gray-200/60 shadow-sm hover:shadow-lg hover:shadow-cyan-200/20 transition-all backdrop-blur-sm"
     >
       <div className="flex items-start justify-between mb-4">
         <div className={`h-12 w-12 rounded-xl ${colorClasses[color]} flex items-center justify-center`}>
@@ -134,15 +137,15 @@ function StatCard({
       </div>
       {loading ? (
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-2" />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24" />
+          <div className="h-8 bg-gray-200 rounded w-16 mb-2" />
+          <div className="h-4 bg-gray-200 rounded w-24" />
         </div>
       ) : (
         <>
-          <p className="text-3xl font-bold text-white mb-1">{value}</p>
-          <p className="text-sm text-slate-400">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 mb-1">{value}</p>
+          <p className="text-sm text-gray-500">{title}</p>
           {subtitle && (
-            <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
+            <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
           )}
         </>
       )}
@@ -166,49 +169,51 @@ function PostCard({ post }: { post: Post }) {
     return date.toLocaleDateString();
   };
 
+  const cardHref = post.status === 'draft' ? `/app/studio?postId=${post.id}&step=3` : '/app/posts';
+
   return (
+    <Link href={cardHref} className="block">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="bg-[#0b1234] rounded-xl p-4 border border-white/10 hover:border-cyan-400/50 transition-colors"
+      className="bg-white/80 rounded-xl p-4 border border-gray-200/60 hover:border-cyan-300/50 transition-colors cursor-pointer backdrop-blur-sm"
     >
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
             {post.status === 'posted' ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
                 <CheckCircle className="h-3 w-3" />
                 Published
               </span>
             ) : post.status === 'scheduled' ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
                 <Clock className="h-3 w-3" />
                 Scheduled
               </span>
             ) : post.status === 'failed' ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded-full">
                 <AlertCircle className="h-3 w-3" />
                 Failed
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-1 rounded-full">
-                <Clock className="h-3 w-3" />
-                Draft
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-cyan-600 bg-cyan-100 px-2 py-1 rounded-full">
+                <Save className="h-3 w-3" />
+                Saved
               </span>
             )}
-            <span className="text-xs text-slate-500">{formatDate(post.created_at)}</span>
+            <span className="text-xs text-gray-400">{formatDate(post.created_at)}</span>
           </div>
-          <p className="text-sm text-slate-200 line-clamp-2">
+          <p className="text-sm text-gray-700 line-clamp-2">
             {post.post_content.length > 150 ? `${post.post_content.substring(0, 150)}...` : post.post_content}
           </p>
         </div>
-        <Button asChild variant="ghost" size="sm" className="shrink-0">
-          <Link href="/app/posts">
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </Button>
+        <div className="shrink-0 text-gray-400">
+          <ChevronRight className="h-4 w-4" />
+        </div>
       </div>
     </motion.div>
+    </Link>
   );
 }
 
@@ -217,16 +222,16 @@ function EmptyState() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="bg-[#0b1234] rounded-xl p-8 border border-white/10 text-center"
+      className="bg-white/80 rounded-xl p-8 border border-gray-200/60 text-center backdrop-blur-sm"
     >
-      <div className="h-16 w-16 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center mx-auto mb-4">
-        <FileText className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+      <div className="h-16 w-16 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-4">
+        <FileText className="h-8 w-8 text-violet-600" />
       </div>
-      <h3 className="font-semibold text-white mb-2">No posts yet</h3>
-      <p className="text-sm text-slate-400 mb-4">
+      <h3 className="font-semibold text-gray-900 mb-2">No posts yet</h3>
+      <p className="text-sm text-gray-500 mb-4">
         Create your first AI-powered LinkedIn post
       </p>
-      <Button asChild className="bg-gradient-to-r from-violet-600 to-blue-600">
+      <Button asChild className="bg-gradient-to-r from-cyan-500 to-violet-500">
         <Link href="/app/generate">
           <Plus className="h-4 w-4 mr-2" />
           Create Post
@@ -393,7 +398,7 @@ export default function DashboardPage() {
         className="mb-8"
         title={
           loading ? (
-            <span className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-8 w-48 inline-block" />
+            <span className="animate-pulse bg-gray-200 rounded h-8 w-48 inline-block" />
           ) : (
             <>
               Welcome back, <span className="text-voxa-gradient">{data.userName}</span>! 👋
@@ -408,7 +413,7 @@ export default function DashboardPage() {
                 variant="outline"
                 onClick={handleDeleteAllPosts}
                 disabled={isDeleting}
-                className="border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="border-red-300 text-red-600 hover:bg-red-50"
               >
                 {isDeleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -420,7 +425,7 @@ export default function DashboardPage() {
                 )}
               </Button>
             )}
-            <Button asChild className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white shadow-lg shadow-violet-500/25">
+            <Button asChild className="bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-cyan-600 hover:via-blue-600 hover:to-violet-600 text-white shadow-lg shadow-cyan-50/20">
               <Link href="/app/generate">
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
@@ -468,7 +473,7 @@ export default function DashboardPage() {
         {/* Recent Posts - Takes 2 columns */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-gray-900">
               Recent Posts
             </h2>
             {data.recentPosts.length > 0 && (
@@ -481,10 +486,10 @@ export default function DashboardPage() {
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-[#0b1234] rounded-xl p-4 border border-white/10 animate-pulse">
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-3" />
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2" />
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+                <div key={i} className="bg-white/80 rounded-xl p-4 border border-gray-200/60 animate-pulse backdrop-blur-sm">
+                  <div className="h-4 bg-gray-200 rounded w-20 mb-3" />
+                  <div className="h-4 bg-gray-200 rounded w-full mb-2" />
+                  <div className="h-4 bg-gray-200 rounded w-2/3" />
                 </div>
               ))}
             </div>
@@ -513,18 +518,18 @@ export default function DashboardPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-[#0b1234] rounded-2xl p-6 border border-white/10"
+              className="bg-white/80 rounded-2xl p-6 border border-gray-200/60 backdrop-blur-sm"
             >
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-10 w-10 rounded-xl bg-cyan-100/80 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center">
                   <Target className="h-5 w-5 text-cyan-600" />
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-400">Voxa Focus</p>
-                  <p className="text-sm font-semibold text-white">{focusAction.title}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Voxa Focus</p>
+                  <p className="text-sm font-semibold text-gray-900">{focusAction.title}</p>
                 </div>
               </div>
-              <p className="text-sm text-slate-400 mb-4">{focusAction.description}</p>
+              <p className="text-sm text-gray-500 mb-4">{focusAction.description}</p>
               <Button asChild className="w-full bg-voxa-gradient text-white hover:opacity-90">
                 <Link href={focusAction.href}>
                   {focusAction.cta}
@@ -538,38 +543,38 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
-            className="bg-[#0b1234] rounded-2xl p-6 border border-white/10"
+            className="bg-white/80 rounded-2xl p-6 border border-gray-200/60 backdrop-blur-sm"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Layers className="h-5 w-5 text-cyan-200" />
-                <p className="font-semibold text-white">Content Pipeline</p>
+                <Layers className="h-5 w-5 text-cyan-600" />
+                <p className="font-semibold text-gray-900">Content Pipeline</p>
               </div>
-              <span className="text-xs text-slate-500">{data.totalPosts} total</span>
+              <span className="text-xs text-gray-400">{data.totalPosts} total</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="text-xs text-slate-400">Drafts</p>
-                <p className="text-lg font-semibold text-white">{data.statusCounts.drafts}</p>
+              <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                <p className="text-xs text-gray-400">Drafts</p>
+                <p className="text-lg font-semibold text-gray-900">{data.statusCounts.drafts}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="text-xs text-slate-400">Scheduled</p>
-                <p className="text-lg font-semibold text-white">{data.statusCounts.scheduled}</p>
+              <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                <p className="text-xs text-gray-400">Scheduled</p>
+                <p className="text-lg font-semibold text-gray-900">{data.statusCounts.scheduled}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="text-xs text-slate-400">Published</p>
-                <p className="text-lg font-semibold text-white">{data.statusCounts.posted}</p>
+              <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                <p className="text-xs text-gray-400">Published</p>
+                <p className="text-lg font-semibold text-gray-900">{data.statusCounts.posted}</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="text-xs text-slate-400">Needs review</p>
-                <p className="text-lg font-semibold text-white">{data.statusCounts.failed}</p>
+              <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-3">
+                <p className="text-xs text-gray-400">Needs review</p>
+                <p className="text-lg font-semibold text-gray-900">{data.statusCounts.failed}</p>
               </div>
             </div>
           </motion.div>
 
           {/* Quick Actions */}
           <div>
-            <h2 className="text-lg font-semibold text-white mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Quick Actions
             </h2>
             <div className="space-y-3">
@@ -581,20 +586,20 @@ export default function DashboardPage() {
                   transition={{ delay: i * 0.1 }}
                 >
                   <Link href={action.href}>
-                    <div className="group bg-[#0b1234] rounded-xl p-4 border border-white/10 hover:border-cyan-400/50 transition-all hover:shadow-md">
+                    <div className="group bg-white/80 rounded-xl p-4 border border-gray-200/60 hover:border-cyan-300/50 transition-all hover:shadow-md hover:shadow-cyan-200/20 backdrop-blur-sm">
                       <div className="flex items-center gap-4">
                         <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${action.gradient} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                           <action.icon className="h-5 w-5 text-white" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-white">
+                          <p className="font-medium text-gray-900">
                             {action.title}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-gray-500">
                             {action.description}
                           </p>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-slate-500 group-hover:text-cyan-300 group-hover:translate-x-1 transition-all" />
+                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all" />
                       </div>
                     </div>
                   </Link>
@@ -612,7 +617,7 @@ export default function DashboardPage() {
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Credit Usage</h3>
-              <Zap className="h-5 w-5 text-slate-200" />
+              <Zap className="h-5 w-5 text-gray-700" />
             </div>
             <div className="mb-4">
               {loading ? (
@@ -624,7 +629,7 @@ export default function DashboardPage() {
                 <>
                   <div className="flex items-baseline gap-2 mb-2">
                     <span className="text-4xl font-bold">{creditsRemaining}</span>
-                    <span className="text-slate-200">/ {data.creditsTotal}</span>
+                    <span className="text-gray-700">/ {data.creditsTotal}</span>
                   </div>
                   <div className="h-3 bg-white/20 rounded-full overflow-hidden">
                     <motion.div
@@ -634,7 +639,7 @@ export default function DashboardPage() {
                       className="h-full bg-white rounded-full"
                     />
                   </div>
-                  <p className="text-sm text-slate-200 mt-2">
+                  <p className="text-sm text-gray-700 mt-2">
                     Resets in {daysUntilReset ?? '--'} days • {PLAN_LIMITS[data.plan].name} Plan
                   </p>
                 </>
@@ -655,27 +660,27 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-[#0b1234] rounded-2xl p-6 border border-white/10"
+            className="bg-white/80 rounded-2xl p-6 border border-gray-200/60 backdrop-blur-sm"
           >
             <div className="flex items-center gap-4 mb-4">
-              <div className="h-12 w-12 rounded-xl bg-[#0077B5] flex items-center justify-center">
+              <div className="h-12 w-12 rounded-xl bg-[#0077B5]/90 flex items-center justify-center shadow-lg shadow-blue-50/20">
                 <Linkedin className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-white">LinkedIn</p>
+                <p className="font-semibold text-gray-900">LinkedIn</p>
                 {loading ? (
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 animate-pulse" />
+                  <div className="h-4 bg-gray-200 rounded w-20 animate-pulse" />
                 ) : (
                   <div className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${data.linkedinConnected ? 'bg-green-500' : 'bg-slate-500'}`} />
-                    <span className={`text-sm ${data.linkedinConnected ? 'text-green-400' : 'text-slate-400'}`}>
+                    <span className={`h-2 w-2 rounded-full ${data.linkedinConnected ? 'bg-green-50' : 'bg-gray-400'}`} />
+                    <span className={`text-sm ${data.linkedinConnected ? 'text-green-600' : 'text-gray-500'}`}>
                       {data.linkedinConnected ? 'Connected' : 'Not Connected'}
                     </span>
                   </div>
                 )}
               </div>
             </div>
-            <p className="text-sm text-slate-400 mb-4">
+            <p className="text-sm text-gray-500 mb-4">
               {data.linkedinConnected 
                 ? 'Your account is connected and ready to publish posts directly.'
                 : 'Connect your LinkedIn account to publish posts directly.'

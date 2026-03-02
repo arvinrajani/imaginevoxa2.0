@@ -33,6 +33,7 @@ const inputSchema = z.object({
       chatbot: z.string().optional(),
     })
     .optional(),
+  productId: z.string().uuid().optional().nullable(),
   solutionMode: z.boolean().optional(),
   experimentMode: z.boolean().optional(),
   experimentAxes: z
@@ -41,8 +42,8 @@ const inputSchema = z.object({
     .optional(),
   emojiPolicy: z
     .object({
-      min: z.number().int().min(0).max(8).optional(),
-      max: z.number().int().min(0).max(8).optional(),
+      min: z.number().int().min(0).max(15).optional(),
+      max: z.number().int().min(0).max(15).optional(),
       style: z.enum(["none", "minimal", "balanced"]).optional(),
     })
     .optional(),
@@ -154,12 +155,12 @@ const TONE_EMOJI_DEFAULTS: Record<
   ToneId,
   { min: number; max: number; style: "none" | "minimal" | "balanced" }
 > = {
-  professional: { min: 0, max: 2, style: "minimal" },
-  conversational: { min: 1, max: 4, style: "balanced" },
-  inspiring: { min: 2, max: 6, style: "balanced" },
-  provocative: { min: 0, max: 3, style: "minimal" },
-  educational: { min: 0, max: 2, style: "minimal" },
-  storytelling: { min: 1, max: 4, style: "balanced" },
+  professional: { min: 1, max: 4, style: "minimal" },
+  conversational: { min: 3, max: 8, style: "balanced" },
+  inspiring: { min: 4, max: 10, style: "balanced" },
+  provocative: { min: 1, max: 5, style: "minimal" },
+  educational: { min: 2, max: 6, style: "balanced" },
+  storytelling: { min: 2, max: 6, style: "balanced" },
 };
 
 const LENGTH_GUIDANCE: Record<
@@ -201,13 +202,44 @@ const TONE_DIRECTIVES: Record<ToneId, string> = {
 
 const STRUCTURE_STYLE_GUIDANCE: Record<StructureStyle, string> = {
   natural:
-    "Write like a polished native LinkedIn post. No rigid section labels. Flow naturally with short paragraphs.",
+    `Write like a polished native LinkedIn post. No rigid section labels. Use a MIX of short paragraphs AND bullet points/pointers throughout.
+    FORMAT RULES:
+    - Start with a compelling 1-2 line hook paragraph
+    - Follow with a short context paragraph (2-3 sentences max)
+    - Then use bullet points (•, ✅, →, ▸) for key insights, tips, or takeaways (3-6 bullets)
+    - After bullets, add a bridging paragraph with personal insight or analogy
+    - Optionally add another set of bullets for action steps
+    - End with a clear CTA paragraph
+    - Use line breaks between sections for readability
+    - Vary bullet styles: use emojis as bullet markers (🔹, ✅, 💡, ➡️, 🎯) to make them visually engaging`,
   "problem-solution":
-    "Use a clear problem -> solution -> proof -> CTA arc. Section labels are allowed if they improve clarity.",
+    `Use a clear problem -> solution -> proof -> CTA arc.
+    FORMAT RULES:
+    - Open with the problem as a punchy 1-2 line paragraph
+    - Use 2-3 bullet points to list pain symptoms
+    - Bridge with a "Here's what works:" or similar transition
+    - Present solution as 3-5 actionable bullet points with emoji markers
+    - Add a proof/results paragraph
+    - Close with CTA
+    - Mix paragraphs and bullets — never write a wall of text`,
   "story-led":
-    "Lead with a real narrative moment, then transition to insights and a practical takeaway.",
+    `Lead with a real narrative moment, then transition to insights.
+    FORMAT RULES:
+    - Start with a vivid 2-3 sentence story hook
+    - Continue the narrative in a short paragraph
+    - Transition with "Here's what I learned:" or similar
+    - List 3-5 key lessons as bullet points with emoji markers
+    - End with a reflection paragraph and CTA
+    - The post should feel like paragraphs interspersed with scannable takeaway bullets`,
   "how-to":
-    "Use a tactical how-to format with concrete numbered steps and implementation guidance.",
+    `Use a tactical how-to format with concrete steps.
+    FORMAT RULES:
+    - Open with why this matters (1-2 sentences)
+    - Use numbered steps (1., 2., 3.) or emoji-numbered bullets for the main process
+    - Under each step, add 1-2 sentences of context or a sub-bullet
+    - After the steps, add a "Pro tip:" or "Bonus:" paragraph
+    - Close with CTA
+    - Each step should feel like a mini-section with its own paragraph`,
 };
 
 const FRAMEWORK_HINTS: Record<string, string> = {
@@ -464,8 +496,8 @@ function ensureBodyLength(body: string, length: LengthId, topic: string) {
 
 function resolveEmojiPolicy(input: z.infer<typeof inputSchema>, tone: ToneId) {
   const defaults = TONE_EMOJI_DEFAULTS[tone];
-  const min = clamp(input.emojiPolicy?.min ?? defaults.min, 0, 8);
-  const max = clamp(input.emojiPolicy?.max ?? defaults.max, min, 8);
+  const min = clamp(input.emojiPolicy?.min ?? defaults.min, 0, 15);
+  const max = clamp(input.emojiPolicy?.max ?? defaults.max, min, 15);
   return {
     min,
     max,
@@ -889,6 +921,17 @@ export async function POST(request: Request) {
         .maybeSingle(),
     ]);
 
+    let productContext: { id: string; name: string; description: string | null } | null = null;
+    if (input.productId) {
+      const { data: productRow } = await supabase
+        .from("products")
+        .select("id, name, description")
+        .eq("id", input.productId)
+        .eq("brand_id", input.brandId)
+        .maybeSingle();
+      productContext = productRow as { id: string; name: string; description: string | null } | null;
+    }
+
     const brandKit = brandKitRes.data || null;
     const moodBoard = moodBoardRes.data || null;
     const identity = identityRes.data || null;
@@ -949,6 +992,9 @@ export async function POST(request: Request) {
       "Avoid generic business filler. Prefer specific context, concrete wording, and realistic details.",
       `Brand naming rule: when you mention the brand/company, use this exact token only: "${canonicalBrandName}". Do not append words like Solutions, Inc, Group, etc unless they already exist in that exact token.`,
       `Structure style: ${STRUCTURE_STYLE_GUIDANCE[structureStyle]}`,
+      productContext
+        ? `Product focus: All posts must specifically reference and highlight the product "${productContext.name}".`
+        : null,
       solutionMode
         ? "Each option must explicitly include: problem, mechanism/solution, proof signal, and CTA."
         : null,
@@ -956,7 +1002,7 @@ export async function POST(request: Request) {
         ? "Do not use rigid section labels like 'The challenge:' or 'The approach:'. Keep prose natural."
         : null,
       `Tone directive: ${TONE_DIRECTIVES[tone]}`,
-      `Emoji policy: minimum ${emojiPolicy.min}, maximum ${emojiPolicy.max}, style ${emojiPolicy.style}.`,
+      `Emoji policy: You MUST use at least ${emojiPolicy.min} emojis and up to ${emojiPolicy.max} emojis throughout the post. Style: ${emojiPolicy.style}. Distribute emojis naturally: use them as bullet markers (🔹, ✅, 💡, 🎯, ➡️, 🚀), section headers, emphasis points, and at the start of key lines. Emojis make posts more scannable and engaging on LinkedIn. Do NOT cluster all emojis together — spread them throughout the post.`,
       `Length requirement: ${lengthGuide.words} words. ${lengthGuide.guidance}`,
       input.audienceLevel
         ? `Audience level: ${input.audienceLevel}. Calibrate vocabulary and examples accordingly.`
@@ -1006,6 +1052,12 @@ export async function POST(request: Request) {
         ? `Optional link bar to include at post end/CTA: ${JSON.stringify({
             website: normalizedLinks.website || "",
             chatbot: normalizedLinks.chatbot || "",
+          })}`
+        : null,
+      productContext
+        ? `Specific product context (write about this product): ${JSON.stringify({
+            name: productContext.name,
+            description: productContext.description || null,
           })}`
         : null,
       `Brand kit context: ${JSON.stringify({
@@ -1203,7 +1255,8 @@ export async function POST(request: Request) {
     dbCandidates.push(supabase);
 
     const primary = normalized[0];
-    const postPayload = {
+    // Full payload (requires migration to have run)
+    const postPayloadFull = {
       user_id: user.id,
       prompt: sanitizedPrompt,
       title: primary.headline,
@@ -1213,8 +1266,17 @@ export async function POST(request: Request) {
       brand_kit_id: brandKit?.id ?? null,
       mood_board_id: moodBoard?.id ?? null,
       image_profile_id: input.imageProfileId ?? null,
+      product_id: productContext?.id ?? null,
       last_edited_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    };
+    // Minimal payload (only columns guaranteed to exist in base schema)
+    const postPayloadMinimal = {
+      user_id: user.id,
+      prompt: sanitizedPrompt,
+      title: primary.headline,
+      post_content: buildPostContent(primary),
+      status: "draft",
     };
 
     let post: { id: string } | null = null;
@@ -1222,14 +1284,21 @@ export async function POST(request: Request) {
 
     for (const dbClient of dbCandidates) {
       const db = dbClient as typeof supabase;
-      const { data, error } = await db.from("posts").insert(postPayload).select("*").single();
+      // Try full payload first
+      const { data, error } = await db.from("posts").insert(postPayloadFull).select("id").single();
       if (!error && data && typeof data.id === "string") {
         post = { id: data.id };
         break;
       }
-      postInsertError = error
-        ? { message: typeof error.message === "string" ? error.message : undefined }
-        : null;
+      // If full payload fails (e.g. missing columns), fall back to minimal payload
+      const { data: dataMin, error: errorMin } = await db.from("posts").insert(postPayloadMinimal).select("id").single();
+      if (!errorMin && dataMin && typeof dataMin.id === "string") {
+        post = { id: dataMin.id };
+        break;
+      }
+      postInsertError = errorMin
+        ? { message: typeof errorMin.message === "string" ? errorMin.message : undefined }
+        : { message: typeof (error as { message?: string } | null)?.message === "string" ? (error as { message?: string }).message : undefined };
     }
 
     if (!post) {
@@ -1320,6 +1389,8 @@ export async function POST(request: Request) {
         experiment_mode: experimentMode,
         experiment_axes: experimentAxes,
         outcome_brief: input.outcomeBrief || null,
+        product_id: productContext?.id ?? null,
+        product_name: productContext?.name ?? null,
         links: includeLinks ? normalizedLinks : null,
         fallback_used: false,
         fallback_reason: null,

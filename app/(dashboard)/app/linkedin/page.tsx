@@ -88,7 +88,7 @@ type LinkedInConnectionRow = {
 function ConnectionStatus({ connection }: { connection: LinkedInConnection }) {
   if (!connection.connected) {
     return (
-      <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+      <div className="flex items-center gap-2 text-red-600">
         <XCircle className="h-5 w-5" />
         <span className="font-medium">Not Connected</span>
       </div>
@@ -102,12 +102,12 @@ function ConnectionStatus({ connection }: { connection: LinkedInConnection }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+      <div className="flex items-center gap-2 text-green-600">
         <CheckCircle className="h-5 w-5" />
         <span className="font-medium">Connected</span>
       </div>
       {isExpiringSoon && (
-        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+        <div className="flex items-center gap-2 text-amber-600 text-sm">
           <AlertTriangle className="h-4 w-4" />
           <span>Token expires in {daysUntilExpiry} days</span>
         </div>
@@ -128,11 +128,11 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+    <div className="bg-white rounded-xl p-4 border border-gray-200">
       <div className={`h-10 w-10 rounded-lg ${color} flex items-center justify-center mb-3`}>
         <Icon className="h-5 w-5 text-white" />
       </div>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-sm text-gray-500">{label}</p>
     </div>
   );
@@ -450,19 +450,19 @@ export default function LinkedInPage() {
       />
 
       {statusMessage && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        <div className="rounded-xl border border-emerald-50/30 bg-emerald-50/10 px-4 py-3 text-sm text-emerald-200">
           {statusMessage}
         </div>
       )}
 
       {friendlyError && (
-        <div className="rounded-xl border border-rose-300/60 dark:border-rose-500/30 bg-rose-100 text-rose-900 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-3 text-sm space-y-2">
+        <div className="rounded-xl border border-rose-300/60 bg-rose-100 text-rose-800 px-4 py-3 text-sm space-y-2">
           <div className="font-medium">{friendlyError.message}</div>
           {friendlyError.details && (
-            <div className="text-xs text-rose-700 dark:text-rose-200/80">Details: {friendlyError.details}</div>
+            <div className="text-xs text-rose-700/80">Details: {friendlyError.details}</div>
           )}
           {friendlyError.code && (
-            <div className="text-xs text-rose-700 dark:text-rose-200/70">Error code: {friendlyError.code}</div>
+            <div className="text-xs text-rose-700/70">Error code: {friendlyError.code}</div>
           )}
           <div className="flex flex-wrap gap-2">
             <Button
@@ -488,7 +488,7 @@ export default function LinkedInPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+        className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0077B5] to-[#00A0DC] p-6">
@@ -496,7 +496,7 @@ export default function LinkedInPage() {
             <div className="h-16 w-16 rounded-xl bg-white flex items-center justify-center">
               <Linkedin className="h-10 w-10 text-[#0077B5]" />
             </div>
-            <div className="text-white">
+            <div className="text-gray-900">
               <h2 className="text-xl font-bold">LinkedIn</h2>
               <p className="text-blue-100">Professional Network Integration</p>
             </div>
@@ -513,10 +513,10 @@ export default function LinkedInPage() {
                   <img
                     src={connection.profile.pictureUrl}
                     alt={connection.profile.name}
-                    className="h-16 w-16 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                    className="h-16 w-16 rounded-full object-cover border-2 border-gray-200"
                   />
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-lg font-semibold text-gray-900">
                       {connection.profile.name}
                     </h3>
                     <p className="text-sm text-gray-500">{connection.profile.headline}</p>
@@ -548,7 +548,7 @@ export default function LinkedInPage() {
                     variant="outline"
                     onClick={handleDisconnect}
                     disabled={isDisconnecting}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-500 border-red-200"
                   >
                     {isDisconnecting ? (
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -561,11 +561,11 @@ export default function LinkedInPage() {
               </div>
 
               {/* Token Health */}
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+              <div className="bg-gray-50/50 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                    <span className="font-medium text-gray-900 dark:text-white">Token Health</span>
+                    <Shield className="h-5 w-5 text-violet-600" />
+                    <span className="font-medium text-gray-900">Token Health</span>
                   </div>
                   <span className={`text-sm font-medium ${
                     daysUntilExpiry > 30 
@@ -577,16 +577,16 @@ export default function LinkedInPage() {
                     {daysUntilExpiry > 0 ? `${daysUntilExpiry} days remaining` : 'Expired'}
                   </span>
                 </div>
-                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.min(100, (daysUntilExpiry / 60) * 100)}%` }}
                     className={`h-full rounded-full ${
                       daysUntilExpiry > 30 
-                        ? 'bg-green-500' 
+                        ? 'bg-green-50' 
                         : daysUntilExpiry > 14 
-                          ? 'bg-amber-500' 
-                          : 'bg-red-500'
+                          ? 'bg-amber-50' 
+                          : 'bg-red-50'
                     }`}
                   />
                 </div>
@@ -618,8 +618,8 @@ export default function LinkedInPage() {
               </div>
 
               {/* Post As Section */}
-              <div className="bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-900/20 dark:to-blue-900/20 rounded-xl p-5 border border-violet-200 dark:border-violet-800">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="bg-gradient-to-r from-violet-50 to-blue-50/20 rounded-xl p-5 border border-violet-200">
+                <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Zap className="h-4 w-4 text-violet-600" />
                   Default Posting Target
                 </h4>
@@ -629,8 +629,8 @@ export default function LinkedInPage() {
                     onClick={() => setDefaultPostingTarget('person')}
                     className={`p-4 rounded-xl text-left transition-all flex items-center gap-3 ${
                       defaultPostingTarget === 'person'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/25'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                        ? 'bg-violet-600 text-white shadow-lg shadow-cyan-50/20'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                     }`}
                   >
                     <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
@@ -638,11 +638,11 @@ export default function LinkedInPage() {
                         ? 'bg-white/20' 
                         : 'bg-gradient-to-br from-violet-400 to-blue-500'
                     }`}>
-                      <User className={`h-5 w-5 ${defaultPostingTarget === 'person' ? 'text-white' : 'text-white'}`} />
+                      <User className={`h-5 w-5 ${defaultPostingTarget === 'person' ? 'text-gray-900' : 'text-gray-900'}`} />
                     </div>
                     <div>
                       <p className="font-medium">Personal Profile</p>
-                      <p className={`text-xs ${defaultPostingTarget === 'person' ? 'text-violet-200' : 'text-gray-500'}`}>
+                      <p className={`text-xs ${defaultPostingTarget === 'person' ? 'text-violet-600' : 'text-gray-500'}`}>
                         Post as yourself
                       </p>
                     </div>
@@ -652,26 +652,26 @@ export default function LinkedInPage() {
                     onClick={() => connection.organizations.length > 0 ? setDefaultPostingTarget('organization') : null}
                     className={`p-4 rounded-xl text-left transition-all flex items-center gap-3 ${
                       defaultPostingTarget === 'organization'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/25'
+                        ? 'bg-violet-600 text-white shadow-lg shadow-cyan-50/20'
                         : (!orgTokenConnected || connection.organizations.length === 0)
-                        ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-700'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                        ? 'bg-gray-100/50 text-gray-400 cursor-not-allowed border border-gray-200'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                     }`}
                   >
                     <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
                       defaultPostingTarget === 'organization' 
                         ? 'bg-white/20' 
                         : connection.organizations.length === 0
-                        ? 'bg-gray-300 dark:bg-gray-600'
+                        ? 'bg-gray-300'
                         : 'bg-gradient-to-br from-blue-500 to-cyan-500'
                     }`}>
-                      <Building2 className={`h-5 w-5 ${defaultPostingTarget === 'organization' ? 'text-white' : 'text-white'}`} />
+                      <Building2 className={`h-5 w-5 ${defaultPostingTarget === 'organization' ? 'text-gray-900' : 'text-gray-900'}`} />
                     </div>
                     <div>
                       <p className="font-medium">Organization</p>
                       <p className={`text-xs ${
                         defaultPostingTarget === 'organization' 
-                          ? 'text-violet-200' 
+                          ? 'text-violet-600' 
                           : 'text-gray-500'
                       }`}>
                         {connection.organizations.length === 0 ? 'No pages found' : `${connection.organizations.length} page(s) available`}
@@ -683,14 +683,14 @@ export default function LinkedInPage() {
                 {/* Organization Dropdown */}
                 {defaultPostingTarget === 'organization' && orgTokenConnected && connection.organizations.length > 0 && (
                   <div className="mt-3">
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-2">
                       Select Company Page
                     </label>
                     <div className="relative">
                       <select
                         value={selectedOrgUrn}
                         onChange={(e) => setSelectedOrgUrn(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all text-sm appearance-none cursor-pointer"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent transition-all text-sm appearance-none cursor-pointer"
                       >
                         {connection.organizations.map((org) => (
                           <option key={org.urn} value={org.urn}>
@@ -704,13 +704,13 @@ export default function LinkedInPage() {
                 )}
 
                 {!orgTokenConnected && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mt-2">
-                    <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+                  <div className="bg-amber-50/20 rounded-lg p-3 mt-2">
+                    <p className="text-xs text-amber-700 mb-2">
                       Connect the organization LinkedIn app to enable company posting.
                     </p>
                     <button
                       onClick={handleConnectOrg}
-                      className="text-xs text-violet-600 dark:text-violet-400 hover:underline font-medium"
+                      className="text-xs text-violet-600 hover:underline font-medium"
                     >
                       Connect organization app
                     </button>
@@ -718,13 +718,13 @@ export default function LinkedInPage() {
                 )}
 
                 {orgTokenConnected && connection.organizations.length === 0 && !showAddOrg && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mt-2">
-                    <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+                  <div className="bg-amber-50/20 rounded-lg p-3 mt-2">
+                    <p className="text-xs text-amber-700 mb-2">
                       💡 <strong>No company pages found.</strong> LinkedIn&apos;s API requires special permissions to auto-detect pages.
                     </p>
                     <button
                       onClick={() => setShowAddOrg(true)}
-                      className="text-xs text-violet-600 dark:text-violet-400 hover:underline font-medium"
+                      className="text-xs text-violet-600 hover:underline font-medium"
                     >
                       + Add organization manually
                     </button>
@@ -733,8 +733,8 @@ export default function LinkedInPage() {
 
                 {/* Manual Add Organization Form */}
                 {showAddOrg && (
-                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 mt-2 border border-gray-200 dark:border-gray-700">
-                    <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                  <div className="bg-white rounded-lg p-4 mt-2 border border-gray-200">
+                    <h5 className="text-sm font-medium text-gray-900 mb-3">
                       Add Organization Page
                     </h5>
                     <p className="text-xs text-gray-500 mb-3">
@@ -742,7 +742,7 @@ export default function LinkedInPage() {
                     </p>
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Organization ID or Page URL</label>
+                        <label className="block text-xs text-gray-600 mb-1">Organization ID or Page URL</label>
                         <input
                           type="text"
                           value={newOrgId}
@@ -755,17 +755,17 @@ export default function LinkedInPage() {
                             setNewOrgId(val);
                           }}
                           placeholder="e.g., linkedin-automations-101 or 123456789"
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Organization Name</label>
+                        <label className="block text-xs text-gray-600 mb-1">Organization Name</label>
                         <input
                           type="text"
                           value={newOrgName}
                           onChange={(e) => setNewOrgName(e.target.value)}
                           placeholder="e.g., LinkedIn Automations 101"
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-violet-500"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50"
                         />
                       </div>
                       {addOrgError && (
@@ -803,25 +803,25 @@ export default function LinkedInPage() {
                 {/* Show existing organizations with option to add more */}
                 {connection.organizations.length > 0 && (
                   <div className="mt-4 space-y-2">
-                    <h5 className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    <h5 className="text-xs font-medium text-gray-600">
                       Your Organizations
                     </h5>
                     {connection.organizations.map((org) => (
                       <div 
                         key={org.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                       >
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-violet-500" />
                           <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{org.name}</p>
+                            <p className="text-sm font-medium text-gray-900">{org.name}</p>
                             <p className="text-xs text-gray-500">ID: {org.id}</p>
                           </div>
                         </div>
                         <button
                           onClick={() => handleDeleteOrganization(org.id)}
                           disabled={deletingOrgId === org.id}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50/20 rounded-lg transition-colors"
                           title="Remove organization"
                         >
                           {deletingOrgId === org.id ? (
@@ -834,7 +834,7 @@ export default function LinkedInPage() {
                     ))}
                     <button
                       onClick={() => setShowAddOrg(!showAddOrg)}
-                      className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+                      className="text-xs text-violet-600 hover:underline"
                     >
                       + Add another organization
                     </button>
@@ -843,8 +843,8 @@ export default function LinkedInPage() {
               </div>
 
               {/* Permissions */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
                   <Link2 className="h-4 w-4" />
                   Granted Permissions
                 </h4>
@@ -852,7 +852,7 @@ export default function LinkedInPage() {
                   {connection.token?.scopes.map((scope) => (
                     <span
                       key={scope}
-                      className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full"
+                      className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full"
                     >
                       {scope}
                     </span>
@@ -864,7 +864,7 @@ export default function LinkedInPage() {
                     {connection.orgToken.scopes.map((scope) => (
                       <span
                         key={`org-${scope}`}
-                        className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full"
+                        className="text-xs bg-blue-50/30 text-blue-600 px-3 py-1 rounded-full"
                       >
                         {scope}
                       </span>
@@ -874,14 +874,14 @@ export default function LinkedInPage() {
                 
                 {/* Warning if no organization scopes */}
                 {!connection.token?.scopes.includes('w_organization_social') && (
-                  <div className="mt-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                  <div className="mt-3 bg-amber-50/20 rounded-lg p-3">
+                    <p className="text-xs text-amber-700">
                       ⚠️ <strong>Organization posting limited.</strong> Your LinkedIn app doesn&apos;t have 
                       organization posting permissions yet. You can still add organizations manually and 
                       the app will try to post, but LinkedIn may reject posts to organization pages.
                       <br /><br />
                       <strong>To enable full organization posting:</strong> Apply for LinkedIn&apos;s 
-                      Marketing Developer Platform to get <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">w_organization_social</code> scope.
+                      Marketing Developer Platform to get <code className="bg-amber-100 px-1 rounded">w_organization_social</code> scope.
                     </p>
                   </div>
                 )}
@@ -892,7 +892,7 @@ export default function LinkedInPage() {
                 <Button
                   onClick={handleRefreshToken}
                   disabled={isConnecting}
-                  className="flex-1 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                  className="flex-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white"
                 >
                   {isConnecting ? (
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -919,10 +919,10 @@ export default function LinkedInPage() {
           ) : (
             /* Not Connected State */
             <div className="text-center py-8">
-              <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+              <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <Linkedin className="h-10 w-10 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 Connect Your LinkedIn
               </h3>
               <p className="text-gray-500 mb-6 max-w-md mx-auto">
@@ -952,17 +952,17 @@ export default function LinkedInPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800"
+          className="bg-blue-50/20 rounded-xl p-6 border border-blue-200"
         >
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
-              <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="h-10 w-10 rounded-lg bg-blue-100/50 flex items-center justify-center shrink-0">
+              <Shield className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+              <h3 className="font-semibold text-blue-900 mb-1">
                 Secure Connection
               </h3>
-              <p className="text-sm text-blue-700 dark:text-blue-300">
+              <p className="text-sm text-blue-700">
                 We use official LinkedIn OAuth 2.0. Your password is never stored or accessed by Imaginevoxa.
               </p>
             </div>
@@ -973,17 +973,17 @@ export default function LinkedInPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-6 border border-violet-200 dark:border-violet-800"
+          className="bg-violet-50/20 rounded-xl p-6 border border-violet-200"
         >
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-lg bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center shrink-0">
-              <Info className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            <div className="h-10 w-10 rounded-lg bg-violet-100/50 flex items-center justify-center shrink-0">
+              <Info className="h-5 w-5 text-violet-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-violet-900 dark:text-violet-100 mb-1">
+              <h3 className="font-semibold text-violet-900 mb-1">
                 Why Connect?
               </h3>
-              <p className="text-sm text-violet-700 dark:text-violet-300">
+              <p className="text-sm text-violet-700">
                 Connecting allows one-click publishing directly to LinkedIn without copying and pasting.
               </p>
             </div>

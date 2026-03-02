@@ -9,6 +9,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // pdf-parse uses PDF.js which breaks when bundled by webpack/Turbopack - keep external
+  serverExternalPackages: ['pdf-parse'],
   experimental: {
     // Avoid lockfile creation failures on restricted filesystems (e.g. OneDrive/EDR).
     lockDistDir: false,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createStructuredChatCompletion, generateImageBase } from "@/lib/ai/openai";
+import { createStructuredChatCompletion, generateImageBase, transcribeMedia } from "@/lib/ai/openai";
 
 type GenerateResponse = {
   title?: string;
@@ -35,7 +35,28 @@ export async function POST(request: Request) {
     const contentSource = (formData.get("contentSource") as string) || "text";
     const pdfText = (formData.get("pdfText") as string) || "";
     const imageContext = (formData.get("imageContext") as string) || "";
-    const videoContext = (formData.get("videoContext") as string) || "";
+    const rawBrandId = (formData.get("brandId") as string) || "";
+    const brandId = rawBrandId.trim() || null;
+    // videoContext will be augmented below if a file is uploaded
+    let videoContext = (formData.get("videoContext") as string) || "";
+
+    // handle optional video file attached by the client
+    const maybeVideo = formData.get("video") as File | null;
+    if (maybeVideo && maybeVideo.size > 0) {
+      try {
+        // if the user already supplied a manual description, append the
+        // transcribed text so the model sees everything.
+        const buf = Buffer.from(await maybeVideo.arrayBuffer());
+        const transcription = await transcribeMedia(buf, maybeVideo.type || "video/mp4");
+        if (transcription) {
+          videoContext = videoContext
+            ? `${videoContext}\n\n${transcription}`
+            : transcription;
+        }
+      } catch (e) {
+        console.warn("Video transcription failed, continuing without it:", e);
+      }
+    }
 
     if (!prompt || prompt.trim().length < 3) {
       return NextResponse.json(
@@ -73,6 +94,7 @@ export async function POST(request: Request) {
         .from("posts")
         .insert({
           user_id: userId,
+          brand_id: brandId,
           prompt: prompt,
           title: generatedData.title || "Generated Post",
           post_content: generatedData.post_content,
