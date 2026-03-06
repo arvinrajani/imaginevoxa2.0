@@ -135,6 +135,9 @@ export function PreviewPublish({
     memberUrn: '',
     organizations: [],
   });
+  // Must be declared here (not after early returns) to follow Rules of Hooks
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   useEffect(() => {
     let cancelled = false;
@@ -542,8 +545,6 @@ export function PreviewPublish({
 
   // LinkedIn truncates feed posts at ~210 chars then shows "...see more"
   const LINKEDIN_TRUNCATE = 210;
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   const postBodyText = [confirmedPost.headline, confirmedPost.body].filter(Boolean).join('\n\n');
   const isTruncatable = postBodyText.length > LINKEDIN_TRUNCATE;
@@ -583,13 +584,12 @@ export function PreviewPublish({
         {/* Header with platform selector and view toggles */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2.5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${
-              previewPlatform === 'linkedin'
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${previewPlatform === 'linkedin'
                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-50/20'
                 : previewPlatform === 'facebook'
-                ? 'bg-gradient-to-br from-blue-600 to-blue-700 shadow-blue-600/20'
-                : 'bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 shadow-purple-50/20'
-            }`}>
+                  ? 'bg-gradient-to-br from-blue-600 to-blue-700 shadow-blue-600/20'
+                  : 'bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 shadow-purple-50/20'
+              }`}>
               {previewPlatform === 'linkedin' ? (
                 <Linkedin className="w-4.5 h-4.5 text-white" />
               ) : previewPlatform === 'facebook' ? (
@@ -612,11 +612,10 @@ export function PreviewPublish({
                 {selectedChannels.includes('linkedin') && (
                   <button
                     onClick={() => setPreviewPlatform('linkedin')}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
-                      previewPlatform === 'linkedin'
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${previewPlatform === 'linkedin'
                         ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
                         : 'text-gray-400 hover:text-slate-700'
-                    }`}
+                      }`}
                   >
                     <Linkedin className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">LinkedIn</span>
@@ -625,11 +624,10 @@ export function PreviewPublish({
                 {selectedChannels.includes('facebook') && (
                   <button
                     onClick={() => setPreviewPlatform('facebook')}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
-                      previewPlatform === 'facebook'
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${previewPlatform === 'facebook'
                         ? 'bg-white text-blue-600 shadow-sm border border-blue-200'
                         : 'text-gray-400 hover:text-slate-700'
-                    }`}
+                      }`}
                   >
                     <Facebook className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Facebook</span>
@@ -638,11 +636,10 @@ export function PreviewPublish({
                 {selectedChannels.includes('instagram') && (
                   <button
                     onClick={() => setPreviewPlatform('instagram')}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
-                      previewPlatform === 'instagram'
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${previewPlatform === 'instagram'
                         ? 'bg-white text-pink-600 shadow-sm border border-pink-200'
                         : 'text-gray-400 hover:text-slate-700'
-                    }`}
+                      }`}
                   >
                     <Instagram className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Instagram</span>
@@ -654,21 +651,19 @@ export function PreviewPublish({
             <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 border border-slate-200">
               <button
                 onClick={() => setPreviewMode('desktop')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  previewMode === 'desktop'
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${previewMode === 'desktop'
                     ? 'bg-white text-slate-800 shadow-sm border border-slate-200'
                     : 'text-gray-400 hover:text-slate-700'
-                }`}
+                  }`}
               >
                 Desktop
               </button>
               <button
                 onClick={() => setPreviewMode('mobile')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  previewMode === 'mobile'
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${previewMode === 'mobile'
                     ? 'bg-white text-slate-800 shadow-sm border border-slate-200'
                     : 'text-gray-400 hover:text-slate-700'
-                }`}
+                  }`}
               >
                 Mobile
               </button>
@@ -678,402 +673,402 @@ export function PreviewPublish({
 
         {/* ─── LinkedIn Feed Simulation ─── */}
         {previewPlatform === 'linkedin' && (
-        <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto transition-all duration-300 overflow-hidden`}>
-          {/* LinkedIn nav simulation mini bar */}
-          <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Linkedin className="w-[22px] h-[22px] text-[#0A66C2]" />
-              <div className="h-7 w-36 rounded-md bg-slate-100 flex items-center px-2">
-                <Search className="w-3 h-3 text-gray-500" />
-                <span className="text-[11px] text-gray-500 ml-1.5">Search</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {['Home', 'Network', 'Jobs'].map((item) => (
-                <span key={item} className="text-[10px] text-gray-500 font-medium">{item}</span>
-              ))}
-            </div>
-          </div>
-
-          {/* LinkedIn Post Card — realistic */}
-          <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
-            {/* Profile Header */}
-            <div className="p-4 flex items-start gap-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0 ring-2 ring-white shadow-md"
-                style={{
-                  background: displayAvatarUrl
-                    ? undefined
-                    : `linear-gradient(135deg, ${brandColors[0] || '#0A66C2'}, ${brandColors[1] || '#0F172A'})`,
-                }}
-              >
-                {displayAvatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={displayAvatarUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span className="text-sm">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-semibold text-slate-900 text-[14px] leading-tight">{displayAuthorName}</span>
-                  <span className="text-gray-500 text-[14px]">• 1st</span>
-                </div>
-                <div className="text-[12px] text-gray-400 leading-tight mt-0.5 truncate">
-                  {publishTarget === 'person' && account?.email
-                    ? account.email
-                    : brandName}
-                </div>
-                <div className="text-[12px] text-gray-500 flex items-center gap-1 mt-0.5">
-                  <span>Just now</span>
-                  <span>•</span>
-                  <Globe className="w-3 h-3" />
+          <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto transition-all duration-300 overflow-hidden`}>
+            {/* LinkedIn nav simulation mini bar */}
+            <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Linkedin className="w-[22px] h-[22px] text-[#0A66C2]" />
+                <div className="h-7 w-36 rounded-md bg-slate-100 flex items-center px-2">
+                  <Search className="w-3 h-3 text-gray-500" />
+                  <span className="text-[11px] text-gray-500 ml-1.5">Search</span>
                 </div>
               </div>
-              <button className="text-gray-500 hover:text-slate-600 p-1">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Post Text with "See more" truncation */}
-            <div className="px-4 pb-3 min-w-0 overflow-hidden">
-              <div className="text-[14px] leading-[1.42] whitespace-pre-wrap text-slate-900 break-words min-w-0">
-                {(() => {
-                  if (!isTruncatable || previewExpanded) {
-                    return (
-                      <>
-                        {confirmedPost.headline && (
-                          <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
-                        )}
-                        {confirmedPost.body}
-                      </>
-                    );
-                  }
-                  // Truncated view
-                  const truncated = postBodyText.slice(0, LINKEDIN_TRUNCATE);
-                  const lastSpace = truncated.lastIndexOf(' ');
-                  const displayText = truncated.slice(0, lastSpace > 100 ? lastSpace : LINKEDIN_TRUNCATE);
-                  return (
-                    <>
-                      <span>{displayText}...</span>
-                      <button
-                        onClick={() => setPreviewExpanded(true)}
-                        className="text-gray-400 hover:text-blue-600 font-medium ml-0.5 text-[14px]"
-                      >
-                        see more
-                      </button>
-                    </>
-                  );
-                })()}
-              </div>
-              {confirmedPost.cta && (previewExpanded || !isTruncatable) && (
-                <div
-                  className="mt-3 text-[14px] font-medium text-slate-700 min-w-0"
-                  style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                >
-                  {confirmedPost.cta}
-                </div>
-              )}
-              {(previewExpanded || !isTruncatable) && confirmedPost.hashtags?.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {confirmedPost.hashtags.map((tag) => (
-                    <span key={tag} className="text-[#0A66C2] text-[14px] font-medium hover:underline cursor-pointer">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {previewExpanded && isTruncatable && (
-                <button
-                  onClick={() => setPreviewExpanded(false)}
-                  className="text-gray-500 hover:text-slate-600 text-xs mt-1 font-medium"
-                >
-                  show less
-                </button>
-              )}
-            </div>
-
-            {/* Image */}
-            {imageToShow && (
-              <div className="w-full border-t border-slate-100 bg-slate-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageToShow}
-                  alt="Post visual"
-                  className="w-full object-contain"
-                  style={{ maxHeight: previewMode === 'mobile' ? '300px' : '420px' }}
-                />
-              </div>
-            )}
-
-            {/* Engagement reactions */}
-            <div className="px-4 pt-2 pb-1">
-              <div className="flex items-center justify-between text-[12px] text-gray-400">
-                <div className="flex items-center gap-0.5">
-                  <span className="flex -space-x-0.5">
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#0A66C2] flex items-center justify-center text-[10px] text-white border border-white">👍</span>
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#DF704D] flex items-center justify-center text-[10px] text-white border border-white">❤️</span>
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#6DAE4F] flex items-center justify-center text-[10px] text-white border border-white">👏</span>
-                  </span>
-                  <span className="ml-1.5 hover:text-[#0A66C2] hover:underline cursor-pointer">42</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="hover:text-[#0A66C2] hover:underline cursor-pointer">8 comments</span>
-                  <span>•</span>
-                  <span className="hover:text-[#0A66C2] hover:underline cursor-pointer">3 reposts</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons bar */}
-            <div className="px-2 py-0.5 border-t border-slate-200 mx-2">
-              <div className="flex justify-between">
-                {[
-                  { icon: ThumbsUp, label: 'Like' },
-                  { icon: MessageCircle, label: 'Comment' },
-                  { icon: Repeat2, label: 'Repost' },
-                  { icon: Send, label: 'Send' },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-100 px-4 py-3 rounded-lg text-[13px] font-semibold transition-colors"
-                  >
-                    <Icon className="w-[18px] h-[18px]" /> {label}
-                  </button>
+              <div className="flex items-center gap-3">
+                {['Home', 'Network', 'Jobs'].map((item) => (
+                  <span key={item} className="text-[10px] text-gray-500 font-medium">{item}</span>
                 ))}
               </div>
             </div>
+
+            {/* LinkedIn Post Card — realistic */}
+            <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
+              {/* Profile Header */}
+              <div className="p-4 flex items-start gap-3">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0 ring-2 ring-white shadow-md"
+                  style={{
+                    background: displayAvatarUrl
+                      ? undefined
+                      : `linear-gradient(135deg, ${brandColors[0] || '#0A66C2'}, ${brandColors[1] || '#0F172A'})`,
+                  }}
+                >
+                  {displayAvatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={displayAvatarUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <span className="text-sm">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold text-slate-900 text-[14px] leading-tight">{displayAuthorName}</span>
+                    <span className="text-gray-500 text-[14px]">• 1st</span>
+                  </div>
+                  <div className="text-[12px] text-gray-400 leading-tight mt-0.5 truncate">
+                    {publishTarget === 'person' && account?.email
+                      ? account.email
+                      : brandName}
+                  </div>
+                  <div className="text-[12px] text-gray-500 flex items-center gap-1 mt-0.5">
+                    <span>Just now</span>
+                    <span>•</span>
+                    <Globe className="w-3 h-3" />
+                  </div>
+                </div>
+                <button className="text-gray-500 hover:text-slate-600 p-1">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Post Text with "See more" truncation */}
+              <div className="px-4 pb-3 min-w-0 overflow-hidden">
+                <div className="text-[14px] leading-[1.42] whitespace-pre-wrap text-slate-900 break-words min-w-0">
+                  {(() => {
+                    if (!isTruncatable || previewExpanded) {
+                      return (
+                        <>
+                          {confirmedPost.headline && (
+                            <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
+                          )}
+                          {confirmedPost.body}
+                        </>
+                      );
+                    }
+                    // Truncated view
+                    const truncated = postBodyText.slice(0, LINKEDIN_TRUNCATE);
+                    const lastSpace = truncated.lastIndexOf(' ');
+                    const displayText = truncated.slice(0, lastSpace > 100 ? lastSpace : LINKEDIN_TRUNCATE);
+                    return (
+                      <>
+                        <span>{displayText}...</span>
+                        <button
+                          onClick={() => setPreviewExpanded(true)}
+                          className="text-gray-400 hover:text-blue-600 font-medium ml-0.5 text-[14px]"
+                        >
+                          see more
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+                {confirmedPost.cta && (previewExpanded || !isTruncatable) && (
+                  <div
+                    className="mt-3 text-[14px] font-medium text-slate-700 min-w-0"
+                    style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                  >
+                    {confirmedPost.cta}
+                  </div>
+                )}
+                {(previewExpanded || !isTruncatable) && confirmedPost.hashtags?.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {confirmedPost.hashtags.map((tag) => (
+                      <span key={tag} className="text-[#0A66C2] text-[14px] font-medium hover:underline cursor-pointer">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {previewExpanded && isTruncatable && (
+                  <button
+                    onClick={() => setPreviewExpanded(false)}
+                    className="text-gray-500 hover:text-slate-600 text-xs mt-1 font-medium"
+                  >
+                    show less
+                  </button>
+                )}
+              </div>
+
+              {/* Image */}
+              {imageToShow && (
+                <div className="w-full border-t border-slate-100 bg-slate-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageToShow}
+                    alt="Post visual"
+                    className="w-full object-contain"
+                    style={{ maxHeight: previewMode === 'mobile' ? '300px' : '420px' }}
+                  />
+                </div>
+              )}
+
+              {/* Engagement reactions */}
+              <div className="px-4 pt-2 pb-1">
+                <div className="flex items-center justify-between text-[12px] text-gray-400">
+                  <div className="flex items-center gap-0.5">
+                    <span className="flex -space-x-0.5">
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#0A66C2] flex items-center justify-center text-[10px] text-white border border-white">👍</span>
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#DF704D] flex items-center justify-center text-[10px] text-white border border-white">❤️</span>
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#6DAE4F] flex items-center justify-center text-[10px] text-white border border-white">👏</span>
+                    </span>
+                    <span className="ml-1.5 hover:text-[#0A66C2] hover:underline cursor-pointer">42</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="hover:text-[#0A66C2] hover:underline cursor-pointer">8 comments</span>
+                    <span>•</span>
+                    <span className="hover:text-[#0A66C2] hover:underline cursor-pointer">3 reposts</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons bar */}
+              <div className="px-2 py-0.5 border-t border-slate-200 mx-2">
+                <div className="flex justify-between">
+                  {[
+                    { icon: ThumbsUp, label: 'Like' },
+                    { icon: MessageCircle, label: 'Comment' },
+                    { icon: Repeat2, label: 'Repost' },
+                    { icon: Send, label: 'Send' },
+                  ].map(({ icon: Icon, label }) => (
+                    <button
+                      key={label}
+                      className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-100 px-4 py-3 rounded-lg text-[13px] font-semibold transition-colors"
+                    >
+                      <Icon className="w-[18px] h-[18px]" /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
         )}
 
         {/* ─── Facebook Feed Simulation ─── */}
         {previewPlatform === 'facebook' && (
-        <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto transition-all duration-300 overflow-hidden`}>
-          {/* Facebook nav bar */}
-          <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Facebook className="w-[22px] h-[22px] text-[#1877F2]" />
-              <div className="h-7 w-36 rounded-full bg-slate-100 flex items-center px-3">
-                <Search className="w-3 h-3 text-gray-500" />
-                <span className="text-[11px] text-gray-500 ml-1.5">Search Facebook</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {['🏠', '📺', '🏪'].map((item, i) => (
-                <span key={i} className="text-[14px]">{item}</span>
-              ))}
-            </div>
-          </div>
-
-          {/* Facebook Post Card */}
-          <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
-            {/* Profile Header */}
-            <div className="p-3 flex items-start gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0 ring-2 ring-white shadow-md"
-                style={{
-                  background: displayAvatarUrl
-                    ? undefined
-                    : `linear-gradient(135deg, ${brandColors[0] || '#1877F2'}, ${brandColors[1] || '#0F172A'})`,
-                }}
-              >
-                {displayAvatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={displayAvatarUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span className="text-xs">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="font-semibold text-slate-900 text-[15px] leading-tight">{displayAuthorName}</span>
-                <div className="text-[12px] text-gray-400 flex items-center gap-1">
-                  <span>Just now</span>
-                  <span>·</span>
-                  <Globe className="w-3 h-3" />
+          <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto transition-all duration-300 overflow-hidden`}>
+            {/* Facebook nav bar */}
+            <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Facebook className="w-[22px] h-[22px] text-[#1877F2]" />
+                <div className="h-7 w-36 rounded-full bg-slate-100 flex items-center px-3">
+                  <Search className="w-3 h-3 text-gray-500" />
+                  <span className="text-[11px] text-gray-500 ml-1.5">Search Facebook</span>
                 </div>
               </div>
-              <button className="text-gray-500 hover:text-slate-600 p-1">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Post Text */}
-            <div className="px-3 pb-3 min-w-0 overflow-hidden">
-              <div className="text-[15px] leading-[1.4] whitespace-pre-wrap text-slate-900 break-words">
-                {confirmedPost.headline && (
-                  <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
-                )}
-                {confirmedPost.body}
-              </div>
-              {confirmedPost.cta && (
-                <div className="mt-2 text-[14px] font-medium text-slate-700">{confirmedPost.cta}</div>
-              )}
-              {confirmedPost.hashtags?.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {confirmedPost.hashtags.map((tag) => (
-                    <span key={tag} className="text-[#1877F2] text-[14px] font-medium hover:underline cursor-pointer">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Image */}
-            {imageToShow && (
-              <div className="w-full border-t border-slate-100 bg-slate-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageToShow}
-                  alt="Post visual"
-                  className="w-full object-contain"
-                  style={{ maxHeight: previewMode === 'mobile' ? '300px' : '420px' }}
-                />
-              </div>
-            )}
-
-            {/* Engagement reactions */}
-            <div className="px-3 pt-2 pb-1">
-              <div className="flex items-center justify-between text-[13px] text-gray-400">
-                <div className="flex items-center gap-0.5">
-                  <span className="flex -space-x-0.5">
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#1877F2] flex items-center justify-center text-[10px] text-white border border-white">👍</span>
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#F0284A] flex items-center justify-center text-[10px] text-white border border-white">❤️</span>
-                    <span className="w-[18px] h-[18px] rounded-full bg-[#F7B928] flex items-center justify-center text-[10px] text-white border border-white">😂</span>
-                  </span>
-                  <span className="ml-1.5 hover:text-[#1877F2] hover:underline cursor-pointer">58</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="hover:underline cursor-pointer">12 comments</span>
-                  <span className="hover:underline cursor-pointer">5 shares</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons bar */}
-            <div className="px-2 py-0.5 border-t border-slate-200 mx-2">
-              <div className="flex justify-between">
-                {[
-                  { icon: ThumbsUp, label: 'Like' },
-                  { icon: MessageCircle, label: 'Comment' },
-                  { icon: Share2, label: 'Share' },
-                ].map(({ icon: Icon, label }) => (
-                  <button
-                    key={label}
-                    className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-100 px-5 py-3 rounded-lg text-[13px] font-semibold transition-colors"
-                  >
-                    <Icon className="w-[18px] h-[18px]" /> {label}
-                  </button>
+              <div className="flex items-center gap-3">
+                {['🏠', '📺', '🏪'].map((item, i) => (
+                  <span key={i} className="text-[14px]">{item}</span>
                 ))}
               </div>
             </div>
+
+            {/* Facebook Post Card */}
+            <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
+              {/* Profile Header */}
+              <div className="p-3 flex items-start gap-3">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0 ring-2 ring-white shadow-md"
+                  style={{
+                    background: displayAvatarUrl
+                      ? undefined
+                      : `linear-gradient(135deg, ${brandColors[0] || '#1877F2'}, ${brandColors[1] || '#0F172A'})`,
+                  }}
+                >
+                  {displayAvatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={displayAvatarUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <span className="text-xs">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-slate-900 text-[15px] leading-tight">{displayAuthorName}</span>
+                  <div className="text-[12px] text-gray-400 flex items-center gap-1">
+                    <span>Just now</span>
+                    <span>·</span>
+                    <Globe className="w-3 h-3" />
+                  </div>
+                </div>
+                <button className="text-gray-500 hover:text-slate-600 p-1">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Post Text */}
+              <div className="px-3 pb-3 min-w-0 overflow-hidden">
+                <div className="text-[15px] leading-[1.4] whitespace-pre-wrap text-slate-900 break-words">
+                  {confirmedPost.headline && (
+                    <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
+                  )}
+                  {confirmedPost.body}
+                </div>
+                {confirmedPost.cta && (
+                  <div className="mt-2 text-[14px] font-medium text-slate-700">{confirmedPost.cta}</div>
+                )}
+                {confirmedPost.hashtags?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {confirmedPost.hashtags.map((tag) => (
+                      <span key={tag} className="text-[#1877F2] text-[14px] font-medium hover:underline cursor-pointer">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Image */}
+              {imageToShow && (
+                <div className="w-full border-t border-slate-100 bg-slate-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageToShow}
+                    alt="Post visual"
+                    className="w-full object-contain"
+                    style={{ maxHeight: previewMode === 'mobile' ? '300px' : '420px' }}
+                  />
+                </div>
+              )}
+
+              {/* Engagement reactions */}
+              <div className="px-3 pt-2 pb-1">
+                <div className="flex items-center justify-between text-[13px] text-gray-400">
+                  <div className="flex items-center gap-0.5">
+                    <span className="flex -space-x-0.5">
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#1877F2] flex items-center justify-center text-[10px] text-white border border-white">👍</span>
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#F0284A] flex items-center justify-center text-[10px] text-white border border-white">❤️</span>
+                      <span className="w-[18px] h-[18px] rounded-full bg-[#F7B928] flex items-center justify-center text-[10px] text-white border border-white">😂</span>
+                    </span>
+                    <span className="ml-1.5 hover:text-[#1877F2] hover:underline cursor-pointer">58</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="hover:underline cursor-pointer">12 comments</span>
+                    <span className="hover:underline cursor-pointer">5 shares</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons bar */}
+              <div className="px-2 py-0.5 border-t border-slate-200 mx-2">
+                <div className="flex justify-between">
+                  {[
+                    { icon: ThumbsUp, label: 'Like' },
+                    { icon: MessageCircle, label: 'Comment' },
+                    { icon: Share2, label: 'Share' },
+                  ].map(({ icon: Icon, label }) => (
+                    <button
+                      key={label}
+                      className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-100 px-5 py-3 rounded-lg text-[13px] font-semibold transition-colors"
+                    >
+                      <Icon className="w-[18px] h-[18px]" /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
         )}
 
         {/* ─── Instagram Feed Simulation ─── */}
         {previewPlatform === 'instagram' && (
-        <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[420px]'} mx-auto transition-all duration-300 overflow-hidden`}>
-          {/* Instagram nav bar */}
-          <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
-            <span className="text-lg font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-              Instagram
-            </span>
-            <div className="flex items-center gap-3">
-              <Heart className="w-5 h-5 text-slate-700" />
-              <Send className="w-5 h-5 text-slate-700" />
+          <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[420px]'} mx-auto transition-all duration-300 overflow-hidden`}>
+            {/* Instagram nav bar */}
+            <div className="bg-white rounded-t-xl border border-b-0 border-slate-200 px-4 py-2 flex items-center justify-between">
+              <span className="text-lg font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+                Instagram
+              </span>
+              <div className="flex items-center gap-3">
+                <Heart className="w-5 h-5 text-slate-700" />
+                <Send className="w-5 h-5 text-slate-700" />
+              </div>
             </div>
-          </div>
 
-          {/* Instagram Post Card */}
-          <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
-            {/* Profile Header */}
-            <div className="p-3 flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0"
-                style={{
-                  background: displayAvatarUrl
-                    ? undefined
-                    : 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)',
-                  padding: displayAvatarUrl ? 0 : '1px',
-                }}
-              >
-                {displayAvatarUrl ? (
-                  <div className="rounded-full p-[2px]" style={{ background: 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={displayAvatarUrl} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-white" />
+            {/* Instagram Post Card */}
+            <div className="bg-white border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden rounded-b-xl">
+              {/* Profile Header */}
+              <div className="p-3 flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0"
+                  style={{
+                    background: displayAvatarUrl
+                      ? undefined
+                      : 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)',
+                    padding: displayAvatarUrl ? 0 : '1px',
+                  }}
+                >
+                  {displayAvatarUrl ? (
+                    <div className="rounded-full p-[2px]" style={{ background: 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={displayAvatarUrl} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-white" />
+                    </div>
+                  ) : (
+                    <span className="text-[10px]">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <span className="font-semibold text-slate-900 text-[13px]">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
+                <button className="ml-auto text-gray-500 hover:text-slate-600 p-1">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Image (Instagram is image-first) */}
+              {imageToShow ? (
+                <div className="w-full bg-black aspect-square flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageToShow}
+                    alt="Post visual"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                  <div className="text-center text-gray-500">
+                    <Instagram className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-medium">No image attached</p>
+                    <p className="text-xs mt-1">Instagram posts require an image</p>
                   </div>
-                ) : (
-                  <span className="text-[10px]">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="px-3 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Heart className="w-6 h-6 text-slate-800 hover:text-red-500 cursor-pointer transition-colors" />
+                  <MessageCircle className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
+                  <Send className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
+                </div>
+                <Bookmark className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
+              </div>
+
+              {/* Likes */}
+              <div className="px-3 pb-1">
+                <span className="text-[13px] font-semibold text-slate-900">128 likes</span>
+              </div>
+
+              {/* Caption */}
+              <div className="px-3 pb-3">
+                <div className="text-[13px] leading-[1.4] text-slate-900">
+                  <span className="font-semibold mr-1">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
+                  {confirmedPost.headline && <span className="font-medium">{confirmedPost.headline} </span>}
+                  {confirmedPost.body}
+                </div>
+                {confirmedPost.cta && (
+                  <div className="mt-1 text-[13px] text-slate-700">{confirmedPost.cta}</div>
                 )}
+                {confirmedPost.hashtags?.length > 0 && (
+                  <div className="mt-1 text-[13px] text-[#00376B]">
+                    {confirmedPost.hashtags.map((tag) => `#${tag.replace(/^#/, '')}`).join(' ')}
+                  </div>
+                )}
+                <div className="mt-1 text-[11px] text-gray-500 uppercase">Just now</div>
               </div>
-              <span className="font-semibold text-slate-900 text-[13px]">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
-              <button className="ml-auto text-gray-500 hover:text-slate-600 p-1">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Image (Instagram is image-first) */}
-            {imageToShow ? (
-              <div className="w-full bg-black aspect-square flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageToShow}
-                  alt="Post visual"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <Instagram className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-medium">No image attached</p>
-                  <p className="text-xs mt-1">Instagram posts require an image</p>
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="px-3 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Heart className="w-6 h-6 text-slate-800 hover:text-red-500 cursor-pointer transition-colors" />
-                <MessageCircle className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
-                <Send className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
-              </div>
-              <Bookmark className="w-6 h-6 text-slate-800 hover:text-slate-600 cursor-pointer" />
-            </div>
-
-            {/* Likes */}
-            <div className="px-3 pb-1">
-              <span className="text-[13px] font-semibold text-slate-900">128 likes</span>
-            </div>
-
-            {/* Caption */}
-            <div className="px-3 pb-3">
-              <div className="text-[13px] leading-[1.4] text-slate-900">
-                <span className="font-semibold mr-1">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
-                {confirmedPost.headline && <span className="font-medium">{confirmedPost.headline} </span>}
-                {confirmedPost.body}
-              </div>
-              {confirmedPost.cta && (
-                <div className="mt-1 text-[13px] text-slate-700">{confirmedPost.cta}</div>
-              )}
-              {confirmedPost.hashtags?.length > 0 && (
-                <div className="mt-1 text-[13px] text-[#00376B]">
-                  {confirmedPost.hashtags.map((tag) => `#${tag.replace(/^#/, '')}`).join(' ')}
-                </div>
-              )}
-              <div className="mt-1 text-[11px] text-gray-500 uppercase">Just now</div>
             </div>
           </div>
-        </div>
         )}
 
         {/* Character limit & reading time bar */}
@@ -1084,21 +1079,19 @@ export function PreviewPublish({
                 <span className="text-[11px] font-semibold text-gray-400">
                   {charCount.toLocaleString()} / 3,000 characters
                 </span>
-                <span className={`text-[11px] font-bold ${
-                  charStatus === 'danger' ? 'text-red-500' : charStatus === 'warn' ? 'text-amber-500' : 'text-emerald-500'
-                }`}>
+                <span className={`text-[11px] font-bold ${charStatus === 'danger' ? 'text-red-500' : charStatus === 'warn' ? 'text-amber-500' : 'text-emerald-500'
+                  }`}>
                   {charStatus === 'danger' ? 'Over limit!' : charStatus === 'warn' ? 'Near limit' : 'Good'}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    charStatus === 'danger'
+                  className={`h-full rounded-full transition-all duration-500 ${charStatus === 'danger'
                       ? 'bg-red-50'
                       : charStatus === 'warn'
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
-                  }`}
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
                   style={{ width: `${Math.min(100, (charCount / 3000) * 100)}%` }}
                 />
               </div>
@@ -1118,19 +1111,17 @@ export function PreviewPublish({
                 <CheckCircle2 className="w-3.5 h-3.5 text-gray-500" />
                 Pre-Publish Checklist
               </h4>
-              <Badge className={`text-[10px] ${
-                checklistDone === checklist.length
+              <Badge className={`text-[10px] ${checklistDone === checklist.length
                   ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                   : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}>
+                }`}>
                 {checklistDone}/{checklist.length}
               </Badge>
             </div>
             <div className="space-y-2">
               {checklist.map((item) => (
-                <div key={item.label} className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors ${
-                  item.done ? 'bg-emerald-50/60' : 'bg-amber-50/40'
-                }`}>
+                <div key={item.label} className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors ${item.done ? 'bg-emerald-50/60' : 'bg-amber-50/40'
+                  }`}>
                   {item.done ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                   ) : (
@@ -1179,8 +1170,8 @@ export function PreviewPublish({
               <h3 className="font-bold text-sm text-slate-800">Estimated Reach</h3>
               <p className="text-xs text-gray-400 mt-0.5">
                 {reachScore >= 80 ? 'High potential — optimized for engagement' :
-                 reachScore >= 50 ? 'Good — add an image or CTA for more reach' :
-                 'Add content, image, and hashtags to boost reach'}
+                  reachScore >= 50 ? 'Good — add an image or CTA for more reach' :
+                    'Add content, image, and hashtags to boost reach'}
               </p>
               <div className="flex items-center gap-1.5 mt-2">
                 {[
@@ -1189,9 +1180,8 @@ export function PreviewPublish({
                   { label: 'CTA', done: Boolean(confirmedPost.cta) },
                   { label: 'Tags', done: (confirmedPost.hashtags?.length || 0) > 0 },
                 ].map((f) => (
-                  <span key={f.label} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                    f.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-gray-500'
-                  }`}>
+                  <span key={f.label} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${f.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-gray-500'
+                    }`}>
                     {f.label}
                   </span>
                 ))}
@@ -1230,36 +1220,33 @@ export function PreviewPublish({
               {/* LinkedIn connection */}
               {selectedChannels.includes('linkedin') && (
                 <div
-                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${
-                    linkedin.connected
+                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${linkedin.connected
                       ? 'border-emerald-200 bg-emerald-50/80'
                       : linkedin.expired
-                      ? 'border-amber-200 bg-amber-50/80'
-                      : 'border-rose-200 bg-rose-50/80'
-                  }`}
+                        ? 'border-amber-200 bg-amber-50/80'
+                        : 'border-rose-200 bg-rose-50/80'
+                    }`}
                 >
                   <Linkedin className="w-4 h-4 text-[#0A66C2] flex-shrink-0" />
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    linkedin.connected ? 'bg-emerald-500 animate-pulse' :
-                    linkedin.expired ? 'bg-amber-50' : 'bg-rose-500'
-                  }`} />
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${linkedin.connected ? 'bg-emerald-500 animate-pulse' :
+                      linkedin.expired ? 'bg-amber-50' : 'bg-rose-500'
+                    }`} />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-xs font-semibold ${
-                        linkedin.connected
+                      className={`text-xs font-semibold ${linkedin.connected
                           ? 'text-emerald-700'
                           : linkedin.expired
-                          ? 'text-amber-700'
-                          : 'text-rose-700'
-                      }`}
+                            ? 'text-amber-700'
+                            : 'text-rose-700'
+                        }`}
                     >
                       {linkedin.loading
                         ? 'Checking LinkedIn...'
                         : linkedin.connected
-                        ? 'LinkedIn connected'
-                        : linkedin.expired
-                        ? 'LinkedIn token expired'
-                        : 'LinkedIn not connected'}
+                          ? 'LinkedIn connected'
+                          : linkedin.expired
+                            ? 'LinkedIn token expired'
+                            : 'LinkedIn not connected'}
                     </p>
                   </div>
                   {!linkedin.connected && !linkedin.loading && (
@@ -1278,36 +1265,33 @@ export function PreviewPublish({
               {/* Facebook connection status */}
               {selectedChannels.includes('facebook') && (
                 <div
-                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${
-                    meta.connected
+                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${meta.connected
                       ? 'border-emerald-200 bg-emerald-50/80'
                       : meta.expired
-                      ? 'border-amber-200 bg-amber-50/80'
-                      : 'border-rose-200 bg-rose-50/80'
-                  }`}
+                        ? 'border-amber-200 bg-amber-50/80'
+                        : 'border-rose-200 bg-rose-50/80'
+                    }`}
                 >
                   <Facebook className="w-4 h-4 text-[#1877F2] flex-shrink-0" />
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    meta.connected ? 'bg-emerald-500 animate-pulse' :
-                    meta.expired ? 'bg-amber-50' : 'bg-rose-500'
-                  }`} />
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.connected ? 'bg-emerald-500 animate-pulse' :
+                      meta.expired ? 'bg-amber-50' : 'bg-rose-500'
+                    }`} />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-xs font-semibold ${
-                        meta.connected
+                      className={`text-xs font-semibold ${meta.connected
                           ? 'text-emerald-700'
                           : meta.expired
-                          ? 'text-amber-700'
-                          : 'text-rose-700'
-                      }`}
+                            ? 'text-amber-700'
+                            : 'text-rose-700'
+                        }`}
                     >
                       {meta.loading
                         ? 'Checking Facebook...'
                         : meta.connected
-                        ? `Facebook connected${meta.pages.length > 0 ? ` (${meta.pages[0].name})` : ''}`
-                        : meta.expired
-                        ? 'Facebook token expired'
-                        : 'Facebook not connected'}
+                          ? `Facebook connected${meta.pages.length > 0 ? ` (${meta.pages[0].name})` : ''}`
+                          : meta.expired
+                            ? 'Facebook token expired'
+                            : 'Facebook not connected'}
                     </p>
                   </div>
                   {!meta.connected && !meta.loading && (
@@ -1326,46 +1310,43 @@ export function PreviewPublish({
               {/* Instagram connection status */}
               {selectedChannels.includes('instagram') && (
                 <div
-                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${
-                    meta.connected && meta.defaultInstagramAccountId
+                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${meta.connected && meta.defaultInstagramAccountId
                       ? 'border-emerald-200 bg-emerald-50/80'
                       : meta.expired
-                      ? 'border-amber-200 bg-amber-50/80'
-                      : meta.connected && !meta.defaultInstagramAccountId
-                      ? 'border-amber-200 bg-amber-50/80'
-                      : 'border-rose-200 bg-rose-50/80'
-                  }`}
+                        ? 'border-amber-200 bg-amber-50/80'
+                        : meta.connected && !meta.defaultInstagramAccountId
+                          ? 'border-amber-200 bg-amber-50/80'
+                          : 'border-rose-200 bg-rose-50/80'
+                    }`}
                 >
                   <Instagram className="w-4 h-4 text-[#E4405F] flex-shrink-0" />
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    meta.connected && meta.defaultInstagramAccountId ? 'bg-emerald-500 animate-pulse' :
-                    meta.expired ? 'bg-amber-50' :
-                    meta.connected ? 'bg-amber-50' : 'bg-rose-500'
-                  }`} />
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.connected && meta.defaultInstagramAccountId ? 'bg-emerald-500 animate-pulse' :
+                      meta.expired ? 'bg-amber-50' :
+                        meta.connected ? 'bg-amber-50' : 'bg-rose-500'
+                    }`} />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-xs font-semibold ${
-                        meta.connected && meta.defaultInstagramAccountId
+                      className={`text-xs font-semibold ${meta.connected && meta.defaultInstagramAccountId
                           ? 'text-emerald-700'
                           : meta.expired
-                          ? 'text-amber-700'
-                          : meta.connected && !meta.defaultInstagramAccountId
-                          ? 'text-amber-700'
-                          : 'text-rose-700'
-                      }`}
+                            ? 'text-amber-700'
+                            : meta.connected && !meta.defaultInstagramAccountId
+                              ? 'text-amber-700'
+                              : 'text-rose-700'
+                        }`}
                     >
                       {meta.loading
                         ? 'Checking Instagram...'
                         : meta.connected && meta.defaultInstagramAccountId
-                        ? (() => {
+                          ? (() => {
                             const igPage = meta.pages.find(p => p.instagram_business_account_id === meta.defaultInstagramAccountId);
                             return igPage?.instagram_username ? `Instagram connected (@${igPage.instagram_username})` : 'Instagram connected';
                           })()
-                        : meta.connected && !meta.defaultInstagramAccountId
-                        ? 'No Instagram Business account linked'
-                        : meta.expired
-                        ? 'Meta token expired'
-                        : 'Instagram not connected'}
+                          : meta.connected && !meta.defaultInstagramAccountId
+                            ? 'No Instagram Business account linked'
+                            : meta.expired
+                              ? 'Meta token expired'
+                              : 'Instagram not connected'}
                     </p>
                   </div>
                   {!meta.connected && !meta.loading && (
@@ -1391,11 +1372,10 @@ export function PreviewPublish({
                     <button
                       onClick={() => setPublishTarget('person')}
                       disabled={!linkedin.connected}
-                      className={`p-3 rounded-xl border text-center transition-all ${
-                        publishTarget === 'person'
+                      className={`p-3 rounded-xl border text-center transition-all ${publishTarget === 'person'
                           ? 'border-blue-400 bg-blue-50 text-blue-700 ring-2 ring-blue-100 shadow-sm'
                           : 'border-slate-200 text-gray-400 hover:border-blue-300 hover:bg-blue-50/50'
-                      }`}
+                        }`}
                     >
                       <User className="w-5 h-5 mx-auto mb-1" />
                       <span className="text-xs font-semibold block">Personal</span>
@@ -1404,11 +1384,10 @@ export function PreviewPublish({
                     <button
                       onClick={() => setPublishTarget('org')}
                       disabled={!linkedin.connected || !canPostAsOrganization}
-                      className={`p-3 rounded-xl border text-center transition-all ${
-                        publishTarget === 'org'
+                      className={`p-3 rounded-xl border text-center transition-all ${publishTarget === 'org'
                           ? 'border-blue-400 bg-blue-50 text-blue-700 ring-2 ring-blue-100 shadow-sm'
                           : 'border-slate-200 text-gray-400 hover:border-blue-300 hover:bg-blue-50/50'
-                      } ${!canPostAsOrganization ? 'opacity-50' : ''}`}
+                        } ${!canPostAsOrganization ? 'opacity-50' : ''}`}
                     >
                       <Building2 className="w-5 h-5 mx-auto mb-1" />
                       <span className="text-xs font-semibold block">Company</span>
@@ -1501,7 +1480,7 @@ export function PreviewPublish({
           )}
         </Card>
 
-{/* ─── PUBLISH BUTTONS ─── */}
+        {/* ─── PUBLISH BUTTONS ─── */}
         <div className="space-y-2">
           {/* LinkedIn Publish */}
           {selectedChannels.includes('linkedin') && (
@@ -1586,8 +1565,8 @@ export function PreviewPublish({
           {linkedin.connected && selectedChannels.includes('linkedin')
             ? `LinkedIn: Publishing${publishTarget === 'org' ? ` as ${selectedOrganization?.name || 'organization'}` : ' to your personal profile'}`
             : selectedChannels.includes('linkedin')
-            ? 'Connect LinkedIn first to publish'
-            : 'Preview your post across platforms'}
+              ? 'Connect LinkedIn first to publish'
+              : 'Preview your post across platforms'}
         </p>
       </div>
     </div>

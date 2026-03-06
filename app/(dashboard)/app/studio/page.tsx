@@ -30,6 +30,7 @@ import {
   Globe,
   Tag,
   Loader2,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -69,6 +70,8 @@ import { PostGenerator } from '@/components/studio/post-generator';
 import { ImageCreator } from '@/components/studio/image-creator';
 import { ImageEditor } from '@/components/studio/image-editor';
 import { PreviewPublish } from '@/components/studio/preview-publish';
+import { EvidenceModal } from '@/components/studio/evidence-modal';
+import { useEvidenceLocker } from '@/components/studio/hooks/use-evidence-locker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -256,6 +259,7 @@ export default function StudioPage() {
   const [setupStep, setSetupStep] = useState<SetupStep>('welcome');
   const [brandSetupComplete, setBrandSetupComplete] = useState(false);
   const [brandIntelligence, setBrandIntelligence] = useState<BrandIntelligence | null>(null);
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [createBrandOpen, setCreateBrandOpen] = useState(false);
   const [creatingBrand, setCreatingBrand] = useState(false);
   const [newBrandForm, setNewBrandForm] = useState<NewBrandForm>({
@@ -265,6 +269,19 @@ export default function StudioPage() {
     website: '',
   });
   const selectedBrandIdRef = useRef<string | null>(null);
+
+  const {
+    evidence,
+    selectedEvidenceIds,
+    selectedEvidence,
+    loading: evidenceLoading,
+    mutating: evidenceMutating,
+    toggleEvidence,
+    clearSelection: clearSelectedEvidence,
+    uploadFileEvidence,
+    createUrlEvidence,
+    createNoteEvidence,
+  } = useEvidenceLocker(selectedBrand?.id || null);
 
   // Onboarding wizard state
   const [onboardStep, setOnboardStep] = useState<1 | 2 | 3>(1);
@@ -294,6 +311,41 @@ export default function StudioPage() {
   const filteredProducts = useMemo(
     () => selectedBrand ? products.filter((p) => p.brand_id === selectedBrand.id) : [],
     [products, selectedBrand]
+  );
+
+  // Derived: PDF-extracted images from the evidence locker (kept in sync after every upload)
+  const pdfEvidenceImages = useMemo(
+    () =>
+      evidence
+        .filter(
+          (item) =>
+            item.type === 'image' &&
+            Array.isArray(item.tags) &&
+            item.tags.includes('pdf-extracted') &&
+            typeof item.signed_url === 'string' &&
+            item.signed_url.length > 0
+        )
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          signed_url: item.signed_url as string,
+        })),
+    [evidence]
+  );
+
+  const selectedEvidenceContext = useMemo(
+    () =>
+      selectedEvidence.map((item) => ({
+        id: item.id,
+        title: item.title,
+        type: item.type,
+        summary:
+          item.description ||
+          item.note_text ||
+          (Array.isArray(item.tags) && item.tags.length ? `Tags: ${item.tags.join(', ')}` : undefined) ||
+          undefined,
+      })),
+    [selectedEvidence]
   );
 
   // Pipeline state � initialised from ?step= URL param
@@ -404,28 +456,35 @@ export default function StudioPage() {
     })();
   }, [searchParams, supabase, draftLoaded, brands]);
 
-  // --- Sync workspace brand ? local selectedBrand ---
+  // --- Sync selectedBrand → workspace (one-directional to avoid circular loop) ---
+  // A ref tracks the last brand ID we synced TO the workspace context, so that when the
+  // workspace context pushes an initial value back we don't re-trigger a second sync.
+  const lastSyncedBrandIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    // On mount / brand list load: if there is a workspace brand set elsewhere, prefer it.
     if (!workspaceBrand || brands.length === 0) return;
+    if (workspaceBrand.id === selectedBrand?.id) return; // already in sync
     const match = brands.find((b) => b.id === workspaceBrand.id);
-    if (match && match.id !== selectedBrand?.id) {
+    if (match) {
+      lastSyncedBrandIdRef.current = match.id; // mark so the next effect won't re-fire
       setSelectedBrand(match);
     }
-  }, [workspaceBrand, brands, selectedBrand?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceBrand?.id, brands]);
 
-  // --- Sync local selectedBrand ? workspace ---
   useEffect(() => {
     if (!selectedBrand) return;
-    if (workspaceBrand?.id !== selectedBrand.id) {
-      setWorkspaceBrand({
-        id: selectedBrand.id,
-        name: selectedBrand.name,
-        description: selectedBrand.description ?? null,
-        industry: selectedBrand.industry ?? null,
-        website: selectedBrand.website ?? null,
-      });
-    }
-  }, [selectedBrand, workspaceBrand?.id, setWorkspaceBrand]);
+    if (lastSyncedBrandIdRef.current === selectedBrand.id) return; // originated from workspace, skip
+    lastSyncedBrandIdRef.current = selectedBrand.id;
+    setWorkspaceBrand({
+      id: selectedBrand.id,
+      name: selectedBrand.name,
+      description: selectedBrand.description ?? null,
+      industry: selectedBrand.industry ?? null,
+      website: selectedBrand.website ?? null,
+    });
+  }, [selectedBrand?.id, setWorkspaceBrand]);
 
   // --- Data Loading ---
 
@@ -466,22 +525,34 @@ export default function StudioPage() {
       let resolvedBrands = (data || []) as Brand[];
 
       if (resolvedBrands.length === 0) {
-        const { data: newBrand, error: createError } = await supabase
+        // Guard: check again to prevent race-condition duplicates
+        const { data: existingCheck } = await supabase
           .from('brands')
-          .insert({
-            owner_user_id: user.id,
-            name: 'My Brand',
-            description: 'Default brand for PRO Studio',
-            company_id: resolvedCompanies[0]?.id || null,
-          })
           .select('id, name, owner_user_id, company_id, description, industry, website')
-          .single();
+          .eq('owner_user_id', user.id)
+          .limit(1);
 
-        if (createError || !newBrand) {
-          throw createError || new Error('Failed to create default brand.');
+        if (existingCheck && existingCheck.length > 0) {
+          // Another concurrent call already created the brand; use it
+          resolvedBrands = existingCheck as Brand[];
+        } else {
+          const { data: newBrand, error: createError } = await supabase
+            .from('brands')
+            .insert({
+              owner_user_id: user.id,
+              name: 'My Brand',
+              description: 'Default brand for PRO Studio',
+              company_id: resolvedCompanies[0]?.id || null,
+            })
+            .select('id, name, owner_user_id, company_id, description, industry, website')
+            .single();
+
+          if (createError || !newBrand) {
+            throw createError || new Error('Failed to create default brand.');
+          }
+
+          resolvedBrands = [newBrand as Brand];
         }
-
-        resolvedBrands = [newBrand as Brand];
       }
 
       // Auto-assign orphan brands (null company_id) to the first company
@@ -1956,6 +2027,21 @@ export default function StudioPage() {
                       <p className="text-sm text-slate-600">Write or AI-generate your LinkedIn post, then confirm the best one</p>
                     </div>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEvidenceModalOpen(true)}
+                    className="text-xs border-cyan-200 text-cyan-700 hover:bg-cyan-50"
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    Brand Knowledge PDFs
+                  </Button>
+                </div>
+                <div className="mt-3 rounded-xl border border-cyan-200/60 bg-cyan-50/40 px-3 py-2 text-xs text-cyan-800">
+                  <span className="font-semibold">Knowledge grounding:</span>{' '}
+                  {selectedEvidence.length > 0
+                    ? `${selectedEvidence.length} source${selectedEvidence.length === 1 ? '' : 's'} selected for generation`
+                    : 'No sources selected. Add PDFs or notes to ground your post with brand knowledge.'}
                 </div>
                 {confirmedPost && (
                   <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200/60 text-sm flex items-center gap-3">
@@ -1977,6 +2063,8 @@ export default function StudioPage() {
                 brandColors={brandColors}
                 brandName={effectiveBrandName}
                 logoUrl={logoUrl}
+                evidenceContext={selectedEvidenceContext}
+                evidenceIds={selectedEvidenceIds}
                 initialTopic={searchParams.get('topic') ?? undefined}
                 onPostGenerated={(post, postId) => {
                   if (postId) setDraftPostId(postId);
@@ -2030,6 +2118,7 @@ export default function StudioPage() {
                 confirmedPostHeadline={confirmedPost?.headline}
                 onImageConfirmed={handleImageConfirmedFromCreator}
                 onImageGenerated={handleImageAutoSync}
+                pdfImages={pdfEvidenceImages}
               />
             </Card>
           )}
@@ -2179,6 +2268,21 @@ export default function StudioPage() {
           : !brandSetupComplete
             ? renderWelcomeScreen()
             : renderMainStudio()}
+
+        <EvidenceModal
+          open={evidenceModalOpen}
+          onOpenChange={setEvidenceModalOpen}
+          brandId={selectedBrand.id}
+          evidence={evidence}
+          selectedEvidenceIds={selectedEvidenceIds}
+          loading={evidenceLoading}
+          mutating={evidenceMutating}
+          onToggleEvidence={toggleEvidence}
+          onClearSelection={clearSelectedEvidence}
+          onUploadFile={uploadFileEvidence}
+          onCreateUrl={createUrlEvidence}
+          onCreateNote={createNoteEvidence}
+        />
       </div>
     </div>
   );
