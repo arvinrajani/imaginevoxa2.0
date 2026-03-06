@@ -53,43 +53,44 @@ export function buildBaseImagePrompt(params: {
     .join(", ");
 
   const prompt = [
-    `You are an award-winning creative director. Create a high-performing image for a LinkedIn post.`,
+    `You are an elite brand creative director for LinkedIn growth campaigns.`,
+    `Generate one production-ready visual concept with clear art direction and strong feed impact.`,
     ``,
     `TOPIC: "${userPrompt}"`,
-    imageProfile?.name ? `Image style: ${imageProfile.name}.` : null,
+    imageProfile?.name ? `Style profile: ${imageProfile.name}.` : null,
     imageProfile?.category ? `Category: ${imageProfile.category}.` : null,
     ``,
-    `CREATIVE DIRECTION:`,
-    `- This should look like polished work from a serious marketing team.`,
+    `CREATIVE BRIEF:`,
+    `- Output must feel premium, modern, and marketing-team quality.`,
     hiringCreative
-      ? `- Use a LinkedIn campaign-poster composition with clear hierarchy and clean typography blocks.`
-      : `- Create a compelling thematic visual that tells a story and evokes emotion related to the topic.`,
+      ? `- Build a recruitment campaign visual with strong hierarchy: hero focal point + supporting detail zones + CTA-ready space.`
+      : `- Build a thematic visual with one clear focal subject that communicates the core message instantly.`,
     hiringCreative
-      ? `- Include a strong headline area, role/detail section, and CTA zone for a recruitment style creative.`
-      : `- Use one of these approaches: professional photography, high-end 3D illustration, or conceptual art.`,
-    `- Strong composition with clear focal hierarchy and feed-stopping presence.`,
-    `- Premium color grading and modern visual polish.`,
-    `- Optimized for LinkedIn feed impact.`,
+      ? `- Keep composition clean and conversion-oriented for hiring campaigns.`
+      : `- Use cinematic photography, premium 3D, or refined conceptual illustration (pick one coherent style).`,
+    `- Compose for LinkedIn landscape placement and mobile readability.`,
+    `- Use deliberate lighting, depth, and visual hierarchy to direct attention.`,
+    `- Make it emotionally relevant to the topic while staying professional.`,
     styleNotes ? `Style preferences: ${styleNotes}.` : null,
     palette.length
-      ? `Brand color palette: ${palette.join(", ")}. Use these in background, accents, and UI-like blocks.`
+      ? `Brand color direction: ${palette.join(", ")}. Use these as dominant palette anchors.`
       : null,
-    brandKit?.font_personality ? `Typography mood: ${brandKit.font_personality}.` : null,
+    brandKit?.font_personality ? `Typography mood reference: ${brandKit.font_personality}.` : null,
     ``,
-    `TECHNICAL QUALITY:`,
-    `- Ultra-sharp and production-grade quality`,
-    `- Clean edges, balanced spacing, and visual consistency`,
-    `- Realistic depth, lighting, and texture`,
-    `- Landscape orientation for LinkedIn (1200x628 or similar ratio)`,
+    `IMAGE QUALITY STANDARD:`,
+    `- Ultra-clean edges, realistic depth, high detail, no visual noise`,
+    `- Balanced spacing and polished composition`,
+    `- Strong contrast and color harmony`,
+    `- Professional final look suitable for executive audiences`,
     ``,
-    `ABSOLUTELY AVOID:`,
-    `- Generic abstract blobs and random gradients`,
-    `- Stock cliches (handshake, light bulb, generic office poses)`,
-    `- Blurry output, noisy details, or low-resolution artifacts`,
+    `HARD CONSTRAINTS:`,
+    `- No logos, no watermarks, no UI screenshots`,
+    `- No gibberish text, broken letters, unreadable typography, or random symbols`,
+    `- No generic stock cliches (handshake, random boardroom poses, light bulb trope)`,
+    `- No blurry output, compression artifacts, or cluttered layout`,
     hiringCreative
-      ? `- Garbled or unreadable text, placeholder copy, broken typography`
-      : `- Excessive text overlays or cluttered composition`,
-    `- Overly busy layout with weak hierarchy`,
+      ? `- If text-like blocks appear, keep them minimal and visually clean without dense copy`
+      : `- Avoid text-heavy overlays; visuals should carry the message primarily through imagery`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -101,6 +102,9 @@ export function buildBaseImagePrompt(params: {
     "clip art",
     "cartoon",
     "amateur",
+    "unreadable text",
+    "gibberish letters",
+    "noisy background",
     "messy layout",
     hiringCreative ? "garbled text" : "text-heavy clutter",
   ].filter(Boolean) as string[];

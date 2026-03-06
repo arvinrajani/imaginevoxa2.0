@@ -80,6 +80,12 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
       options?: { title?: string; description?: string; bucket?: string; tags?: string[] }
     ) => {
       if (!brandId) return;
+      if (file.size > 300 * 1024 * 1024) {
+        toast.error('File too large', {
+          description: 'Each file must be 300MB or less.',
+        });
+        return;
+      }
       setMutating(true);
       try {
         const form = new FormData();
@@ -100,8 +106,52 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
           throw new Error(errorPayload.error || 'Failed to upload evidence');
         }
 
+        const payload = (await response.json().catch(() => ({}))) as {
+          knowledge_sync?: {
+            status?: string;
+            detail?: string;
+            text_chars?: number;
+            image_extraction?: {
+              status?: string;
+              saved_count?: number;
+              found_count?: number;
+              detail?: string;
+            };
+          };
+        };
         await refresh();
-        toast.success('Evidence uploaded');
+        if (payload.knowledge_sync?.status === 'ingested') {
+          const extractedCount = payload.knowledge_sync.image_extraction?.saved_count ?? 0;
+          if (extractedCount > 0) {
+            toast.success(
+              `PDF uploaded, indexed, and ${extractedCount} image${
+                extractedCount === 1 ? '' : 's'
+              } extracted`
+            );
+          } else {
+            toast.success('PDF uploaded and indexed for post generation');
+          }
+        } else if (payload.knowledge_sync?.status && payload.knowledge_sync.status !== 'ingested') {
+          const extractedCount = payload.knowledge_sync.image_extraction?.saved_count ?? 0;
+          if (extractedCount > 0) {
+            toast.success(
+              `PDF uploaded — ${extractedCount} image${extractedCount === 1 ? '' : 's'} extracted`,
+              {
+                description:
+                  payload.knowledge_sync.detail ||
+                  'Text could not be indexed, but images were saved to the Evidence Locker.',
+              }
+            );
+          } else {
+            toast.success('Evidence uploaded', {
+              description:
+                payload.knowledge_sync.detail ||
+                'PDF was saved, but knowledge indexing is incomplete. You can still select it as context.',
+            });
+          }
+        } else {
+          toast.success('Evidence uploaded');
+        }
       } catch (error) {
         toast.error('Upload failed', {
           description: error instanceof Error ? error.message : 'Please try again.',

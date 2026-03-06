@@ -8,11 +8,8 @@ import {
   Sparkles,
   Palette,
   Image as ImageIcon,
-  Wand2,
   Settings,
-  Play,
   Rocket,
-  Crown,
   CheckCircle2,
   Target,
   Briefcase,
@@ -333,6 +330,16 @@ export default function StudioPage() {
     [evidence]
   );
 
+  const studioPdfEvidence = useMemo(
+    () => evidence.filter((item) => item.type === 'pdf').slice(0, 6),
+    [evidence]
+  );
+
+  const selectedEvidenceIdSet = useMemo(
+    () => new Set(selectedEvidenceIds),
+    [selectedEvidenceIds]
+  );
+
   const selectedEvidenceContext = useMemo(
     () =>
       selectedEvidence.map((item) => ({
@@ -447,7 +454,7 @@ export default function StudioPage() {
 
         // Also sync the brand if the post has one
         if (post.brand_id && brands.length > 0) {
-          const match = brands.find((b: any) => b.id === post.brand_id);
+          const match = brands.find((b) => b.id === post.brand_id);
           if (match) setSelectedBrand(match);
         }
       } catch (err) {
@@ -2043,6 +2050,68 @@ export default function StudioPage() {
                     ? `${selectedEvidence.length} source${selectedEvidence.length === 1 ? '' : 's'} selected for generation`
                     : 'No sources selected. Add PDFs or notes to ground your post with brand knowledge.'}
                 </div>
+                {(studioPdfEvidence.length > 0 || pdfEvidenceImages.length > 0) && (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Studio Source Library
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                          {studioPdfEvidence.length} saved PDF{studioPdfEvidence.length === 1 ? '' : 's'}
+                          {pdfEvidenceImages.length > 0
+                            ? ` • ${pdfEvidenceImages.length} extracted image${pdfEvidenceImages.length === 1 ? '' : 's'} ready for Image Creator`
+                            : ''}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          PDFs live in Studio only. Select them here to ground the post, then use their extracted images in Step 2.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEvidenceModalOpen(true)}
+                        className="text-xs border-slate-300 bg-white"
+                      >
+                        Manage Studio Files
+                      </Button>
+                    </div>
+                    {studioPdfEvidence.length > 0 && (
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {studioPdfEvidence.map((item) => {
+                          const selected = selectedEvidenceIdSet.has(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => toggleEvidence(item.id)}
+                              className={`rounded-xl border p-3 text-left transition-colors ${
+                                selected
+                                  ? 'border-cyan-400 bg-cyan-50'
+                                  : 'border-slate-200 bg-white hover:border-cyan-200'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-slate-900">
+                                    {item.title}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-600">
+                                    {item.description?.trim() ||
+                                      'PDF source saved in the Evidence Locker for reusable post grounding.'}
+                                  </p>
+                                </div>
+                                <Badge className={selected ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-600'}>
+                                  {selected ? 'Selected' : 'PDF'}
+                                </Badge>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {confirmedPost && (
                   <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200/60 text-sm flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />

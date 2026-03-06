@@ -536,30 +536,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to update post." }, { status: 500 });
     }
 
-    // Send to n8n for any custom approval workflows (optional)
-    const webhookUrl = process.env.N8N_APPROVE_WEBHOOK_URL;
-    const apiKey = process.env.N8N_X_API_KEY;
-    if (webhookUrl && apiKey) {
-      try {
-        await fetch(webhookUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            postId: post.id,
-            userId: effectiveUserId,
-            title: post.title,
-            post_content: postContent,
-            image_url: post.image_url,
-          }),
-        });
-      } catch {
-        // Don't fail if n8n webhook fails
-      }
-    }
-
     // If autoPost is true or not specified, post to LinkedIn
     if (body.autoPost !== false) {
       console.log("🔵 Starting auto-post to LinkedIn...");

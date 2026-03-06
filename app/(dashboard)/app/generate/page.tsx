@@ -29,6 +29,7 @@ import {
   File,
   Trash2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
@@ -185,6 +186,35 @@ const getPostMetrics = (content: string) => {
   };
 };
 
+const normalizeGeneratedPostText = (content: string) =>
+  content
+    .replace(/\r\n/g, '\n')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^\s*[*]\s+/gm, '👉 ')
+    .replace(/\*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const normalizeExtractedPdfText = (content: string) =>
+  content
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const hasPdfExtractionFailure = (content: string) =>
+  /could not extract|image-based/i.test(content);
+
+const mergeTextValue = (current: string, incoming: string) => {
+  const normalizedIncoming = incoming.trim();
+  if (!normalizedIncoming) return current;
+  if (!current.trim()) return normalizedIncoming;
+  return `${current.trim()}\n\n${normalizedIncoming}`;
+};
+
+const fileNameWithoutExtension = (fileName: string) =>
+  fileName.replace(/\.[^.]+$/, '') || fileName;
+
 const suggestToneForContext = (industry?: string | null, businessFocus?: string | null) => {
   const context = `${industry || ''} ${businessFocus || ''}`.toLowerCase();
 
@@ -224,7 +254,13 @@ export default function GeneratePage() {
   // PDF upload
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfText, setPdfText] = useState('');
+  const [pdfMeta, setPdfMeta] = useState<{ pages?: number; chars?: number } | null>(null);
   const [isExtractingPdf, setIsExtractingPdf] = useState(false);
+  const [isSavingPdfToStudio, setIsSavingPdfToStudio] = useState(false);
+  const [savedPdfToStudio, setSavedPdfToStudio] = useState<{
+    title: string;
+    extractedImages: number;
+  } | null>(null);
   
   // Image upload
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
@@ -283,6 +319,139 @@ export default function GeneratePage() {
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
+
+  const appendImages = async (
+    files: File[],
+    options?: { source?: 'picker' | 'paste' }
+  ) => {
+    const validImages = files.filter((file) => file.type.startsWith('image/'));
+    if (validImages.length === 0) {
+      setPublishError('Please add valid image files');
+      return;
+    }
+
+    const availableSlots = Math.max(0, 4 - imagePreviewUrls.length);
+    if (availableSlots === 0) {
+      setPublishError('You can add up to 4 images per post');
+      return;
+    }
+
+    const nextImages = validImages.slice(0, availableSlots);
+
+    try {
+      const nextPreviews = await Promise.all(nextImages.map(readImageAsDataUrl));
+      setUploadedImages((prev) => [...prev, ...nextImages]);
+      setImagePreviewUrls((prev) => {
+        const merged = [...prev, ...nextPreviews];
+        if (contentSource === 'image') {
+          setGeneratedPost((post) =>
+            post ? { ...post, imageUrls: merged, imageUrl: merged[0] } : post
+          );
+        }
+        return merged;
+      });
+      setPublishError(null);
+
+      if (options?.source === 'paste') {
+        toast.success(
+          `Added ${nextImages.length} pasted image${nextImages.length === 1 ? '' : 's'}`
+        );
+      }
+    } catch (error) {
+      console.error('Image read error:', error);
+      setPublishError('Failed to read images. Please try again.');
+    }
+  };
+
+  const handleClipboardPaste = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement | HTMLDivElement>
+  ) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const pastedImages = items
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file) && file.type.startsWith('image/'));
+
+    if (pastedImages.length === 0) {
+      return;
+    }
+
+    e.preventDefault();
+
+    if (contentSource !== 'image') {
+      setContentSource('image');
+    }
+
+    const pastedText = e.clipboardData.getData('text/plain');
+    if (pastedText.trim()) {
+      setImagePrompt((prev) => mergeTextValue(prev, pastedText));
+    }
+
+    await appendImages(pastedImages, { source: 'paste' });
+  };
+
+  const savePdfToStudio = async () => {
+    if (!pdfFile) {
+      setPublishError('Upload a PDF first');
+      return;
+    }
+
+    if (!selectedBrand?.id) {
+      setPublishError('Select a brand before saving this PDF to Studio');
+      return;
+    }
+
+    setIsSavingPdfToStudio(true);
+    setPublishError(null);
+
+    try {
+      const form = new FormData();
+      form.set('brandId', selectedBrand.id);
+      form.set('file', pdfFile);
+      form.set('title', fileNameWithoutExtension(pdfFile.name));
+      form.set(
+        'description',
+        'Saved from the Generate tab for Studio reuse. Text extraction and embedded image extraction run automatically.'
+      );
+      form.set('tags', JSON.stringify(['generate-tab', 'pdf-source']));
+
+      const response = await fetch('/api/studio/evidence/upload', {
+        method: 'POST',
+        body: form,
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        knowledge_sync?: {
+          image_extraction?: {
+            saved_count?: number;
+          };
+        };
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to save PDF to Studio');
+      }
+
+      const extractedImages = payload.knowledge_sync?.image_extraction?.saved_count ?? 0;
+      setSavedPdfToStudio({
+        title: fileNameWithoutExtension(pdfFile.name),
+        extractedImages,
+      });
+
+      toast.success(
+        extractedImages > 0
+          ? `Saved to Studio and extracted ${extractedImages} image${extractedImages === 1 ? '' : 's'}`
+          : 'PDF saved to Studio'
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not save the PDF to Studio';
+      setPublishError(message);
+      toast.error('Studio save failed', { description: message });
+    } finally {
+      setIsSavingPdfToStudio(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchUserData() {
@@ -422,6 +591,7 @@ export default function GeneratePage() {
     setPdfFile(file);
     setPdfText('');
     setIsExtractingPdf(true);
+    setSavedPdfToStudio(null);
     setPublishError(null);
     
     try {
@@ -439,11 +609,17 @@ export default function GeneratePage() {
       }
       
       const data = await response.json();
-      setPdfText(data.text || '');
+      const extracted = normalizeExtractedPdfText(data.text || data.content || '');
+      setPdfText(extracted);
+      setPdfMeta({
+        pages: typeof data.pages === 'number' ? data.pages : undefined,
+        chars: extracted.length,
+      });
     } catch (error) {
       console.error('PDF extraction error:', error);
       setPublishError('Failed to extract text from PDF. Please try again.');
       setPdfFile(null);
+      setPdfMeta(null);
     } finally {
       setIsExtractingPdf(false);
       if (fileInputRef.current) {
@@ -455,31 +631,9 @@ export default function GeneratePage() {
   // Handle image file selection
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const validImages = files.filter(file => file.type.startsWith('image/'));
-    
-    if (validImages.length === 0) {
-      setPublishError('Please select valid image files');
-      return;
-    }
-    
-    // Limit to 4 images
-    const newImages = validImages.slice(0, 4);
-    setUploadedImages(newImages);
-    
-    try {
-      const newPreviews = await Promise.all(newImages.map(readImageAsDataUrl));
-      setImagePreviewUrls(newPreviews);
-      setPublishError(null);
-      if (contentSource === 'image') {
-        setGeneratedPost(prev => prev ? { ...prev, imageUrls: newPreviews, imageUrl: newPreviews[0] } : prev);
-      }
-    } catch (error) {
-      console.error('Image read error:', error);
-      setPublishError('Failed to read images. Please try again.');
-    } finally {
-      if (imageInputRef.current) {
-        imageInputRef.current.value = '';
-      }
+    await appendImages(files, { source: 'picker' });
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
     }
   };
 
@@ -556,6 +710,8 @@ export default function GeneratePage() {
   const clearPdf = () => {
     setPdfFile(null);
     setPdfText('');
+    setPdfMeta(null);
+    setSavedPdfToStudio(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -579,17 +735,13 @@ export default function GeneratePage() {
       setPublishError('Please upload a video');
       return;
     }
-    if (contentSource === 'image' && !imagePrompt.trim()) {
-      setPublishError('Please describe what you want to say about your images');
-      return;
-    }
     if (contentSource === 'video' && !videoPrompt.trim()) {
       setPublishError('Please describe what you want to say about your video');
       return;
     }
     
     // For PDF: require manual description if text extraction failed
-    if (contentSource === 'pdf' && (pdfText.includes('Could not extract') || pdfText.includes('image-based')) && !topic.trim()) {
+    if (contentSource === 'pdf' && hasPdfExtractionFailure(pdfText) && !topic.trim()) {
       setPublishError('Please describe the PDF content since text extraction failed');
       return;
     }
@@ -659,21 +811,27 @@ export default function GeneratePage() {
         formData.append('wantImage', canGenerateImages ? 'true' : 'false');
       } else if (contentSource === 'pdf') {
         // Check if we have extracted text or need to use manual description
-        const hasExtractedText = pdfText && !pdfText.includes('Could not extract') && !pdfText.includes('image-based');
+        const hasExtractedText = pdfText && !hasPdfExtractionFailure(pdfText);
         const pdfContent = hasExtractedText 
-          ? pdfText.substring(0, 3000)
+          ? pdfText.substring(0, 5000)
           : topic; // Use manual description
-        
-        const additionalContext = hasExtractedText && topic.trim() 
-          ? `\n\nAdditional context from user: ${topic}` 
-          : '';
-        
-        formData.append('prompt', `Create a LinkedIn post based on this document content:\n\n${pdfContent}${additionalContext}${brandContextNote}${guidanceNote}`);
+
+        const userFocus = topic.trim()
+          ? `Focus request from user: ${topic.trim()}.`
+          : 'Focus request from user: highlight the most actionable ideas and practical takeaways.';
+
+        formData.append('prompt', `${userFocus}${brandContextNote}${guidanceNote}`);
         formData.append('pdfText', pdfContent);
         formData.append('wantImage', canGenerateImages ? 'true' : 'false');
       } else if (contentSource === 'image') {
-        formData.append('prompt', `Create a LinkedIn post about these personal images. Context from user: ${imagePrompt}${brandContextNote}${guidanceNote}`);
-        formData.append('imageContext', imagePrompt);
+        const normalizedImagePrompt = imagePrompt.trim();
+        formData.append(
+          'prompt',
+          normalizedImagePrompt
+            ? `Create a LinkedIn post about these uploaded images. Context from user: ${normalizedImagePrompt}${brandContextNote}${guidanceNote}`
+            : `Create a LinkedIn post grounded in the uploaded images. Use the visual details as the main source of truth.${brandContextNote}${guidanceNote}`
+        );
+        formData.append('imageContext', normalizedImagePrompt);
         formData.append('wantImage', 'false'); // User has their own images
         // Attach images
         uploadedImages.forEach((img, i) => {
@@ -717,7 +875,7 @@ export default function GeneratePage() {
         ? imagePreviewUrls
         : (data.imageUrl || data.image_url ? [data.imageUrl || data.image_url] : []);
 
-      const generatedContent = data.content || data.post_content;
+      const generatedContent = normalizeGeneratedPostText(data.content || data.post_content || '');
 
       setGeneratedPost({
         content: generatedContent,
@@ -988,7 +1146,7 @@ export default function GeneratePage() {
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">2</div>
             <p className="text-sm font-bold text-blue-900">Set Tone & Goals</p>
           </div>
-          <p className="text-xs text-gray-600">Tell us who you're talking to and what tone to use</p>
+          <p className="text-xs text-gray-600">Tell us who you are talking to and what tone to use</p>
         </div>
         <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-500 to-white/20 p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
@@ -1144,13 +1302,14 @@ export default function GeneratePage() {
                 <textarea
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
+                  onPaste={handleClipboardPaste}
                   placeholder="Type your topic or idea here...\n\nExamples:\n• Share 3 lessons I learned from failing at my first startup\n• Explain why AI won't replace developers, but will change how we work\n• Announce our company's new sustainability initiative\n• Tell the story of how I landed my dream job\n• Give 5 actionable tips for better LinkedIn engagement\n\nThe more detail you provide, the better your AI-generated post will be!"
                   rows={4}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
                 <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
-                  <span>Tip: Be specific! Instead of "productivity tips", try "5 time management techniques that helped me finish work by 3pm"</span>
+                  <span>Tip: paste an existing draft, notes, or even a copied screenshot. If you paste an image, we switch to image mode automatically.</span>
                 </p>
               </div>
 
@@ -1202,7 +1361,7 @@ export default function GeneratePage() {
                       We will extract the text and create a post
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Files are processed for extraction and not stored.
+                      Upload up to 300MB. Generate uses the extracted text immediately. Save it to Studio if you want it stored for reuse and embedded image extraction.
                     </p>
                     <input
                       ref={fileInputRef}
@@ -1222,7 +1381,7 @@ export default function GeneratePage() {
                             {pdfFile.name}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {(pdfFile.size / 1024).toFixed(1)} KB
+                            {(pdfFile.size / (1024 * 1024)).toFixed(2)} MB
                           </p>
                         </div>
                       </div>
@@ -1237,8 +1396,8 @@ export default function GeneratePage() {
                         Extracting text...
                       </div>
                     ) : pdfText ? (
-                      <div>
-                        {pdfText.includes('Could not extract') || pdfText.includes('image-based') ? (
+                      <div className="space-y-3">
+                        {hasPdfExtractionFailure(pdfText) ? (
                           <p className="text-xs text-amber-600 mb-2">
                             ⚠️ This PDF is image-based. Please describe the content below.
                           </p>
@@ -1247,11 +1406,73 @@ export default function GeneratePage() {
                             <p className="text-xs text-green-600 mb-2">
                               ✓ Text extracted successfully
                             </p>
+                            {pdfMeta ? (
+                              <p className="mb-2 text-[11px] text-gray-500">
+                                {pdfMeta.pages ? `${pdfMeta.pages} page${pdfMeta.pages === 1 ? '' : 's'}` : 'Pages unavailable'}
+                                {typeof pdfMeta.chars === 'number'
+                                  ? ` • ${pdfMeta.chars.toLocaleString()} characters`
+                                  : ''}
+                              </p>
+                            ) : null}
                             <div className="max-h-32 overflow-y-auto text-xs text-gray-600 bg-white p-3 rounded-lg">
                               {pdfText.substring(0, 500)}...
                             </div>
                           </>
                         )}
+                        <div className="rounded-lg border border-cyan-200 bg-cyan-50/70 p-3 text-xs text-cyan-900">
+                          <p className="font-medium">Want this PDF available in Studio too?</p>
+                          <p className="mt-1 text-cyan-800">
+                            Save it to the Studio Evidence Locker to reuse it later and let Studio extract any embedded images for the image step.
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={savePdfToStudio}
+                              disabled={isSavingPdfToStudio || !selectedBrand}
+                              className="bg-cyan-600 text-white hover:bg-cyan-700"
+                            >
+                              {isSavingPdfToStudio ? (
+                                <>
+                                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : savedPdfToStudio ? (
+                                <>
+                                  <Check className="mr-2 h-3.5 w-3.5" />
+                                  Saved to Studio
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="mr-2 h-3.5 w-3.5" />
+                                  Save PDF to Studio
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => router.push('/app/studio')}
+                              disabled={!selectedBrand}
+                            >
+                              Open Studio
+                            </Button>
+                          </div>
+                          {savedPdfToStudio ? (
+                            <p className="mt-2 text-cyan-800">
+                              {savedPdfToStudio.title} is now in Studio
+                              {savedPdfToStudio.extractedImages > 0
+                                ? ` with ${savedPdfToStudio.extractedImages} extracted image${savedPdfToStudio.extractedImages === 1 ? '' : 's'}.`
+                                : '.'}
+                            </p>
+                          ) : null}
+                          {!selectedBrand ? (
+                            <p className="mt-2 text-amber-700">
+                              Select a workspace brand first if you want to store this PDF in Studio.
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -1261,19 +1482,20 @@ export default function GeneratePage() {
               {/* Manual description for image-based PDFs or additional context */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Describe the PDF content {pdfText && !pdfText.includes('Could not extract') ? '(optional)' : '*'}
+                  Describe the PDF content {pdfText && !hasPdfExtractionFailure(pdfText) ? '(optional)' : '*'}
                 </label>
                 <textarea
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder={pdfText && !pdfText.includes('Could not extract') 
+                  onPaste={handleClipboardPaste}
+                  placeholder={pdfText && !hasPdfExtractionFailure(pdfText) 
                     ? "Add context or angle for the post...\n\nExamples:\n• Highlight the 3 most important insights from this report\n• Focus on the cost-saving benefits mentioned in the document\n• Create a post that asks for feedback on these findings"
                     : "Describe the main points from your PDF...\n\nExamples:\n• This product catalog covers our new smart capacitors with energy-saving features\n• Whitepaper about AI trends in 2026, focusing on practical business applications\n• Case study showing how our client increased sales by 40% in 6 months"}
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  {pdfText && !pdfText.includes('Could not extract') 
+                  {pdfText && !hasPdfExtractionFailure(pdfText) 
                     ? '✓ We extracted the text - add any extra context or focus areas here'
                     : '⚠️ Couldn\'t extract text automatically - please summarize the key points from your PDF'}
                 </p>
@@ -1318,10 +1540,15 @@ export default function GeneratePage() {
                   {uploadedImages.length < 4 && (
                     <div
                       onClick={() => imageInputRef.current?.click()}
-                      className="aspect-square border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-400 transition-colors"
+                      onPaste={handleClipboardPaste}
+                      tabIndex={0}
+                      className="aspect-square border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-400 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-200"
                     >
                       <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <p className="text-xs text-gray-500">Select Images</p>
+                      <p className="text-xs text-gray-500">Select or Paste Images</p>
+                      <p className="mt-1 px-3 text-center text-[11px] text-gray-400">
+                        Click here, then press Ctrl+V to paste screenshots or copied photos
+                      </p>
                       <input
                         ref={imageInputRef}
                         type="file"
@@ -1334,24 +1561,25 @@ export default function GeneratePage() {
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  Images stay in your browser until you publish.
+                  Images stay in your browser until you publish. If you skip extra context, we will analyze the visuals automatically.
                 </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  What is this post about? *
+                  What is this post about? (optional)
                 </label>
                 <textarea
                   value={imagePrompt}
                   onChange={(e) => setImagePrompt(e.target.value)}
+                  onPaste={handleClipboardPaste}
                   placeholder="Tell us what story these images tell...\n\nExamples:\n• Just wrapped our best team offsite yet! These moments show what makes our culture special\n• Proud to unveil our new product. Here's what 6 months of work looks like\n• Behind the scenes of how we solve customer problems every day\n• Last week at the conference - met incredible people and learned so much"
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent resize-none transition-all"
                 />
                 <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <ImageIcon className="w-3 h-3 mt-0.5 shrink-0" />
-                  <span>AI will create engaging text to complement your images - be descriptive about what they show and why they matter</span>
+                  <span>Paste screenshots straight into this box or add context if you want the post to lean toward a specific story, CTA, or angle.</span>
                 </p>
               </div>
             </>
@@ -1442,7 +1670,7 @@ export default function GeneratePage() {
                 />
                 <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
                   <Video className="w-3 h-3 mt-0.5 shrink-0" />
-                  <span>We'll write a compelling caption that drives engagement with your video content</span>
+                  <span>We will write a compelling caption that drives engagement with your video content</span>
                 </p>
               </div>
             </>
@@ -1500,7 +1728,7 @@ export default function GeneratePage() {
                   placeholder="What do you want readers to do? (e.g., Visit our website, Comment their thoughts, Book a call)"
                   className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-violet-50 focus:border-transparent text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1.5">We'll create a compelling call-to-action based on your goal</p>
+                <p className="text-xs text-gray-500 mt-1.5">We will create a compelling call-to-action based on your goal</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-2">
@@ -1784,6 +2012,7 @@ export default function GeneratePage() {
                             Reset
                           </button>
                         </div>
+                        <p className="text-xs text-gray-500 mb-2">You can edit the generated post before copying or publishing.</p>
                         <textarea
                           value={draftContent}
                           onChange={(e) => setDraftContent(e.target.value)}

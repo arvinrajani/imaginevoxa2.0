@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+﻿import type { NextConfig } from "next";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.supabase.co",
       },
-      // AI image generation services (adjust based on your n8n setup)
+      // AI image generation services
       {
         protocol: "https",
         hostname: "*.openai.com",
@@ -40,10 +40,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "oaidalleapiprodscus.blob.core.windows.net",
       },
-      // Add your n8n domain if images are hosted there
+      // Add your image host domain if external images are used
       // {
       //   protocol: "https",
-      //   hostname: "your-n8n-domain.com",
+      //   hostname: "your-image-domain.com",
       // },
     ],
   },
@@ -58,3 +58,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

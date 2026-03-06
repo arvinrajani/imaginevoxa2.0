@@ -54,6 +54,7 @@ interface PostGeneratorProps {
     type: string;
     summary?: string;
   }>;
+  evidenceIds?: string[];
   brandComplianceRules?: {
     doNotUse?: string[];
     styleRules?: string[];
@@ -779,6 +780,7 @@ export function PostGenerator({
   productId,
   productName,
   evidenceContext = [],
+  evidenceIds = [],
   brandComplianceRules,
   onPostGenerated,
   onPostConfirmed,
@@ -1172,6 +1174,7 @@ export function PostGenerator({
           experimentMode,
           experimentAxes: overrideAxes || experimentAxes,
           length: postLength,
+          evidenceIds: evidenceIds.length ? evidenceIds : undefined,
           outcomeBrief: hasOutcomeBrief ? outcomeBrief : undefined,
           links: hasQuickLinks
             ? {
@@ -1207,6 +1210,7 @@ export function PostGenerator({
       experimentMode,
       experimentAxes,
       postLength,
+      evidenceIds,
       outcomeBrief,
       websiteLink,
       chatbotLink,

@@ -42,6 +42,9 @@ interface ImageCreatorProps {
   onImageConfirmed?: (imageUrl: string) => void;
   /** Called whenever a new image is generated — auto-syncs URL to parent without navigating */
   onImageGenerated?: (imageUrl: string) => void;
+  /** Pre-loaded PDF-extracted images from the parent's evidence state. When supplied the
+   *  internal fetch is skipped — images stay in sync whenever evidence changes. */
+  pdfImages?: Array<{ id: string; title: string; signed_url: string }>;
 }
 
 type BlendModeId = 'normal' | 'multiply' | 'screen' | 'overlay' | 'soft-light';
@@ -136,6 +139,7 @@ export function ImageCreator({
   confirmedPostHeadline,
   onImageConfirmed,
   onImageGenerated,
+  pdfImages: propPdfImages,
 }: ImageCreatorProps) {
   const derivedWording = useMemo(
     () => deriveWordingFromPost(confirmedPostText),
@@ -159,6 +163,12 @@ export function ImageCreator({
   const [isFetchingSiteImages, setIsFetchingSiteImages] = useState(false);
   const [fetchedSiteImages, setFetchedSiteImages] = useState<Array<{ url: string; source: string; width: number | null; height: number | null }>>([]);
   const [selectedReferenceImage, setSelectedReferenceImage] = useState<string | null>(null);
+
+  // PDF-extracted brand images (from Evidence Locker)
+  const [pdfEvidenceImages, setPdfEvidenceImages] = useState<Array<{ id: string; title: string; signed_url: string }>>([]);
+  const [isFetchingPdfImages, setIsFetchingPdfImages] = useState(false);
+  // Tracks PDF image suggestions the user has explicitly dismissed this session
+  const [dismissedPdfSuggestions, setDismissedPdfSuggestions] = useState<Set<string>>(() => new Set());
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -195,6 +205,40 @@ export function ImageCreator({
       setUploadedLogo(defaultLogoUrl);
     }
   }, [defaultLogoUrl, uploadedLogo]);
+
+  // Fetch PDF-extracted images from the brand's Evidence Locker.
+  // Skipped when the parent passes pre-loaded images via the `pdfImages` prop.
+  useEffect(() => {
+    if (propPdfImages !== undefined) return;
+    if (!brandId) return;
+    setIsFetchingPdfImages(true);
+    fetch(`/api/studio/evidence/list?brandId=${encodeURIComponent(brandId)}`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? res.json() : Promise.resolve({ evidence: [] })))
+      .then((payload: { evidence?: Array<{ id: string; type: string; title: string; tags?: string[]; signed_url?: string | null }> }) => {
+        const extracted = (payload.evidence ?? []).filter(
+          (item) =>
+            item.type === 'image' &&
+            Array.isArray(item.tags) &&
+            item.tags.includes('pdf-extracted') &&
+            typeof item.signed_url === 'string' &&
+            item.signed_url.length > 0
+        );
+        setPdfEvidenceImages(
+          extracted.map((item) => ({
+            id: item.id,
+            title: item.title,
+            signed_url: item.signed_url as string,
+          }))
+        );
+      })
+      .catch(() => {
+        // Non-critical — silently absorb
+      })
+      .finally(() => setIsFetchingPdfImages(false));
+  }, [brandId, propPdfImages]);
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬
   const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -448,6 +492,39 @@ export function ImageCreator({
       ? 'aspect-[4/5]'
       : 'aspect-[1200/628]';
 
+  // Use prop-supplied images when the parent passes them (keeps in sync after evidence uploads).
+  // Fall back to internally-fetched images when no prop is provided.
+  const effectivePdfImages = propPdfImages ?? pdfEvidenceImages;
+  const isLoadingPdf = propPdfImages !== undefined ? false : isFetchingPdfImages;
+
+  // Detect if the custom prompt mentions a PDF image by title so we can suggest auto-selecting it.
+  // Match on any word ≥4 chars from an image title appearing in the prompt (case-insensitive).
+  const promptMatchedPdfImage = useMemo(() => {
+    if (!customPrompt.trim() || effectivePdfImages.length === 0) return null;
+    const promptLower = customPrompt.toLowerCase();
+    // Score each image by how many of its title words appear in the prompt
+    let bestMatch: { img: typeof effectivePdfImages[number]; score: number } | null = null;
+    for (const img of effectivePdfImages) {
+      const words = img.title
+        .toLowerCase()
+        .replace(/[•·—–]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 4);
+      if (words.length === 0) continue;
+      const matched = words.filter((w) => promptLower.includes(w)).length;
+      const score = matched / words.length;
+      if (score > 0 && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { img, score };
+      }
+    }
+    // Only suggest when at least one meaningful keyword matched
+    if (!bestMatch || bestMatch.score === 0) return null;
+    // Don't suggest if already selected or if the user dismissed it
+    if (selectedReferenceImage === bestMatch.img.signed_url) return null;
+    if (dismissedPdfSuggestions.has(bestMatch.img.id)) return null;
+    return bestMatch.img;
+  }, [customPrompt, effectivePdfImages, selectedReferenceImage, dismissedPdfSuggestions]);
+
   return (
     <div className="grid lg:grid-cols-[400px_1fr] gap-8">
       {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â LEFT: Form Controls Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
@@ -641,6 +718,64 @@ export function ImageCreator({
           )}
         </Card>
 
+        {/* ── Brand PDF Images ── */}
+        {/* ── Brand PDF Images ── */}
+        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                <ImageIcon className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm text-slate-900">Brand PDF Images</h3>
+                <p className="text-[11px] text-gray-400">Click to select as reference, or mention by name in Your Vision</p>
+              </div>
+            </div>
+
+            {isLoadingPdf ? (
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading brand images...
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-1.5">
+                {effectivePdfImages.map((img) => (
+                  <button
+                    key={img.id}
+                    onClick={() =>
+                      setSelectedReferenceImage(
+                        selectedReferenceImage === img.signed_url ? null : img.signed_url
+                      )
+                    }
+                    title={img.title}
+                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                      selectedReferenceImage === img.signed_url
+                        ? 'border-emerald-400 ring-2 ring-emerald-300'
+                        : 'border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.signed_url}
+                      alt={img.title}
+                      className="w-full h-full object-cover"
+                    />
+                    {selectedReferenceImage === img.signed_url && (
+                      <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!isLoadingPdf && effectivePdfImages.length === 0 && (
+              <p className="text-xs text-gray-400">
+                No PDF images yet. Upload a brand PDF in the Evidence Locker to extract images automatically.
+              </p>
+            )}
+          </Card>
+
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. Your Vision / Creative Prompt Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Your Vision */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
@@ -660,7 +795,36 @@ export function ImageCreator({
             rows={3}
             className="text-sm resize-none bg-slate-50 border-slate-300 text-slate-900 placeholder:text-gray-400"
           />
-          <p className="text-[10px] text-gray-400">Be specific: mention colors, layout, mood, and key visual elements.</p>
+
+          {/* Auto-suggest: use PDF image detected in prompt */}
+          {promptMatchedPdfImage && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <ImageIcon className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+              <p className="text-[11px] text-emerald-800 flex-1 min-w-0">
+                <span className="font-semibold">Detected PDF image:</span>{' '}
+                <span className="truncate">&ldquo;{promptMatchedPdfImage.title}&rdquo;</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setSelectedReferenceImage(promptMatchedPdfImage.signed_url)}
+                className="flex-shrink-0 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                Use it
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDismissedPdfSuggestions((prev) => new Set([...prev, promptMatchedPdfImage.id]))
+                }
+                aria-label="Dismiss suggestion"
+                className="text-emerald-400 hover:text-emerald-700"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-400">Be specific: mention colors, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.</p>
         </Card>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Text / Wording Ã¢â€â‚¬Ã¢â€â‚¬ */}

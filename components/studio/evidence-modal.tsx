@@ -66,6 +66,7 @@ export function EvidenceModal({
   const [uploadDescription, setUploadDescription] = useState('');
   const [uploadBucket, setUploadBucket] = useState('general');
   const [uploadTags, setUploadTags] = useState('');
+  const [isUploadActive, setIsUploadActive] = useState(false);
 
   const [urlTitle, setUrlTitle] = useState('');
   const [urlValue, setUrlValue] = useState('');
@@ -92,6 +93,36 @@ export function EvidenceModal({
       return haystack.includes(query);
     });
   }, [evidence, search]);
+
+  const submitUploadFile = async (file: File | null) => {
+    if (!file || !brandId) return;
+
+    const isPdf =
+      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/');
+
+    if (!isPdf && !isImage) {
+      return;
+    }
+
+    await onUploadFile(file, {
+      title: uploadTitle,
+      description: uploadDescription,
+      bucket: uploadBucket,
+      tags: normalizeTags(uploadTags),
+    });
+
+    setUploadTitle('');
+    setUploadDescription('');
+    setUploadTags('');
+  };
+
+  const pickSupportedFile = (files: ArrayLike<File>) =>
+    Array.from(files).find((file) => {
+      const isPdf =
+        file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      return isPdf || file.type.startsWith('image/');
+    }) || null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -233,22 +264,46 @@ export function EvidenceModal({
                     className="border-gray-200/60 bg-gray-100 text-gray-900"
                   />
                 </div>
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-sm text-gray-700 hover:bg-gray-100">
+                <label
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-8 text-sm transition-colors ${
+                    isUploadActive
+                      ? 'border-cyan-400 bg-cyan-50 text-cyan-800'
+                      : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  }`}
+                  tabIndex={0}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsUploadActive(true);
+                  }}
+                  onDragLeave={() => setIsUploadActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsUploadActive(false);
+                    const file = pickSupportedFile(e.dataTransfer.files);
+                    void submitUploadFile(file);
+                  }}
+                  onPaste={(e) => {
+                    const pastedFiles = Array.from(e.clipboardData.items)
+                      .map((item) => item.getAsFile())
+                      .filter((file): file is File => Boolean(file));
+                    const file = pickSupportedFile(pastedFiles);
+                    if (!file) return;
+                    e.preventDefault();
+                    void submitUploadFile(file);
+                  }}
+                >
                   <Upload className="h-4 w-4" />
-                  <span>Choose PDF or image file</span>
+                  <span>Choose, drop, or paste a PDF or image file (max 300MB).</span>
+                  <span className="text-center text-xs text-gray-500">
+                    PDFs are saved in Studio only, auto-indexed for post generation, and any embedded images become available in Image Creator.
+                  </span>
                   <input
                     type="file"
                     accept="application/pdf,image/*"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (!file || !brandId) return;
-                      void onUploadFile(file, {
-                        title: uploadTitle,
-                        description: uploadDescription,
-                        bucket: uploadBucket,
-                        tags: normalizeTags(uploadTags),
-                      });
+                      void submitUploadFile(file || null);
                       e.currentTarget.value = '';
                     }}
                   />

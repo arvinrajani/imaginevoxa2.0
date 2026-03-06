@@ -7,6 +7,8 @@ import {
 } from '@/lib/studio/server-auth';
 
 export const dynamic = 'force-dynamic';
+const EVIDENCE_STORAGE_BUCKET =
+  process.env.STUDIO_EVIDENCE_BUCKET?.trim() || 'brand-evidence';
 
 export async function GET(request: Request) {
   try {
@@ -41,7 +43,7 @@ export async function GET(request: Request) {
         }
 
         const signed = await admin.storage
-          .from('brand-evidence')
+          .from(EVIDENCE_STORAGE_BUCKET)
           .createSignedUrl(item.file_path, 60 * 60);
 
         return {
