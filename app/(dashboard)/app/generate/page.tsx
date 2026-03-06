@@ -369,7 +369,8 @@ export default function GeneratePage() {
     const items = Array.from(e.clipboardData?.items || []);
     const pastedImages = items
       .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file) && file.type.startsWith('image/'));
+      .filter((file): file is File => file instanceof File)
+      .filter((file) => file.type.startsWith('image/'));
 
     if (pastedImages.length === 0) {
       return;
