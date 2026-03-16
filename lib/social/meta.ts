@@ -5,6 +5,9 @@ type GraphErrorShape = {
     type?: string;
   };
   id?: string;
+  post_id?: string;
+  permalink?: string;
+  permalink_url?: string;
 };
 
 export type MetaPageConnection = {
@@ -12,7 +15,9 @@ export type MetaPageConnection = {
   name: string;
   category?: string;
   access_token: string;
+  picture_url?: string | null;
   instagram_business_account_id?: string | null;
+  instagram_name?: string | null;
   instagram_username?: string | null;
   instagram_profile_picture_url?: string | null;
 };
@@ -20,6 +25,8 @@ export type MetaPageConnection = {
 export type FacebookPublishResult = {
   success: boolean;
   postId?: string;
+  objectId?: string;
+  permalinkUrl?: string;
   error?: string;
 };
 
@@ -27,6 +34,7 @@ export type InstagramPublishResult = {
   success: boolean;
   mediaId?: string;
   creationId?: string;
+  permalinkUrl?: string;
   error?: string;
 };
 
@@ -100,6 +108,7 @@ export function parseMetaPages(data: unknown): MetaPageConnection[] {
       const name = toNonEmptyString(row.name);
       const category = toNonEmptyString(row.category);
       const access_token = toNonEmptyString(row.access_token) || toNonEmptyString(row.pageAccessToken);
+      const picture_url = toNonEmptyString(row.picture_url);
 
       if (!id || !name || !access_token) return null;
 
@@ -108,7 +117,9 @@ export function parseMetaPages(data: unknown): MetaPageConnection[] {
         name,
         category: category || "Local Business",
         access_token,
+        picture_url,
         instagram_business_account_id: toNonEmptyString(row.instagram_business_account_id),
+        instagram_name: toNonEmptyString(row.instagram_name),
         instagram_username: toNonEmptyString(row.instagram_username),
         instagram_profile_picture_url: toNonEmptyString(row.instagram_profile_picture_url),
       };
@@ -138,12 +149,24 @@ export async function publishToFacebookPage(options: {
     }
 
     const payload = await graphPost(endpoint, params);
-    const postId = toNonEmptyString(payload.id);
+    const objectId = toNonEmptyString(payload.id);
+    const postId = toNonEmptyString(payload.post_id) || objectId;
     if (!postId) {
       return { success: false, error: "Facebook publish response did not include a post id." };
     }
 
-    return { success: true, postId };
+    let permalinkUrl: string | undefined;
+    try {
+      const permalinkResponse = await graphGet(`/${postId}`, {
+        access_token: options.pageAccessToken,
+        fields: "permalink_url",
+      });
+      permalinkUrl = toNonEmptyString(permalinkResponse.permalink_url) || undefined;
+    } catch {
+      permalinkUrl = undefined;
+    }
+
+    return { success: true, postId, objectId: objectId || undefined, permalinkUrl };
   } catch (error) {
     return {
       success: false,
@@ -220,10 +243,22 @@ export async function publishToInstagramAccount(options: {
       };
     }
 
+    let permalinkUrl: string | undefined;
+    try {
+      const permalinkResponse = await graphGet(`/${mediaId}`, {
+        access_token: options.pageAccessToken,
+        fields: "permalink",
+      });
+      permalinkUrl = toNonEmptyString(permalinkResponse.permalink) || undefined;
+    } catch {
+      permalinkUrl = undefined;
+    }
+
     return {
       success: true,
       mediaId,
       creationId,
+      permalinkUrl,
     };
   } catch (error) {
     return {

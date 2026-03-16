@@ -15,6 +15,11 @@ type MetaPageResponse = {
     name?: string;
     access_token?: string;
     category?: string;
+    picture?: {
+      data?: {
+        url?: string;
+      };
+    };
     instagram_business_account?: {
       id?: string;
       name?: string;
@@ -167,7 +172,10 @@ export async function GET(request: Request) {
 
     const getAllFacebookPages = async (accessToken: string) => {
       let allPages: NonNullable<NonNullable<MetaPageResponse["data"]>[0]>[] = [];
-      let url: string | null = `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
+      let url: string | null =
+        "https://graph.facebook.com/v22.0/me/accounts" +
+        "?fields=id,name,category,picture{url},access_token,instagram_business_account{id,name,username,profile_picture_url}" +
+        `&limit=100&access_token=${accessToken}`;
 
       while (url) {
         const responseData: MetaPageResponse = await fetchMetaJson<MetaPageResponse>(url);
@@ -192,7 +200,9 @@ export async function GET(request: Request) {
           name,
           category: row.category?.trim() || "Local Business",
           access_token: pageAccessToken,
+          picture_url: row.picture?.data?.url?.trim() || null,
           instagram_business_account_id: row.instagram_business_account?.id?.trim() || null,
+          instagram_name: row.instagram_business_account?.name?.trim() || null,
           instagram_username: row.instagram_business_account?.username?.trim() || null,
           instagram_profile_picture_url: row.instagram_business_account?.profile_picture_url || null,
         };

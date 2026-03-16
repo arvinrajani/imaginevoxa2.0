@@ -37,17 +37,39 @@ interface ImageCreatorProps {
   productName?: string;
   brandColors?: string[];
   logoUrl?: string;
+  analysisProfile?: {
+    tone?: string | null;
+    imageStyle?: string | null;
+    postTypes?: string[];
+    contentPillars?: string[];
+    targetAudience?: string | null;
+    businessFocus?: string | null;
+    tagline?: string | null;
+    website?: string | null;
+    brandDescription?: string | null;
+    ctaStyle?: string | null;
+    visualDensity?: string | null;
+  };
   confirmedPostText?: string;
   confirmedPostHeadline?: string;
+  confirmedPostImagePrompt?: string;
   onImageConfirmed?: (imageUrl: string) => void;
   /** Called whenever a new image is generated — auto-syncs URL to parent without navigating */
   onImageGenerated?: (imageUrl: string) => void;
+  /** Called when user edits brand colors manually */
+  onBrandColorsChange?: (colors: string[]) => void;
   /** Pre-loaded PDF-extracted images from the parent's evidence state. When supplied the
    *  internal fetch is skipped — images stay in sync whenever evidence changes. */
   pdfImages?: Array<{ id: string; title: string; signed_url: string }>;
 }
 
 type BlendModeId = 'normal' | 'multiply' | 'screen' | 'overlay' | 'soft-light';
+
+type PdfImageReference = {
+  id: string;
+  title: string;
+  signed_url: string;
+};
 
 function deriveWordingFromPost(postText?: string) {
   if (!postText) {
@@ -71,6 +93,30 @@ function deriveWordingFromPost(postText?: string) {
   return {
     headline: clean(firstLine).slice(0, 80),
     tagline: clean(secondLine).slice(0, 120),
+  };
+}
+
+function normalizeReferenceText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getPdfImageDisplayTitle(title: string) {
+  const normalized = title.replace(/\s+/g, ' ').trim();
+  const match = normalized.match(/^(.*?)[\u2022\u00b7-]\s*(Extracted image \d+)$/i);
+
+  if (!match) {
+    return {
+      primary: normalized,
+      secondary: null as string | null,
+    };
+  }
+
+  return {
+    primary: match[2],
+    secondary: match[1].trim() || null,
   };
 }
 
@@ -125,6 +171,42 @@ const ASPECT_DIMENSIONS: Record<'landscape' | 'square' | 'portrait', { width: nu
   portrait: { width: 1080, height: 1350 },
 };
 
+function normalizeAnalysisToken(value: string | null | undefined) {
+  return (value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function mapAnalysisToneToImageTone(value: string | null | undefined): string | null {
+  switch (normalizeAnalysisToken(value)) {
+    case 'professional':
+    case 'corporate':
+      return 'professional';
+    case 'professional-founder':
+    case 'casual':
+      return 'warm';
+    case 'thought-leader':
+      return 'tech';
+    case 'sales-oriented':
+      return 'bold';
+    default:
+      return null;
+  }
+}
+
+function mapAnalysisImageStyleToLayout(value: string | null | undefined): string | null {
+  switch (normalizeAnalysisToken(value)) {
+    case 'clean-minimal':
+      return 'text-overlay';
+    case 'professional-corporate':
+      return 'split-layout';
+    case 'bold-colorful':
+      return 'abstract-brand';
+    case 'tech-modern':
+      return 'photo-blend';
+    default:
+      return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -135,10 +217,13 @@ export function ImageCreator({
   productName,
   brandColors = [],
   logoUrl: defaultLogoUrl,
+  analysisProfile,
   confirmedPostText,
   confirmedPostHeadline,
+  confirmedPostImagePrompt,
   onImageConfirmed,
   onImageGenerated,
+  onBrandColorsChange,
   pdfImages: propPdfImages,
 }: ImageCreatorProps) {
   const derivedWording = useMemo(
@@ -146,15 +231,21 @@ export function ImageCreator({
     [confirmedPostText]
   );
   const hasPostContext = Boolean(confirmedPostText?.trim());
+  const confirmedPostKey = `${confirmedPostHeadline || ''}::${confirmedPostText || ''}::${confirmedPostImagePrompt || ''}`;
+  const syncedHeadlineFromPost = (confirmedPostHeadline?.trim() || derivedWording.headline || '').slice(0, 80);
+  const confirmedPostImageBrief = (confirmedPostImagePrompt || '').trim();
 
   // Form state
   const [headline, setHeadline] = useState(confirmedPostHeadline || derivedWording.headline || '');
+  const [usePostHeadline, setUsePostHeadline] = useState(true);
   const [tagline, setTagline] = useState('');
   const [selectedTone, setSelectedTone] = useState('professional');
   const [selectedStyle, setSelectedStyle] = useState('split-layout');
   const [customPrompt, setCustomPrompt] = useState('');
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(defaultLogoUrl || null);
-  const [logoPlacement, setLogoPlacement] = useState<'overlay' | 'infuse' | 'none'>('overlay');
+  const [logoPlacement, setLogoPlacement] = useState<'overlay' | 'infuse' | 'none'>(
+    defaultLogoUrl ? 'overlay' : 'none'
+  );
   const [selectedBlendMode, setSelectedBlendMode] = useState<BlendModeId>('normal');
   const [imageAspect, setImageAspect] = useState<'landscape' | 'square' | 'portrait'>('landscape');
 
@@ -170,6 +261,10 @@ export function ImageCreator({
   // Tracks PDF image suggestions the user has explicitly dismissed this session
   const [dismissedPdfSuggestions, setDismissedPdfSuggestions] = useState<Set<string>>(() => new Set());
 
+  // Color editing
+  const [isEditingColors, setIsEditingColors] = useState(false);
+  const [newColorInput, setNewColorInput] = useState('#');
+
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [isApplyingBlend, setIsApplyingBlend] = useState(false);
@@ -184,12 +279,49 @@ export function ImageCreator({
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastSyncedPostKeyRef = useRef('');
+  const appliedAnalysisDefaultsRef = useRef({
+    tone: false,
+    style: false,
+    tagline: false,
+  });
+  const analyzedToneDefault = useMemo(
+    () => mapAnalysisToneToImageTone(analysisProfile?.tone),
+    [analysisProfile?.tone]
+  );
+  const analyzedStyleDefault = useMemo(
+    () => mapAnalysisImageStyleToLayout(analysisProfile?.imageStyle),
+    [analysisProfile?.imageStyle]
+  );
+  const analyzedTaglineDefault = useMemo(
+    () => (analysisProfile?.tagline || '').trim().slice(0, 120),
+    [analysisProfile?.tagline]
+  );
 
   useEffect(() => {
-    if (!headline.trim() && confirmedPostHeadline?.trim()) {
-      setHeadline(confirmedPostHeadline.trim().slice(0, 80));
+    appliedAnalysisDefaultsRef.current = {
+      tone: false,
+      style: false,
+      tagline: false,
+    };
+    lastSyncedPostKeyRef.current = '';
+  }, [brandId]);
+
+  useEffect(() => {
+    if (!confirmedPostKey.trim()) return;
+    if (lastSyncedPostKeyRef.current === confirmedPostKey) return;
+
+    const nextHeadline = (confirmedPostHeadline?.trim() || derivedWording.headline || '').slice(0, 80);
+    const nextTagline = (derivedWording.tagline || '').slice(0, 120);
+
+    setHeadline(nextHeadline);
+    setUsePostHeadline(true);
+    if (nextTagline) {
+      setTagline(nextTagline);
     }
-  }, [confirmedPostHeadline, headline]);
+
+    lastSyncedPostKeyRef.current = confirmedPostKey;
+  }, [confirmedPostHeadline, confirmedPostKey, derivedWording.headline, derivedWording.tagline]);
 
   useEffect(() => {
     if (!headline.trim() && derivedWording.headline) {
@@ -201,10 +333,49 @@ export function ImageCreator({
   }, [derivedWording, headline, tagline]);
 
   useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.tone) return;
+    if (selectedTone !== 'professional') {
+      appliedAnalysisDefaultsRef.current.tone = true;
+      return;
+    }
+    if (!analyzedToneDefault) return;
+    setSelectedTone(analyzedToneDefault);
+    appliedAnalysisDefaultsRef.current.tone = true;
+  }, [analyzedToneDefault, selectedTone]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.style) return;
+    if (selectedStyle !== 'split-layout') {
+      appliedAnalysisDefaultsRef.current.style = true;
+      return;
+    }
+    if (!analyzedStyleDefault) return;
+    setSelectedStyle(analyzedStyleDefault);
+    appliedAnalysisDefaultsRef.current.style = true;
+  }, [analyzedStyleDefault, selectedStyle]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.tagline) return;
+    if (tagline.trim()) {
+      appliedAnalysisDefaultsRef.current.tagline = true;
+      return;
+    }
+    if (!analyzedTaglineDefault) return;
+    setTagline(analyzedTaglineDefault);
+    appliedAnalysisDefaultsRef.current.tagline = true;
+  }, [analyzedTaglineDefault, tagline]);
+
+  useEffect(() => {
     if (defaultLogoUrl && !uploadedLogo) {
       setUploadedLogo(defaultLogoUrl);
     }
   }, [defaultLogoUrl, uploadedLogo]);
+
+  useEffect(() => {
+    if (!defaultLogoUrl && !uploadedLogo && logoPlacement !== 'none') {
+      setLogoPlacement('none');
+    }
+  }, [defaultLogoUrl, uploadedLogo, logoPlacement]);
 
   // Fetch PDF-extracted images from the brand's Evidence Locker.
   // Skipped when the parent passes pre-loaded images via the `pdfImages` prop.
@@ -239,6 +410,42 @@ export function ImageCreator({
       })
       .finally(() => setIsFetchingPdfImages(false));
   }, [brandId, propPdfImages]);
+
+  const toggleReferenceSelection = useCallback((imageUrl: string) => {
+    setSelectedReferenceImage((prev) => (prev === imageUrl ? null : imageUrl));
+  }, []);
+
+
+  const insertPdfImageIntoPrompt = useCallback(
+    (image: PdfImageReference) => {
+      const normalizedTitle = image.title.trim();
+      if (!normalizedTitle) return;
+
+      const promptSnippet = `Use PDF reference image "${normalizedTitle}" as the visual reference.`;
+      const alreadyReferenced = normalizeReferenceText(customPrompt).includes(
+        normalizeReferenceText(normalizedTitle)
+      );
+
+      if (!alreadyReferenced) {
+        setCustomPrompt((prev) => (prev.trim() ? `${prev.trim()}\n${promptSnippet}` : promptSnippet));
+      }
+
+      setSelectedReferenceImage(image.signed_url);
+      setDismissedPdfSuggestions((prev) => {
+        if (!prev.has(image.id)) return prev;
+        const next = new Set(prev);
+        next.delete(image.id);
+        return next;
+      });
+
+      toast.success(
+        alreadyReferenced
+          ? `"${normalizedTitle}" is already in Your Vision and has been selected.`
+          : `Added "${normalizedTitle}" to Your Vision and selected it as the reference.`
+      );
+    },
+    [customPrompt]
+  );
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬
   const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,10 +519,18 @@ export function ImageCreator({
       return;
     }
 
-    const effectiveHeadline = (headline || confirmedPostHeadline || derivedWording.headline || '').trim();
+    const effectiveHeadline = (
+      (usePostHeadline ? syncedHeadlineFromPost : headline) ||
+      syncedHeadlineFromPost ||
+      headline ||
+      derivedWording.headline ||
+      ''
+    ).trim();
     const effectiveTagline = (tagline || derivedWording.tagline || '').trim();
+    const resolvedLogoForGeneration = uploadedLogo || defaultLogoUrl || null;
+    const effectiveLogoPlacement = resolvedLogoForGeneration ? logoPlacement : 'none';
     const effectiveLogoForGeneration =
-      logoPlacement !== 'none' ? (uploadedLogo || defaultLogoUrl || null) : null;
+      effectiveLogoPlacement !== 'none' ? resolvedLogoForGeneration : null;
     const nextNonce = generationNonce + 1;
 
     if (!effectiveHeadline && !confirmedPostText) {
@@ -323,9 +538,10 @@ export function ImageCreator({
       return;
     }
 
-    if (logoPlacement !== 'none' && !effectiveLogoForGeneration) {
-      toast.error('Upload your logo first or choose "No Logo"');
-      return;
+    if (logoPlacement !== 'none' && !resolvedLogoForGeneration) {
+      toast.message('Generating without logo', {
+        description: 'No brand logo was found, so this image will be created without one.',
+      });
     }
 
     setGenerationNonce(nextNonce);
@@ -346,8 +562,9 @@ export function ImageCreator({
           tone: selectedTone,
           style: selectedStyle,
           logoUrl: effectiveLogoForGeneration || undefined,
-          logoPlacement,
+          logoPlacement: effectiveLogoPlacement,
           postText: confirmedPostText || undefined,
+          postImagePrompt: confirmedPostImageBrief || undefined,
           customPrompt: customPrompt.trim() || undefined,
           generationNonce: nextNonce,
           imageAspect,
@@ -453,7 +670,9 @@ export function ImageCreator({
   }, [
     hasPostContext,
     headline,
-    confirmedPostHeadline,
+    usePostHeadline,
+    syncedHeadlineFromPost,
+    confirmedPostImageBrief,
     derivedWording,
     tagline,
     selectedTone,
@@ -485,6 +704,14 @@ export function ImageCreator({
 
   const currentTone = TONE_OPTIONS.find((t) => t.id === selectedTone);
   const currentStyle = STYLE_OPTIONS.find((s) => s.id === selectedStyle);
+  const headlineInputValue = usePostHeadline ? syncedHeadlineFromPost : headline;
+  const activeHeadlineText = (
+    headlineInputValue ||
+    syncedHeadlineFromPost ||
+    derivedWording.headline ||
+    ''
+  ).trim();
+  const activeTaglineText = (tagline || derivedWording.tagline || analyzedTaglineDefault || '').trim();
   const previewAspectClass =
     imageAspect === 'square'
       ? 'aspect-square'
@@ -496,12 +723,18 @@ export function ImageCreator({
   // Fall back to internally-fetched images when no prop is provided.
   const effectivePdfImages = propPdfImages ?? pdfEvidenceImages;
   const isLoadingPdf = propPdfImages !== undefined ? false : isFetchingPdfImages;
+  const normalizedPrompt = normalizeReferenceText(customPrompt);
+  const selectedPdfImage =
+    effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
+  const selectedSiteImage =
+    fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
+  const hasReadyLogo = Boolean(uploadedLogo || defaultLogoUrl);
 
   // Detect if the custom prompt mentions a PDF image by title so we can suggest auto-selecting it.
   // Match on any word ≥4 chars from an image title appearing in the prompt (case-insensitive).
   const promptMatchedPdfImage = useMemo(() => {
     if (!customPrompt.trim() || effectivePdfImages.length === 0) return null;
-    const promptLower = customPrompt.toLowerCase();
+    const promptLower = normalizedPrompt;
     // Score each image by how many of its title words appear in the prompt
     let bestMatch: { img: typeof effectivePdfImages[number]; score: number } | null = null;
     for (const img of effectivePdfImages) {
@@ -523,7 +756,8 @@ export function ImageCreator({
     if (selectedReferenceImage === bestMatch.img.signed_url) return null;
     if (dismissedPdfSuggestions.has(bestMatch.img.id)) return null;
     return bestMatch.img;
-  }, [customPrompt, effectivePdfImages, selectedReferenceImage, dismissedPdfSuggestions]);
+  }, [customPrompt, effectivePdfImages, selectedReferenceImage, dismissedPdfSuggestions, normalizedPrompt]);
+
 
   return (
     <div className="grid lg:grid-cols-[400px_1fr] gap-8">
@@ -562,6 +796,138 @@ export function ImageCreator({
         )}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 1. Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {hasPostContext && (
+          <Card className="p-4 bg-white border border-cyan-200 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700">
+                  AI Generated Headline
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {activeHeadlineText || 'Headline will be taken from your confirmed post'}
+                </p>
+                {activeTaglineText && (
+                  <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                    {activeTaglineText}
+                  </p>
+                )}
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Your post already gives the wording. Pick a look and generate.
+                </p>
+              </div>
+              <Badge className="bg-cyan-100 text-cyan-700 border border-cyan-200 text-[10px]">
+                Auto
+              </Badge>
+            </div>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {brandName && (
+                  <Badge className="border border-cyan-200 bg-cyan-50 text-cyan-700 text-[10px]">
+                    Brand: {brandName}
+                  </Badge>
+                )}
+                {brandColors.length > 0 && (
+                  <Badge className="border border-amber-200 bg-amber-50 text-amber-700 text-[10px]">
+                    {brandColors.length} color{brandColors.length === 1 ? '' : 's'} selected
+                  </Badge>
+                )}
+                {hasReadyLogo && (
+                  <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
+                    Logo ready
+                  </Badge>
+                )}
+                {effectivePdfImages.length > 0 && (
+                  <Badge className="border border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
+                    {effectivePdfImages.length} extracted image{effectivePdfImages.length === 1 ? '' : 's'}
+                  </Badge>
+                )}
+                {selectedReferenceImage && (
+                  <Badge className="border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
+                    Reference selected
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Active palette
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingColors(!isEditingColors)}
+                    className="text-[10px] font-semibold text-purple-600 hover:text-purple-800"
+                  >
+                    {isEditingColors ? 'Done' : 'Edit colors'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {brandColors.slice(0, 8).map((color, idx) => (
+                    <div key={`${color}-${idx}`} className="relative group">
+                      <div
+                        className="h-6 w-6 rounded-md border border-white shadow-sm ring-1 ring-slate-200 cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                      {isEditingColors && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = brandColors.filter((_, i) => i !== idx);
+                            onBrandColorsChange?.(updated);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center shadow-sm hover:bg-red-600"
+                          title="Remove color"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {isEditingColors && brandColors.length < 8 && (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="color"
+                        value={newColorInput.startsWith('#') && newColorInput.length === 7 ? newColorInput : '#6366f1'}
+                        onChange={(e) => setNewColorInput(e.target.value)}
+                        className="w-6 h-6 rounded-md border border-slate-300 cursor-pointer p-0"
+                        title="Pick a color"
+                      />
+                      <input
+                        type="text"
+                        value={newColorInput}
+                        onChange={(e) => setNewColorInput(e.target.value)}
+                        placeholder="#hex"
+                        className="w-16 h-6 text-[10px] px-1.5 border border-slate-300 rounded-md bg-white text-slate-700"
+                        maxLength={7}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const hex = newColorInput.trim();
+                          if (/^#[0-9a-fA-F]{6}$/.test(hex) && !brandColors.includes(hex)) {
+                            onBrandColorsChange?.([...brandColors, hex]);
+                            setNewColorInput('#');
+                          }
+                        }}
+                        className="h-6 px-2 text-[10px] font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            {confirmedPostImageBrief && (
+              <div className="mt-3">
+                <Badge className="bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px]">
+                  Visual brief ready
+                </Badge>
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-purple-300 transition-colors">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -696,15 +1062,19 @@ export function ImageCreator({
           )}
 
           {selectedReferenceImage && (
-            <div className="flex items-center gap-2 p-2 bg-indigo-50 rounded-lg border border-indigo-200">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
               <img
-                src={selectedReferenceImage}
+                src={selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage}
                 alt="Selected reference"
                 className="w-10 h-10 rounded object-cover"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-indigo-700">Reference image selected</p>
-                <p className="text-[10px] text-indigo-50 truncate">{selectedReferenceImage}</p>
+                <p className="text-xs font-medium text-slate-900">
+                  {selectedPdfImage ? 'PDF reference selected' : 'Reference image selected'}
+                </p>
+                <p className="text-[10px] text-slate-500 truncate">
+                  {selectedPdfImage?.title || selectedReferenceImage}
+                </p>
               </div>
               <Button
                 size="sm"
@@ -719,60 +1089,124 @@ export function ImageCreator({
         </Card>
 
         {/* ── Brand PDF Images ── */}
-        {/* ── Brand PDF Images ── */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-emerald-300 transition-colors">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <ImageIcon className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm text-slate-900">
+                    PDF Extracted Images
+                    {effectivePdfImages.length > 0 && (
+                      <span className="ml-1.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                        {effectivePdfImages.length}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-gray-400">Images auto-extracted from your uploaded PDFs — select one as a visual reference for AI generation</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-sm text-slate-900">Brand PDF Images</h3>
-                <p className="text-[11px] text-gray-400">Click to select as reference, or mention by name in Your Vision</p>
-              </div>
+              {selectedPdfImage && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedReferenceImage(null)}
+                  className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                >
+                  Clear selection
+                </button>
+              )}
             </div>
 
             {isLoadingPdf ? (
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Loading brand images...
+              <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Scanning PDFs for images...
               </div>
-            ) : (
-              <div className="grid grid-cols-4 gap-1.5">
-                {effectivePdfImages.map((img) => (
-                  <button
-                    key={img.id}
-                    onClick={() =>
-                      setSelectedReferenceImage(
-                        selectedReferenceImage === img.signed_url ? null : img.signed_url
-                      )
-                    }
-                    title={img.title}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                      selectedReferenceImage === img.signed_url
-                        ? 'border-emerald-400 ring-2 ring-emerald-300'
-                        : 'border-slate-200 hover:border-emerald-300'
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.signed_url}
-                      alt={img.title}
-                      className="w-full h-full object-cover"
-                    />
-                    {selectedReferenceImage === img.signed_url && (
-                      <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                        <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            ) : effectivePdfImages.length > 0 ? (
+              <>
+                {/* Grid thumbnail view */}
+                <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto pr-1">
+                  {effectivePdfImages.map((img) => {
+                    const selected = selectedReferenceImage === img.signed_url;
+                    const inPrompt = normalizedPrompt.includes(normalizeReferenceText(img.title));
+                    const displayTitle = getPdfImageDisplayTitle(img.title);
 
-            {!isLoadingPdf && effectivePdfImages.length === 0 && (
-              <p className="text-xs text-gray-400">
-                No PDF images yet. Upload a brand PDF in the Evidence Locker to extract images automatically.
-              </p>
+                    return (
+                      <div
+                        key={img.id}
+                        className={`group relative rounded-xl border-2 transition-all cursor-pointer overflow-hidden ${
+                          selected
+                            ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md'
+                            : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleReferenceSelection(img.signed_url)}
+                          title={`${selected ? 'Deselect' : 'Select'}: ${img.title}`}
+                          className="w-full text-left"
+                        >
+                          <div className="relative aspect-square overflow-hidden bg-slate-100">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={img.signed_url}
+                              alt={img.title}
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                            />
+                            {selected && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-emerald-500/30 backdrop-blur-[1px]">
+                                <CheckCircle2 className="h-6 w-6 text-white drop-shadow-lg" />
+                              </div>
+                            )}
+                            {inPrompt && !selected && (
+                              <div className="absolute top-1 right-1">
+                                <Badge className="bg-slate-800/70 text-white text-[8px] px-1 py-0">
+                                  In prompt
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-1.5">
+                            <p className="truncate text-[10px] font-medium text-slate-700">
+                              {displayTitle.primary}
+                            </p>
+                            {displayTitle.secondary && (
+                              <p className="truncate text-[9px] text-slate-400">
+                                {displayTitle.secondary}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity p-1 border-t border-slate-100">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={inPrompt ? 'secondary' : 'outline'}
+                            onClick={(e) => { e.stopPropagation(); insertPdfImageIntoPrompt(img); }}
+                            className="w-full h-6 text-[10px]"
+                          >
+                            {inPrompt ? '✓ In prompt' : '+ Add to prompt'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400">Click an image to select it as the reference. Hover to add it to your creative prompt.</p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-2 py-4 text-center">
+                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                  <ImageIcon className="w-5 h-5 text-slate-300" />
+                </div>
+                <p className="text-xs text-gray-400">
+                  No PDF images yet
+                </p>
+                <p className="text-[10px] text-gray-300">
+                  Upload a brand PDF in the Evidence Locker — images will be auto-extracted and shown here
+                </p>
+              </div>
             )}
           </Card>
 
@@ -785,13 +1219,24 @@ export function ImageCreator({
             </div>
             <div>
               <h3 className="font-semibold text-sm text-slate-900">Your Vision <span className="text-[10px] font-normal text-gray-400">(optional)</span></h3>
-              <p className="text-[11px] text-gray-400">Describe exactly what you want the AI to create</p>
+              <p className="text-[11px] text-gray-400">Add extra image instructions without losing alignment to the confirmed post</p>
             </div>
           </div>
+          {confirmedPostImageBrief && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-700">
+                Post Generator Visual Brief
+              </p>
+              <p className="mt-1 text-xs leading-5 text-indigo-900">{confirmedPostImageBrief}</p>
+              <p className="mt-1 text-[10px] text-indigo-700">
+                This comes directly from the post generator. Your vision below refines it.
+              </p>
+            </div>
+          )}
           <Textarea
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder={`e.g. Dark navy background, glowing gold accent lines, logo centered with spotlight, white modern font, subtle particle effects...`}
+            placeholder={`e.g. Show a founder reviewing live analytics on a large screen, premium office lighting, clean headline-safe space at the top, realistic detail, strong navy and teal accents...`}
             rows={3}
             className="text-sm resize-none bg-slate-50 border-slate-300 text-slate-900 placeholder:text-gray-400"
           />
@@ -806,10 +1251,17 @@ export function ImageCreator({
               </p>
               <button
                 type="button"
-                onClick={() => setSelectedReferenceImage(promptMatchedPdfImage.signed_url)}
+                onClick={() => toggleReferenceSelection(promptMatchedPdfImage.signed_url)}
                 className="flex-shrink-0 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-emerald-700 transition-colors"
               >
                 Use it
+              </button>
+              <button
+                type="button"
+                onClick={() => insertPdfImageIntoPrompt(promptMatchedPdfImage)}
+                className="flex-shrink-0 rounded-md border border-emerald-300 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                Add to prompt
               </button>
               <button
                 type="button"
@@ -824,7 +1276,7 @@ export function ImageCreator({
             </div>
           )}
 
-          <p className="text-[10px] text-gray-400">Be specific: mention colors, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.</p>
+          <p className="text-[10px] text-gray-400">Be specific: mention subject, setting, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.</p>
         </Card>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Text / Wording Ã¢â€â‚¬Ã¢â€â‚¬ */}
@@ -842,17 +1294,46 @@ export function ImageCreator({
 
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-                Headline <span className="text-red-500">*</span>
-              </label>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Headline <span className="text-red-500">*</span>
+                </label>
+                {hasPostContext && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (usePostHeadline) {
+                        setUsePostHeadline(false);
+                        setHeadline(syncedHeadlineFromPost);
+                        return;
+                      }
+                      setHeadline(syncedHeadlineFromPost);
+                      setUsePostHeadline(true);
+                    }}
+                    className="text-[10px] font-semibold text-cyan-700 hover:text-cyan-900"
+                  >
+                    {usePostHeadline ? 'Edit manually' : 'Use post headline'}
+                  </button>
+                )}
+              </div>
               <Input
-                value={headline}
+                value={headlineInputValue}
                 onChange={(e) => setHeadline(e.target.value)}
                 placeholder="e.g. 5 AI Tips for LinkedIn Growth"
-                className="font-semibold text-sm h-10 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
+                readOnly={usePostHeadline}
+                className={`font-semibold text-sm h-10 border-slate-300 text-slate-900 placeholder:text-gray-400 ${
+                  usePostHeadline ? 'bg-slate-50' : 'bg-white'
+                }`}
                 maxLength={80}
               />
-              <p className="text-[11px] text-gray-400 text-right mt-1">{headline.length}/80</p>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <p className="text-[11px] text-gray-400">
+                  {usePostHeadline
+                    ? 'Synced directly from the confirmed post headline.'
+                    : 'Manual image headline override.'}
+                </p>
+                <p className="text-[11px] text-gray-400">{headlineInputValue.length}/80</p>
+              </div>
             </div>
 
             <div>
@@ -871,6 +1352,7 @@ export function ImageCreator({
         </Card>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Tone Ã¢â€â‚¬Ã¢â€â‚¬ */}
+
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5 mb-1">
             <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
@@ -1062,7 +1544,7 @@ export function ImageCreator({
         <Button
           size="lg"
           onClick={handleGenerate}
-          disabled={isGenerating || isApplyingBlend || !hasPostContext || (!headline.trim() && !confirmedPostText)}
+          disabled={isGenerating || isApplyingBlend || !hasPostContext || (!activeHeadlineText && !confirmedPostText)}
           className="w-full h-14 text-base font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 hover:from-purple-700 hover:via-pink-600 hover:to-orange-600 shadow-lg hover:shadow-xl hover:shadow-purple-50/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
         >
           {isGenerating || isApplyingBlend ? (
@@ -1131,7 +1613,7 @@ export function ImageCreator({
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-end justify-between">
                   <div className="text-white text-sm">
-                    <p className="font-semibold text-sm">{headline || 'Your LinkedIn Image'}</p>
+                    <p className="font-semibold text-sm">{activeHeadlineText || 'Your LinkedIn Image'}</p>
                     {tagline && <p className="text-white/60 text-xs mt-0.5">{tagline}</p>}
                   </div>
                   <div className="flex gap-1.5">
@@ -1163,13 +1645,13 @@ export function ImageCreator({
               </div>
               <p className="text-base font-semibold text-gray-400">Your image will appear here</p>
               <p className="text-sm text-gray-500 mt-1 max-w-sm text-center">
-                Enter your headline, pick a tone & style, then hit Generate
+                Your confirmed post already gives the headline. Pick a tone and style, then generate.
               </p>
 
               <div className="mt-6 flex items-center gap-3 text-xs text-gray-500">
                 <div className="flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-500 font-bold text-[10px]">1</span>
-                  <span>Text</span>
+                  <span>Post</span>
                 </div>
                 <ArrowRight className="w-3 h-3 text-gray-600" />
                 <div className="flex items-center gap-1.5">

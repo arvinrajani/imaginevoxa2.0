@@ -31,14 +31,26 @@ async function publishViaApprove(baseUrl: string, secret: string, postId: string
     body: JSON.stringify({ postId, autoPost: true }),
   });
 
-  if (publishResponse.ok) {
+  const payload = await publishResponse.json().catch(() => null);
+
+  if (
+    publishResponse.ok &&
+    payload &&
+    typeof payload === "object" &&
+    (payload as { status?: string }).status === "posted"
+  ) {
     return { ok: true as const, message: null };
   }
 
-  const errorText = await publishResponse.text();
   return {
     ok: false as const,
-    message: (errorText || "Publish failed.").slice(0, 1000),
+    message:
+      (
+        (payload &&
+          typeof payload === "object" &&
+          (((payload as { message?: string }).message || (payload as { error?: string }).error) ?? null)) ||
+        "Publish failed."
+      ).slice(0, 1000),
   };
 }
 

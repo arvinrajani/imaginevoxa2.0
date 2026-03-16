@@ -60,6 +60,24 @@ type LinkedInUgcPayload = {
   };
 };
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? ({ ...value } as Record<string, unknown>)
+    : {};
+}
+
+function mergePublishChannels(value: unknown, channel: "linkedin") {
+  const channels = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  if (!channels.includes(channel)) {
+    channels.push(channel);
+  }
+
+  return channels;
+}
+
 // Helper function to upload image to LinkedIn using the v2 Assets API
 async function uploadImageToLinkedIn(
   imageUrl: string,
@@ -637,6 +655,25 @@ export async function POST(request: Request) {
         })
         .eq("id", post.id);
 
+      const targetLabel =
+        targetType === "organization"
+          ? ((Array.isArray(connection.orgs) ? connection.orgs : []) as Array<{
+              id?: string;
+              urn?: string;
+              name?: string;
+            }>).find((org) => {
+              const normalizedUrn =
+                typeof org?.urn === "string" && org.urn.trim()
+                  ? org.urn.trim()
+                  : typeof org?.id === "string" && org.id.trim()
+                    ? `urn:li:organization:${org.id.trim()}`
+                    : null;
+              return normalizedUrn === targetUrn;
+            })?.name || null
+          : (typeof connection.profile_name === "string" && connection.profile_name.trim()
+              ? connection.profile_name.trim()
+              : null);
+
       const requestImageUrls = Array.isArray(body.imageUrls)
         ? body.imageUrls.filter((url) => typeof url === "string" && url.length > 0)
         : [];
@@ -698,6 +735,16 @@ export async function POST(request: Request) {
       );
 
       if (result.success) {
+        const publishResults = asRecord(post.publish_results);
+        publishResults.linkedin = {
+          status: "published",
+          published_at: new Date().toISOString(),
+          target_type: targetType,
+          target_urn: targetUrn,
+          target_label: targetLabel,
+          linkedin_post_urn: result.postUrn || null,
+        };
+
         // Update post status
         await supabase
           .from("posts")
@@ -705,6 +752,8 @@ export async function POST(request: Request) {
             status: "posted",
             posted_at: new Date().toISOString(),
             linkedin_post_urn: result.postUrn || null,
+            publish_channels: mergePublishChannels(post.publish_channels, "linkedin"),
+            publish_results: publishResults,
             error_message: null,
           })
           .eq("id", post.id);

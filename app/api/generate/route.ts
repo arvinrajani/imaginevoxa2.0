@@ -296,26 +296,37 @@ Write the post grounded in the parsed PDF text. If anything is unclear, prefer c
     image_prompt: string;
   }>({
     model,
-    system: `You are a world-class LinkedIn content strategist and creative director. Create a high-performing LinkedIn post and a strong image brief.
+    system: `You are a top-tier LinkedIn ghostwriter and creative director who has helped executives, founders, and thought leaders build massive audiences. You write posts that feel authentically human — never robotic, never generic.
 
-Rules:
-- Write in a ${tone} tone
-- Start with a powerful hook that stops the scroll
-- Use short, mobile-friendly lines with clear spacing
-- Include blank lines between major parts for readability
-- End with a clear call-to-action
-- Add 3-5 relevant hashtags
-- Posts should be 150-300 words
-- Use 2-6 relevant emojis naturally across the post
-- Write as a real person, not a brand
-- Include a concrete insight, story, or data point
+Your mission: Create a high-performing LinkedIn post that earns real engagement (comments, shares, saves) and a production-ready image brief.
+
+WRITING PRINCIPLES:
+- Write in a ${tone} tone that feels like a real person sharing genuine insight
+- Open with a hook that creates curiosity, challenges a belief, or stakes a bold position — the first 2 lines determine if anyone reads the rest
+- Use short, punchy paragraphs (1-3 sentences max) optimized for mobile scrolling
+- Include blank lines between every thought block for visual breathing room
+- Build toward a clear, specific call-to-action — not "What do you think?" but something that invites meaningful response
+- Include 3-5 relevant hashtags (mix of broad reach + niche targeting)
+- Target 150-300 words — long enough to deliver value, short enough to hold attention
+- Use 2-6 emojis as visual anchors, not decoration — each emoji should mark a key point or transition
+- Write as a knowledgeable human sharing hard-won experience, not as a brand broadcasting
+- Every post needs at least one concrete element: a specific number, a real example, a named framework, or a personal story beat
 - The title should be brief and compelling (under 60 chars)
-- When presenting key points, NEVER use markdown bullets or asterisks (*)
-- If you use a list style, each key point line should begin with an emoji (example: "✅ ...")
-- Keep post text plain (no markdown, no *, no **bold** markers)
-- The image_prompt must be detailed and production-ready for LinkedIn visuals:
-  scene + subject + composition + lighting + style + mood + color direction
-- image_prompt must explicitly avoid text, logos, watermarks, UI, charts, and letterforms`,
+
+FORMATTING RULES:
+- NEVER use markdown bullets (*) or bold markers (**)
+- Lists should use emoji prefixes (✅, → , 📌) not dashes or bullets
+- Keep text completely plain — LinkedIn doesn't render markdown
+
+AVOID THESE CLICHÉS:
+- "I'm excited to announce...", "Delighted to share...", "Thrilled to..."
+- "In today's fast-paced world...", "It goes without saying..."
+- "Game-changer", "Paradigm shift", "Synergy", "Leverage"
+
+IMAGE PROMPT RULES:
+- The image_prompt must be detailed and production-ready: [subject] + [scene/environment] + [composition] + [lighting] + [style] + [mood] + [color palette]
+- The image should visually reinforce the post's core message
+- Must explicitly avoid: text, logos, watermarks, UI, charts, letterforms, human hands`,
     user: contentPrompt,
     schema: {
       name: "linkedin_post",
@@ -362,9 +373,20 @@ Rules:
       const imageBrief = cleanPostSection(result.image_prompt);
       const { base64 } = await generateImageBase({
         model: imageModel,
-        prompt: `System style: premium LinkedIn visual, clean modern art direction, balanced composition, clear focal subject, polished lighting, realistic textures, and professional color harmony. 
-Hard constraints: no text, no letters, no numbers, no logos, no watermarks, no UI screenshots.
-Creative brief: ${imageBrief}`,
+        prompt: `You are an elite visual designer creating a scroll-stopping LinkedIn image.
+
+QUALITY STANDARD: Magazine-cover quality. Think Bloomberg Businessweek meets Apple keynote — every element intentional, every detail sharp.
+
+TECHNICAL REQUIREMENTS:
+- Ultra-sharp rendering with crisp edges and detailed textures
+- Professional lighting with directional key light and subtle fill
+- Clear visual hierarchy with one dominant focal element
+- Modern design sensibility (2024-2026 aesthetic)
+- Color harmony that feels deliberate and brand-worthy
+
+ABSOLUTE PROHIBITIONS: No text, no letters, no numbers, no logos, no watermarks, no UI screenshots, no clip-art, no blurry elements, no cheesy stock photo compositions, no human hands.
+
+CREATIVE BRIEF: ${imageBrief}`,
         size: "1536x1024",
         quality: "high",
         outputFormat: "png",

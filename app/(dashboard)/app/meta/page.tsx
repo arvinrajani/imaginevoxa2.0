@@ -21,7 +21,9 @@ import {
 type MetaPage = {
   id: string;
   name: string;
+  picture_url: string | null;
   instagram_business_account_id: string | null;
+  instagram_name: string | null;
   instagram_username: string | null;
   instagram_profile_picture_url: string | null;
   category: string;
@@ -39,6 +41,7 @@ export default function MetaPage() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [savingDefaults, setSavingDefaults] = useState<"facebook" | "instagram" | null>(null);
   const [connection, setConnection] = useState<MetaConnection | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +93,35 @@ export default function MetaPage() {
       setError("Failed to disconnect Meta.");
     } finally {
       setDisconnecting(false);
+    }
+  };
+
+  const updateDefaults = async (payload: {
+    defaultFacebookPageId?: string | null;
+    defaultInstagramAccountId?: string | null;
+  }) => {
+    setSavingDefaults(
+      payload.defaultInstagramAccountId !== undefined ? "instagram" : "facebook"
+    );
+    setError(null);
+    try {
+      const response = await fetch("/api/meta/connection", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError((result as { error?: string } | null)?.error || "Failed to update Meta defaults.");
+        return;
+      }
+
+      setConnection(result as MetaConnection);
+    } catch {
+      setError("Failed to update Meta defaults.");
+    } finally {
+      setSavingDefaults(null);
     }
   };
 
@@ -257,16 +289,39 @@ export default function MetaPage() {
                       className="rounded-xl border border-slate-200/50 bg-slate-50/40 p-4 transition-all hover:border-[#1877F2]/30"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1877F2] to-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                          {page.name.charAt(0).toUpperCase()}
-                        </div>
+                        {page.picture_url ? (
+                          <img
+                            src={page.picture_url}
+                            alt={page.name}
+                            className="w-10 h-10 rounded-xl border border-slate-200 object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1877F2] to-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                            {page.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm text-slate-900 truncate">
                             {page.name}
                           </p>
                           <p className="text-xs text-gray-400">{page.category}</p>
                         </div>
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                        {connection?.default_facebook_page_id === page.id ? (
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            Default
+                          </span>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px]"
+                            onClick={() => updateDefaults({ defaultFacebookPageId: page.id })}
+                            disabled={savingDefaults !== null}
+                          >
+                            {savingDefaults === "facebook" ? "Saving..." : "Set default"}
+                          </Button>
+                        )}
                       </div>
 
                       {/* Linked Instagram preview */}
@@ -398,13 +453,32 @@ export default function MetaPage() {
                           <p className="font-semibold text-sm text-slate-900">
                             {page.instagram_username
                               ? `@${page.instagram_username}`
-                              : "Instagram Profile"}
+                              : page.instagram_name || "Instagram Profile"}
                           </p>
                           <p className="text-xs text-gray-400">
                             via {page.name}
                           </p>
                         </div>
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                        {connection?.default_instagram_account_id === page.instagram_business_account_id ? (
+                          <span className="rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700">
+                            Default
+                          </span>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px]"
+                            onClick={() =>
+                              updateDefaults({
+                                defaultInstagramAccountId: page.instagram_business_account_id,
+                              })
+                            }
+                            disabled={savingDefaults !== null}
+                          >
+                            {savingDefaults === "instagram" ? "Saving..." : "Set default"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -42,13 +42,19 @@ export async function GET(request: Request) {
           return { ...item, signed_url: null };
         }
 
+        const indexedOnly =
+          Array.isArray(item.tags) && item.tags.includes('indexed-only');
+        if (indexedOnly) {
+          return { ...item, signed_url: null };
+        }
+
         const signed = await admin.storage
           .from(EVIDENCE_STORAGE_BUCKET)
           .createSignedUrl(item.file_path, 60 * 60);
 
         return {
           ...item,
-          signed_url: signed.data?.signedUrl || null,
+          signed_url: signed.error ? null : signed.data?.signedUrl || null,
         };
       })
     );

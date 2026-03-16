@@ -1,5 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+/* Turbopack on Windows is resolving CSS package imports from C:\Projects instead of the app root. */
+@import "../node_modules/tailwindcss/index.css";
+@import "../node_modules/tw-animate-css/dist/tw-animate.css";
 @import "../styles/animations.css";
 
 @custom-variant dark (&:is(.dark *));

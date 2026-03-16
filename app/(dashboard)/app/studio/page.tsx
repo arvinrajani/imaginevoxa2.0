@@ -28,6 +28,7 @@ import {
   Tag,
   Loader2,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -94,6 +95,7 @@ type Product = {
   id: string;
   name: string;
   brand_id: string;
+  description?: string | null;
 };
 
 interface BrandKit {
@@ -146,6 +148,15 @@ type BrandIntelligence = {
   brandDescription: string | null;
   website: string | null;
   analyzedAt: string | null;
+  tone: string | null;
+  imageStyle: string | null;
+  postTypes: string[];
+  contentPillars: string[];
+  ctaStyle: string | null;
+  visualDensity: string | null;
+  primaryColors: string[];
+  accentColors: string[];
+  colorNames: Record<string, string>;
 };
 
 type NewBrandForm = {
@@ -156,7 +167,15 @@ type NewBrandForm = {
 };
 
 type AnalysisResult = {
+  tone?: string;
   primary_colors?: string[];
+  accent_colors?: string[];
+  color_names?: Record<string, string>;
+  image_style?: string;
+  post_types?: string[];
+  content_pillars?: string[];
+  cta_style?: string;
+  visual_density?: string;
   brand_name?: string;
   brand_description?: string;
   industry?: string;
@@ -196,6 +215,40 @@ function asStringList(value: unknown): string[] {
   return value
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
     .filter(Boolean);
+}
+
+function mergeDistinctStrings(...values: Array<string[] | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const list of values) {
+    if (!Array.isArray(list)) continue;
+
+    for (const item of list) {
+      const normalized = typeof item === 'string' ? item.trim() : '';
+      const key = normalized.toLowerCase();
+      if (!normalized || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(normalized);
+    }
+  }
+
+  return merged;
+}
+
+function isAutoPlaceholderBrand(
+  brand: Pick<Brand, 'name' | 'description'> | null | undefined
+) {
+  if (!brand) return false;
+
+  const name = typeof brand.name === 'string' ? brand.name.trim() : '';
+  const description =
+    typeof brand.description === 'string' ? brand.description.trim().toLowerCase() : '';
+
+  return (
+    name === 'My Brand' &&
+    (description === 'default brand for pro studio' || description === 'default brand for studio')
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -275,9 +328,11 @@ export default function StudioPage() {
     mutating: evidenceMutating,
     toggleEvidence,
     clearSelection: clearSelectedEvidence,
-    uploadFileEvidence,
+    deleteEvidenceByIds,
+    uploadFilesEvidence,
     createUrlEvidence,
     createNoteEvidence,
+    reextractPdfEvidence,
   } = useEvidenceLocker(selectedBrand?.id || null);
 
   // Onboarding wizard state
@@ -295,6 +350,7 @@ export default function StudioPage() {
   const [newProductName, setNewProductName] = useState('');
   const [newProductDescription, setNewProductDescription] = useState('');
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const [deletingBrandId, setDeletingBrandId] = useState<string | null>(null);
 
   // Derived: brands filtered by selected company (include orphan brands with null company_id)
   const filteredBrands = useMemo(
@@ -310,10 +366,45 @@ export default function StudioPage() {
     [products, selectedBrand]
   );
 
+  const analyzerProducts = useMemo(
+    () => mergeDistinctStrings(
+      filteredProducts.map((product) => product.name),
+      brandIntelligence?.products || []
+    ),
+    [filteredProducts, brandIntelligence?.products]
+  );
+
+  const analyzerOfferings = useMemo(
+    () => mergeDistinctStrings(
+      brandIntelligence?.offerings || [],
+      filteredProducts
+        .map((product) => product.description || '')
+        .filter((description): description is string => Boolean(description))
+    ),
+    [filteredProducts, brandIntelligence?.offerings]
+  );
+
+  const analysisProfile = useMemo(
+    () => ({
+      tone: brandIntelligence?.tone || null,
+      imageStyle: brandIntelligence?.imageStyle || null,
+      postTypes: brandIntelligence?.postTypes || [],
+      contentPillars: brandIntelligence?.contentPillars || [],
+      targetAudience: brandIntelligence?.targetAudience || null,
+      businessFocus: brandIntelligence?.businessFocus || null,
+      tagline: brandIntelligence?.tagline || null,
+      website: brandIntelligence?.website || selectedBrand?.website || null,
+      brandDescription: brandIntelligence?.brandDescription || selectedBrand?.description || null,
+      ctaStyle: brandIntelligence?.ctaStyle || null,
+      visualDensity: brandIntelligence?.visualDensity || null,
+    }),
+    [brandIntelligence, selectedBrand?.description, selectedBrand?.website]
+  );
+
   // Derived: PDF-extracted images from the evidence locker (kept in sync after every upload)
   const pdfEvidenceImages = useMemo(
-    () =>
-      evidence
+    () => {
+      const extractedImages = evidence
         .filter(
           (item) =>
             item.type === 'image' &&
@@ -325,13 +416,37 @@ export default function StudioPage() {
         .map((item) => ({
           id: item.id,
           title: item.title,
+          tags: item.tags,
           signed_url: item.signed_url as string,
-        })),
-    [evidence]
+        }));
+
+      if (selectedEvidenceIds.length === 0) {
+        return extractedImages.map(({ id, title, signed_url }) => ({
+          id,
+          title,
+          signed_url,
+        }));
+      }
+
+      const selectedSourceTags = new Set(
+        selectedEvidenceIds.map((id) => `pdf-source-${id}`)
+      );
+      const matchedImages = extractedImages.filter((item) =>
+        item.tags.some((tag) => selectedSourceTags.has(tag))
+      );
+      const finalImages = matchedImages.length > 0 ? matchedImages : extractedImages;
+
+      return finalImages.map(({ id, title, signed_url }) => ({
+        id,
+        title,
+        signed_url,
+      }));
+    },
+    [evidence, selectedEvidenceIds]
   );
 
   const studioPdfEvidence = useMemo(
-    () => evidence.filter((item) => item.type === 'pdf').slice(0, 6),
+    () => evidence.filter((item) => item.type === 'pdf'),
     [evidence]
   );
 
@@ -435,17 +550,28 @@ export default function StudioPage() {
           }
         }
 
+        const storedChannels = Array.isArray(post.publish_channels)
+          ? post.publish_channels.filter((channel: unknown): channel is PostChannel =>
+              channel === 'linkedin' || channel === 'facebook' || channel === 'instagram'
+            )
+          : [];
+        const selectedChannels = storedChannels.length > 0 ? storedChannels : ['linkedin'];
+        const primaryChannel = selectedChannels.includes('linkedin')
+          ? 'linkedin'
+          : selectedChannels[0];
+
         const loadedPost: ConfirmedPost = {
           headline,
           body,
           cta,
           hashtags,
           imageUrl: post.image_url || undefined,
-          selectedChannels: ['linkedin', 'facebook', 'instagram'],
-          primaryChannel: 'linkedin',
+          selectedChannels,
+          primaryChannel,
         };
 
         setConfirmedPost(loadedPost);
+        setDraftPostId(post.id);
         if (post.image_url) {
           setConfirmedImageUrl(post.image_url);
         }
@@ -481,7 +607,11 @@ export default function StudioPage() {
   }, [workspaceBrand?.id, brands]);
 
   useEffect(() => {
-    if (!selectedBrand) return;
+    if (!selectedBrand) {
+      lastSyncedBrandIdRef.current = null;
+      setWorkspaceBrand(null);
+      return;
+    }
     if (lastSyncedBrandIdRef.current === selectedBrand.id) return; // originated from workspace, skip
     lastSyncedBrandIdRef.current = selectedBrand.id;
     setWorkspaceBrand({
@@ -491,7 +621,7 @@ export default function StudioPage() {
       industry: selectedBrand.industry ?? null,
       website: selectedBrand.website ?? null,
     });
-  }, [selectedBrand?.id, setWorkspaceBrand]);
+  }, [selectedBrand, setWorkspaceBrand]);
 
   // --- Data Loading ---
 
@@ -530,53 +660,21 @@ export default function StudioPage() {
       if (error) throw error;
 
       let resolvedBrands = (data || []) as Brand[];
+      const placeholderBrandIds = resolvedBrands
+        .filter((brand) => isAutoPlaceholderBrand(brand))
+        .map((brand) => brand.id);
 
-      if (resolvedBrands.length === 0) {
-        // Guard: check again to prevent race-condition duplicates
-        const { data: existingCheck } = await supabase
+      if (placeholderBrandIds.length > 0) {
+        resolvedBrands = resolvedBrands.filter((brand) => !placeholderBrandIds.includes(brand.id));
+
+        const { error: cleanupError } = await supabase
           .from('brands')
-          .select('id, name, owner_user_id, company_id, description, industry, website')
+          .delete()
           .eq('owner_user_id', user.id)
-          .limit(1);
+          .in('id', placeholderBrandIds);
 
-        if (existingCheck && existingCheck.length > 0) {
-          // Another concurrent call already created the brand; use it
-          resolvedBrands = existingCheck as Brand[];
-        } else {
-          const { data: newBrand, error: createError } = await supabase
-            .from('brands')
-            .insert({
-              owner_user_id: user.id,
-              name: 'My Brand',
-              description: 'Default brand for PRO Studio',
-              company_id: resolvedCompanies[0]?.id || null,
-            })
-            .select('id, name, owner_user_id, company_id, description, industry, website')
-            .single();
-
-          if (createError || !newBrand) {
-            throw createError || new Error('Failed to create default brand.');
-          }
-
-          resolvedBrands = [newBrand as Brand];
-        }
-      }
-
-      // Auto-assign orphan brands (null company_id) to the first company
-      if (resolvedCompanies.length > 0) {
-        const orphanBrands = resolvedBrands.filter((b) => !b.company_id);
-        if (orphanBrands.length > 0) {
-          const companyId = resolvedCompanies[0].id;
-          // Update in DB (fire-and-forget)
-          supabase
-            .from('brands')
-            .update({ company_id: companyId })
-            .in('id', orphanBrands.map((b) => b.id))
-            .then(() => { /* ignore */ });
-          // Update locally
-          resolvedBrands = resolvedBrands.map((b) =>
-            !b.company_id ? { ...b, company_id: companyId } : b
-          );
+        if (cleanupError) {
+          console.warn('Failed to cleanup placeholder Studio brands:', cleanupError.message);
         }
       }
 
@@ -600,10 +698,12 @@ export default function StudioPage() {
       if (brandIds.length > 0) {
         const { data: productData } = await supabase
           .from('products')
-          .select('id, name, brand_id')
+          .select('id, name, brand_id, description')
           .in('brand_id', brandIds)
           .order('created_at', { ascending: true });
         setProducts((productData || []) as Product[]);
+      } else {
+        setProducts([]);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load brands';
@@ -625,7 +725,7 @@ export default function StudioPage() {
     try {
       const { data, error } = await supabase
         .from('marketing_dna')
-        .select('analyzed_at, evidence, created_at')
+        .select('analyzed_at, evidence, created_at, tone, image_style, post_types, cta_style, visual_density, primary_colors, accent_colors')
         .eq('brand_id', brandId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -639,6 +739,10 @@ export default function StudioPage() {
       }
 
       const evidence = (data.evidence || {}) as Record<string, unknown>;
+      const colorNames =
+        evidence.color_names && typeof evidence.color_names === 'object' && !Array.isArray(evidence.color_names)
+          ? (evidence.color_names as Record<string, string>)
+          : {};
       const nextIntelligence: BrandIntelligence = {
         products: asStringList(evidence.products),
         offerings: asStringList(evidence.key_offerings),
@@ -648,29 +752,39 @@ export default function StudioPage() {
         brandDescription: asTrimmedString(evidence.brand_description),
         website: asTrimmedString(evidence.website),
         analyzedAt: typeof data.analyzed_at === 'string' ? data.analyzed_at : null,
+        tone: asTrimmedString(data.tone),
+        imageStyle: asTrimmedString(data.image_style),
+        postTypes: asStringList(data.post_types),
+        contentPillars: asStringList(evidence.content_pillars),
+        ctaStyle: asTrimmedString(data.cta_style),
+        visualDensity: asTrimmedString(data.visual_density),
+        primaryColors: asStringList(data.primary_colors),
+        accentColors: asStringList(data.accent_colors),
+        colorNames,
       };
 
       if (selectedBrandIdRef.current === brandId) {
         setBrandIntelligence(nextIntelligence);
 
-        // Also extract colors from evidence if available and no brand_kit colors loaded yet
-        const evidenceColors = asStringList(evidence.primary_colors);
-        if (evidenceColors.length > 0) {
+        const analyzedPalette = mergeDistinctStrings(
+          nextIntelligence.primaryColors,
+          nextIntelligence.accentColors,
+          asStringList(evidence.primary_colors),
+          asStringList(evidence.accent_colors)
+        );
+
+        if (analyzedPalette.length > 0) {
           setBrandColors((prev) => {
             // Only update if still on default colors
             const isDefault = prev.length === 3
               && prev[0] === '#0A66C2'
               && prev[1] === '#0F172A'
               && prev[2] === '#22D3EE';
-            return isDefault ? evidenceColors.slice(0, 6) : prev;
+            return isDefault ? analyzedPalette.slice(0, 6) : prev;
           });
         }
 
-        // Extract color names from evidence if available
-        const colorNames = evidence.color_names;
-        if (colorNames && typeof colorNames === 'object' && !Array.isArray(colorNames)) {
-          setBrandColorNames(colorNames as Record<string, string>);
-        }
+        setBrandColorNames(nextIntelligence.colorNames);
       }
     } catch {
       if (selectedBrandIdRef.current === brandId) {
@@ -747,7 +861,7 @@ export default function StudioPage() {
           name: trimmedName,
           description: newProductDescription.trim() || null,
         })
-        .select('id, name, brand_id')
+        .select('id, name, brand_id, description')
         .single();
       if (error || !createdProduct) throw error || new Error('Could not create product');
       setProducts((prev) => [...prev, createdProduct as Product]);
@@ -828,6 +942,8 @@ export default function StudioPage() {
     setBrandKit(null);
     setLogoUrl('');
     setBrandColors(['#0A66C2', '#0F172A', '#22D3EE']);
+    setBrandColorNames({});
+    setBrandIntelligence(null);
     setSetupStep('welcome');
     setActiveStep(0);
     setConfirmedPost(null);
@@ -842,8 +958,17 @@ export default function StudioPage() {
   // --- Setup Handlers ---
 
   const handleAnalysisComplete = (analysis: AnalysisResult) => {
-    if (analysis?.primary_colors?.length) {
-      setBrandColors(analysis.primary_colors);
+    const analyzedPalette = mergeDistinctStrings(
+      analysis?.primary_colors,
+      analysis?.accent_colors
+    );
+
+    if (analyzedPalette.length) {
+      setBrandColors(analyzedPalette.slice(0, 6));
+    }
+
+    if (analysis?.color_names && typeof analysis.color_names === 'object' && !Array.isArray(analysis.color_names)) {
+      setBrandColorNames(analysis.color_names);
     }
 
     const extractedName =
@@ -891,28 +1016,60 @@ export default function StudioPage() {
       );
     }
 
-    if (extractedName || extractedDescription) {
+    if (
+      extractedName ||
+      extractedDescription ||
+      analyzedPalette.length > 0 ||
+      asTrimmedString(analysis?.tone) ||
+      asTrimmedString(analysis?.image_style)
+    ) {
       setBrandKit((prev) => ({
         brandName: extractedName || prev?.brandName || selectedBrand?.name || '',
-        primaryColors: prev?.primaryColors || [],
+        primaryColors: analysis?.primary_colors?.length ? analysis.primary_colors : prev?.primaryColors || [],
         secondaryColors: prev?.secondaryColors || [],
-        accentColors: prev?.accentColors || [],
+        accentColors: analysis?.accent_colors?.length ? analysis.accent_colors : prev?.accentColors || [],
         logoAssets: prev?.logoAssets || [],
         fontPersonality: prev?.fontPersonality || null,
-        toneGuidelines: prev?.toneGuidelines || [],
-        allowedImageStyles: prev?.allowedImageStyles || [],
+        toneGuidelines:
+          prev?.toneGuidelines?.length
+            ? prev.toneGuidelines
+            : mergeDistinctStrings(analysis?.tone ? [analysis.tone] : []),
+        allowedImageStyles:
+          prev?.allowedImageStyles?.length
+            ? prev.allowedImageStyles
+            : mergeDistinctStrings(analysis?.image_style ? [analysis.image_style] : []),
       }));
     }
 
     setBrandIntelligence({
-      products: asStringList(analysis?.products),
-      offerings: asStringList(analysis?.key_offerings),
+      products: mergeDistinctStrings(
+        asStringList(analysis?.products),
+        filteredProducts.map((product) => product.name)
+      ),
+      offerings: mergeDistinctStrings(
+        asStringList(analysis?.key_offerings),
+        filteredProducts
+          .map((product) => product.description || '')
+          .filter((description): description is string => Boolean(description))
+      ),
       targetAudience: asTrimmedString(analysis?.target_audience),
       businessFocus: asTrimmedString(analysis?.business_focus),
       tagline: asTrimmedString(analysis?.tagline),
       brandDescription: extractedDescription || asTrimmedString(analysis?.brand_description),
       website: extractedWebsite || asTrimmedString(analysis?.website),
       analyzedAt: new Date().toISOString(),
+      tone: asTrimmedString(analysis?.tone),
+      imageStyle: asTrimmedString(analysis?.image_style),
+      postTypes: asStringList(analysis?.post_types),
+      contentPillars: asStringList(analysis?.content_pillars),
+      ctaStyle: asTrimmedString(analysis?.cta_style),
+      visualDensity: asTrimmedString(analysis?.visual_density),
+      primaryColors: asStringList(analysis?.primary_colors),
+      accentColors: asStringList(analysis?.accent_colors),
+      colorNames:
+        analysis?.color_names && typeof analysis.color_names === 'object' && !Array.isArray(analysis.color_names)
+          ? analysis.color_names
+          : {},
     });
 
     setSetupStep('style');
@@ -1475,6 +1632,37 @@ export default function StudioPage() {
       setProductNameInput('');
     };
 
+    const handleDeleteBrand = async (brandId: string) => {
+      setDeletingBrandId(brandId);
+      try {
+        const { error } = await supabase
+          .from('brands')
+          .delete()
+          .eq('id', brandId);
+
+        if (error) throw error;
+
+        setBrands((prev) => {
+          const nextBrands = prev.filter((brand) => brand.id !== brandId);
+          if (selectedBrand?.id === brandId) {
+            const nextSelected =
+              (selectedCompany
+                ? nextBrands.find((brand) => brand.company_id === selectedCompany.id)
+                : nextBrands[0]) || null;
+            setSelectedBrand(nextSelected);
+          }
+          return nextBrands;
+        });
+        toast.success('Brand removed');
+      } catch (err) {
+        toast.error('Failed to delete brand', {
+          description: err instanceof Error ? err.message : '',
+        });
+      } finally {
+        setDeletingBrandId(null);
+      }
+    };
+
     const handleFinishOnboarding = async () => {
       const targetBrand = selectedBrand ?? brands[0];
       if (targetBrand && onboardProducts.length > 0) {
@@ -1491,8 +1679,8 @@ export default function StudioPage() {
     };
 
     const userBrands = selectedCompany
-      ? brands.filter(b => b.company_id === selectedCompany.id)
-      : brands.filter(b => b.name !== 'My Brand');
+      ? brands.filter((brand) => brand.company_id === selectedCompany.id && !isAutoPlaceholderBrand(brand))
+      : brands.filter((brand) => !isAutoPlaceholderBrand(brand));
 
     return (
       <div className="relative min-h-[84vh] flex items-center justify-center overflow-hidden">
@@ -1593,7 +1781,22 @@ export default function StudioPage() {
                           {brand.name.charAt(0).toUpperCase()}
                         </div>
                         <span className="font-medium text-gray-900">{brand.name}</span>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-auto" />
+                        <div className="ml-auto flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteBrand(brand.id)}
+                            disabled={deletingBrandId === brand.id}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            aria-label={`Delete ${brand.name}`}
+                          >
+                            {deletingBrandId === brand.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1805,8 +2008,8 @@ export default function StudioPage() {
                 description: selectedBrand.description || undefined,
                 industry: selectedBrand.industry || undefined,
                 website: selectedBrand.website || undefined,
-                products: brandIntelligence?.products || [],
-                offerings: brandIntelligence?.offerings || [],
+                products: analyzerProducts,
+                offerings: analyzerOfferings,
                 targetAudience: brandIntelligence?.targetAudience || undefined,
               }}
               onAnalysisComplete={handleAnalysisComplete}
@@ -2041,21 +2244,24 @@ export default function StudioPage() {
                     className="text-xs border-cyan-200 text-cyan-700 hover:bg-cyan-50"
                   >
                     <FileText className="w-3.5 h-3.5 mr-1.5" />
-                    Brand Knowledge PDFs
+                    Knowledge Base
                   </Button>
                 </div>
                 <div className="mt-3 rounded-xl border border-cyan-200/60 bg-cyan-50/40 px-3 py-2 text-xs text-cyan-800">
-                  <span className="font-semibold">Knowledge grounding:</span>{' '}
+                  <span className="font-semibold">Knowledge base:</span>{' '}
                   {selectedEvidence.length > 0
                     ? `${selectedEvidence.length} source${selectedEvidence.length === 1 ? '' : 's'} selected for generation`
-                    : 'No sources selected. Add PDFs or notes to ground your post with brand knowledge.'}
+                    : 'No PDFs selected. Upload product PDFs to ground the post with real source knowledge.'}
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500">
+                  Selected PDFs send extracted text and summaries into generation automatically.
                 </div>
                 {(studioPdfEvidence.length > 0 || pdfEvidenceImages.length > 0) && (
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Studio Source Library
+                          Knowledge Base
                         </p>
                         <p className="mt-1 text-sm font-semibold text-slate-900">
                           {studioPdfEvidence.length} saved PDF{studioPdfEvidence.length === 1 ? '' : 's'}
@@ -2073,7 +2279,7 @@ export default function StudioPage() {
                         onClick={() => setEvidenceModalOpen(true)}
                         className="text-xs border-slate-300 bg-white"
                       >
-                        Manage Studio Files
+                        Manage PDFs
                       </Button>
                     </div>
                     {studioPdfEvidence.length > 0 && (
@@ -2098,7 +2304,7 @@ export default function StudioPage() {
                                   </p>
                                   <p className="mt-1 text-xs text-slate-600">
                                     {item.description?.trim() ||
-                                      'PDF source saved in the Evidence Locker for reusable post grounding.'}
+                                      'PDF source saved in the knowledge base for reusable post grounding.'}
                                   </p>
                                 </div>
                                 <Badge className={selected ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-600'}>
@@ -2134,6 +2340,15 @@ export default function StudioPage() {
                 logoUrl={logoUrl}
                 evidenceContext={selectedEvidenceContext}
                 evidenceIds={selectedEvidenceIds}
+                analysisProfile={analysisProfile}
+                brandComplianceRules={{
+                  styleRules:
+                    brandKit?.toneGuidelines?.length
+                      ? brandKit.toneGuidelines
+                      : analysisProfile.tone
+                        ? [analysisProfile.tone]
+                        : [],
+                }}
                 initialTopic={searchParams.get('topic') ?? undefined}
                 onPostGenerated={(post, postId) => {
                   if (postId) setDraftPostId(postId);
@@ -2156,7 +2371,7 @@ export default function StudioPage() {
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">Create Your Image</h2>
                       <p className="text-sm text-slate-600">
-                        Add your logo, enter your wording, choose a tone � AI creates a branded LinkedIn image
+                        AI uses your confirmed post automatically. Optional settings can refine the image if needed.
                       </p>
                     </div>
                   </div>
@@ -2183,10 +2398,13 @@ export default function StudioPage() {
                 productName={selectedProduct?.name}
                 brandColors={brandColors}
                 logoUrl={logoUrl}
+                analysisProfile={analysisProfile}
                 confirmedPostText={confirmedPost ? `${confirmedPost.headline}\n\n${confirmedPost.body}` : undefined}
                 confirmedPostHeadline={confirmedPost?.headline}
+                confirmedPostImagePrompt={confirmedPost?.imagePrompt}
                 onImageConfirmed={handleImageConfirmedFromCreator}
                 onImageGenerated={handleImageAutoSync}
+                onBrandColorsChange={setBrandColors}
                 pdfImages={pdfEvidenceImages}
               />
             </Card>
@@ -2251,6 +2469,7 @@ export default function StudioPage() {
                 brandColors={brandColors}
                 logoUrl={logoUrl}
                 brandId={selectedBrand.id}
+                draftPostId={draftPostId}
                 onGoToStep={goToStep}
                 selectedChannels={confirmedPost?.selectedChannels || ['linkedin']}
                 primaryChannel={confirmedPost?.primaryChannel || 'linkedin'}
@@ -2348,7 +2567,9 @@ export default function StudioPage() {
           mutating={evidenceMutating}
           onToggleEvidence={toggleEvidence}
           onClearSelection={clearSelectedEvidence}
-          onUploadFile={uploadFileEvidence}
+          onDeleteEvidenceIds={deleteEvidenceByIds}
+          onReextractPdfEvidence={reextractPdfEvidence}
+          onUploadFiles={uploadFilesEvidence}
           onCreateUrl={createUrlEvidence}
           onCreateNote={createNoteEvidence}
         />

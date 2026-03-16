@@ -34,6 +34,19 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 const STORAGE_KEY_BRAND = 'voxa_active_brand_id';
 const STORAGE_KEY_COMPANY = 'voxa_active_company_id';
 
+function isAutoPlaceholderBrand(brand: WorkspaceBrand | null | undefined) {
+  if (!brand) return false;
+
+  const name = typeof brand.name === 'string' ? brand.name.trim() : '';
+  const description =
+    typeof brand.description === 'string' ? brand.description.trim().toLowerCase() : '';
+
+  return (
+    name === 'My Brand' &&
+    (description === 'default brand for pro studio' || description === 'default brand for studio')
+  );
+}
+
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -86,7 +99,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           .order('created_at', { ascending: true }),
       ]);
 
-      const loadedBrands = (brandsResult.data || []) as WorkspaceBrand[];
+      const loadedBrands = ((brandsResult.data || []) as WorkspaceBrand[]).filter(
+        (brand) => !isAutoPlaceholderBrand(brand)
+      );
       const loadedCompanies = (companiesResult.data || []) as WorkspaceCompany[];
 
       setBrands(loadedBrands);

@@ -13,13 +13,15 @@ import {
   Check,
   Palette,
   Globe,
-  Zap,
   AlertTriangle,
   Crown,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import type { BillingAlert, BillingSnapshot } from '@/lib/billing/client';
+import { useBillingSnapshot } from '@/lib/billing/use-billing-snapshot';
 import { createClient } from '@/lib/supabase/client';
 
 type SettingsTab = 'profile' | 'billing' | 'notifications' | 'security' | 'data';
@@ -32,22 +34,29 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'data', label: 'Data & Privacy', icon: Download },
 ];
 
-// Plan configurations
-const PLANS = {
-  starter: { name: 'Starter', price: 30, credits: 25, features: ['25 posts/month', 'PDF, image, and video uploads', 'Manual LinkedIn publishing'] },
-  pro: { name: 'Pro', price: 40, credits: 30, features: ['30 posts/month', 'Everything included', 'Direct LinkedIn posting', 'Voxa 1.0 image generation'] },
-  business: { name: 'Pro+', price: 70, credits: 60, features: ['60 posts/month', 'Everything in Pro', 'Voxa 1.5 image generation', 'Team collaboration', 'Priority support'] }
+type UserData = BillingSnapshot;
+
+const BILLING_ALERT_STYLES: Record<BillingAlert['tone'], string> = {
+  info: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
+  error: 'border-red-200 bg-red-50 text-red-800',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
 };
 
-type UserData = {
-  id: string;
-  name: string;
-  email: string;
-  plan: 'starter' | 'pro' | 'business';
-  creditsUsed: number;
-  creditsTotal: number;
-  memberSince: string;
-};
+function formatBillingEventTitle(type: string) {
+  const normalized = String(type || 'billing_update')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+
+  if (!normalized) return 'Billing update';
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function formatBillingAmount(amount: number | null) {
+  if (typeof amount !== 'number' || Number.isNaN(amount)) return null;
+  const prefix = amount > 0 ? '+' : '';
+  return `${prefix}${amount}`;
+}
 
 function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate: () => void }) {
   const [name, setName] = useState(userData.name);
@@ -60,7 +69,7 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
 
     await supabase
       .from('profiles')
-      .upsert({ id: userData.id, full_name: name });
+      .upsert({ id: userData.userId, full_name: name });
 
     setIsSaving(false);
     setSaved(true);
@@ -177,64 +186,112 @@ function ProfileSettings({ userData, onUpdate }: { userData: UserData; onUpdate:
   );
 }
 
-function BillingSettings({ userData }: { userData: UserData }) {
-  const plan = PLANS[userData.plan];
-  const creditsRemaining = Math.max(0, userData.creditsTotal - userData.creditsUsed);
-  const creditPercentage = userData.creditsTotal > 0 ? (userData.creditsUsed / userData.creditsTotal) * 100 : 0;
+function BillingSettings({
+  userData,
+  onRefresh,
+  isRefreshing,
+}: {
+  userData: UserData;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
+  const creditsRemaining = userData.creditsUnlimited ? null : Math.max(0, userData.creditsRemaining);
+  const creditPercentage =
+    !userData.creditsUnlimited && userData.creditsTotal > 0
+      ? (userData.creditsUsed / userData.creditsTotal) * 100
+      : 0;
 
-  // Calculate days until reset
   const now = new Date();
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const daysUntilReset = Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const fallbackPeriodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const periodEnd = userData.subscriptionPeriodEnd
+    ? new Date(userData.subscriptionPeriodEnd)
+    : fallbackPeriodEnd;
+  const hasPeriodEnd = Number.isFinite(periodEnd.getTime());
+  const daysUntilReset = hasPeriodEnd
+    ? Math.max(0, Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    : null;
 
   return (
     <div className="space-y-6">
-      {/* Current Plan */}
-      <div className={`rounded-2xl p-6 text-white ${userData.plan === 'starter'
-          ? 'bg-gradient-to-br from-gray-600 to-gray-700'
-          : 'bg-gradient-to-br from-violet-500 to-blue-600'
-        }`}>
-        <div className="flex items-center gap-2 mb-4">
-          {userData.plan !== 'starter' && <Crown className="h-5 w-5 text-amber-300" />}
-          <span className="font-semibold">{plan.name} Plan</span>
+      {userData.alerts.length > 0 && (
+        <div className="space-y-3">
+          {userData.alerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`rounded-xl border px-4 py-3 ${BILLING_ALERT_STYLES[alert.tone]}`}
+            >
+              <p className="text-sm font-semibold">{alert.title}</p>
+              <p className="mt-1 text-sm opacity-90">{alert.description}</p>
+            </div>
+          ))}
         </div>
-        <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-4xl font-bold">${plan.price}</span>
-          <span className="text-gray-500">/month</span>
+      )}
+
+      <div
+        className={`rounded-2xl p-6 text-white ${userData.plan === 'starter'
+            ? 'bg-gradient-to-br from-slate-700 to-slate-800'
+            : 'bg-gradient-to-br from-violet-500 to-blue-600'
+          }`}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              {userData.plan !== 'starter' && <Crown className="h-5 w-5 text-amber-300" />}
+              <span className="font-semibold">{userData.planName} Plan</span>
+              {userData.subscriptionStatus ? (
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/90">
+                  {userData.subscriptionStatus.replace(/_/g, ' ')}
+                </span>
+              ) : null}
+              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/90">
+                {userData.billingSource === 'live' ? 'Live sync' : 'Estimated'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-4xl font-bold">${userData.planPriceMonthly}</span>
+              <span className="text-white/70">/month</span>
+            </div>
+            {userData.plan === 'starter' ? (
+              <p className="text-white/85 mb-4 max-w-xl">
+                Upgrade to unlock direct publishing, better image generation, and more monthly credits.
+              </p>
+            ) : userData.plan === 'pro' ? (
+              <p className="text-white/85 mb-4 max-w-xl">
+                Pro is active. Move to Pro+ if you need more credits and collaboration capacity.
+              </p>
+            ) : (
+              <p className="text-white/85 mb-4 max-w-xl">
+                Pro+ is active with the highest credit tier and the most complete Studio workflow.
+              </p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            className="border-white/30 bg-white/10 text-white hover:bg-white/20"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh Billing
+          </Button>
         </div>
-        {userData.plan === 'starter' ? (
-          <p className="text-gray-600 mb-4">
-            You&apos;re on the Starter plan. Upgrade to unlock Voxa image generation and direct publishing!
-          </p>
-        ) : userData.plan === 'pro' ? (
-          <p className="text-gray-600 mb-4">
-            You&apos;re on the Pro plan. Upgrade to Pro+ for higher posting limits.
-          </p>
-        ) : (
-          <p className="text-gray-600 mb-4">
-            Thanks for being a Pro+ member!
-          </p>
-        )}
+
         <div className="flex gap-3">
           <Link href="/pricing">
             <Button className="bg-white text-violet-600 hover:bg-gray-100">
               {userData.plan === 'starter' ? 'Upgrade Plan' : 'Change Plan'}
             </Button>
           </Link>
-          <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-100">
-            Cancel Subscription
-          </Button>
         </div>
       </div>
 
-      {/* Plan Features */}
       <div className="bg-white rounded-xl p-6 border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Plan Features
         </h3>
         <ul className="space-y-3">
-          {plan.features.map((feature, i) => (
-            <li key={i} className="flex items-center gap-3 text-gray-600">
+          {userData.planFeatures.map((feature, index) => (
+            <li key={`${feature}-${index}`} className="flex items-center gap-3 text-gray-600">
               <Check className="h-5 w-5 text-green-500" />
               {feature}
             </li>
@@ -242,42 +299,84 @@ function BillingSettings({ userData }: { userData: UserData }) {
         </ul>
       </div>
 
-      {/* Credits Usage */}
       <div className="bg-white rounded-xl p-6 border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Credits Usage
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Credits Usage
+          </h3>
+          {hasPeriodEnd ? (
+            <span className="text-xs text-gray-500">
+              Current period ends {periodEnd.toLocaleDateString()}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-baseline gap-2 mb-3">
           <span className="text-3xl font-bold text-gray-900">
-            {creditsRemaining}
+            {userData.creditsUnlimited ? 'Unlimited' : creditsRemaining}
           </span>
-          <span className="text-gray-500">/ {userData.creditsTotal} credits remaining</span>
+          <span className="text-gray-500">
+            {userData.creditsUnlimited ? 'credits available' : `/ ${userData.creditsTotal} credits remaining`}
+          </span>
         </div>
         <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, 100 - creditPercentage)}%` }}
+            animate={{ width: userData.creditsUnlimited ? '100%' : `${Math.min(100, 100 - creditPercentage)}%` }}
             className="h-full bg-voxa-gradient rounded-full"
           />
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">{userData.creditsUsed} credits used this month</span>
-          <span className="text-gray-500">Resets in {daysUntilReset} days</span>
+        <div className="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+          <span>{userData.creditsUsed} credits used this billing period</span>
+          <span>
+            {daysUntilReset === null ? 'Billing period end unavailable' : `Resets in ${daysUntilReset} day${daysUntilReset === 1 ? '' : 's'}`}
+          </span>
         </div>
       </div>
 
-      {/* Billing History */}
       <div className="bg-white rounded-xl p-6 border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Billing History
+          Recent Billing Activity
         </h3>
-        <div className="text-center py-8">
-          <CreditCard className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 mb-2">No billing history yet</p>
-          <p className="text-sm text-gray-400">
-            Payment integration is coming soon.
-          </p>
-        </div>
+        {userData.events.length > 0 ? (
+          <div className="space-y-3">
+            {userData.events.map((event) => {
+              const amountLabel = formatBillingAmount(event.amount);
+              return (
+                <div
+                  key={event.id}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">
+                      {event.description || formatBillingEventTitle(event.type)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {formatBillingEventTitle(event.type)} • {new Date(event.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {amountLabel ? (
+                      <p className={`font-semibold ${event.amount && event.amount > 0 ? 'text-emerald-600' : 'text-gray-700'}`}>
+                        {amountLabel}
+                      </p>
+                    ) : null}
+                    {event.balanceAfter !== null ? (
+                      <p className="text-xs text-gray-500">Balance {event.balanceAfter}</p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <CreditCard className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 mb-2">No recent billing events</p>
+            <p className="text-sm text-gray-400">
+              Credit refreshes and payment-related activity will appear here automatically.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -336,7 +435,7 @@ function NotificationSettings() {
   );
 }
 
-function SecuritySettings({ userData }: { userData: UserData }) {
+function SecuritySettings() {
   return (
     <div className="space-y-6">
       <div>
@@ -392,10 +491,10 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
     const supabase = createClient();
 
     // Delete all user's posts
-    await supabase.from('posts').delete().eq('user_id', userData.id);
+    await supabase.from('posts').delete().eq('user_id', userData.userId);
 
     // Delete LinkedIn connections
-    await supabase.from('linkedin_connections').delete().eq('user_id', userData.id);
+    await supabase.from('linkedin_connections').delete().eq('user_id', userData.userId);
 
     setIsDeleting(false);
     setShowDeleteConfirm(false);
@@ -498,56 +597,17 @@ function DataSettings({ userData, onDeleteData }: { userData: UserData; onDelete
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const billingQuery = useBillingSnapshot();
+  const userData = billingQuery.data ?? null;
 
-  const userQuery = useQuery({
-    queryKey: ['settings-user'],
-    queryFn: async (): Promise<UserData> => {
-      const supabase = createClient();
+  const refreshBilling = async () => {
+    const result = await billingQuery.refetch();
+    if (result.data) {
+      toast.success('Billing refreshed');
+    }
+  };
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('Unauthorized');
-      }
-
-      // Get profile
-      const { data: profileRows } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .limit(1);
-      const profile = profileRows?.[0] ?? null;
-
-      // Get posts this month
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const { data: posts } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfMonth.toISOString());
-
-      const postsThisMonth = posts?.length || 0;
-
-      const plan: 'starter' | 'pro' | 'business' =
-        profile?.plan === 'pro' || profile?.plan === 'business' ? profile.plan : 'starter';
-      const creditsTotal = PLANS[plan].credits;
-
-      return {
-        id: user.id,
-        name: profile?.full_name || user.email?.split('@')[0] || 'User',
-        email: user.email || '',
-        plan,
-        creditsUsed: postsThisMonth,
-        creditsTotal,
-        memberSince: profile?.created_at || user.created_at || new Date().toISOString(),
-      };
-    },
-  });
-
-  const userData = userQuery.data ?? null;
-
-  if (userQuery.isLoading) {
+  if (billingQuery.isLoading && !userData) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
@@ -555,7 +615,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (userQuery.isError || !userData) {
+  if (billingQuery.isError || !userData) {
     return (
       <div className="flex items-center justify-center min-h-[400px] text-gray-500">
         Unable to load settings right now.
@@ -598,11 +658,17 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === 'profile' && <ProfileSettings userData={userData} onUpdate={() => userQuery.refetch()} />}
-            {activeTab === 'billing' && <BillingSettings userData={userData} />}
+            {activeTab === 'profile' && <ProfileSettings userData={userData} onUpdate={() => void billingQuery.refetch()} />}
+            {activeTab === 'billing' && (
+              <BillingSettings
+                userData={userData}
+                onRefresh={() => void refreshBilling()}
+                isRefreshing={billingQuery.isFetching}
+              />
+            )}
             {activeTab === 'notifications' && <NotificationSettings />}
-            {activeTab === 'security' && <SecuritySettings userData={userData} />}
-            {activeTab === 'data' && <DataSettings userData={userData} onDeleteData={() => userQuery.refetch()} />}
+            {activeTab === 'security' && <SecuritySettings />}
+            {activeTab === 'data' && <DataSettings userData={userData} onDeleteData={() => void billingQuery.refetch()} />}
           </motion.div>
         </div>
       </div>

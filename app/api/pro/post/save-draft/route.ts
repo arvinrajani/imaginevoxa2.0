@@ -19,6 +19,11 @@ export async function POST(request: Request) {
       moodBoardId,
       imageProfileId,
       scheduledFor,
+      publishChannels,
+      targetType,
+      targetUrn,
+      facebookPageId,
+      instagramAccountId,
     } = body;
 
     if (!brandId) {
@@ -70,6 +75,24 @@ export async function POST(request: Request) {
       (typeof prompt === 'string' && prompt.trim()) ||
       (typeof imagePrompt === 'string' && imagePrompt.trim()) ||
       title;
+    const normalizedPublishChannels = (() => {
+      if (!Array.isArray(publishChannels)) {
+        return ['linkedin'];
+      }
+
+      const channels = Array.from(
+        new Set(
+          publishChannels.filter(
+            (channel): channel is 'linkedin' | 'facebook' | 'instagram' =>
+              channel === 'linkedin' || channel === 'facebook' || channel === 'instagram'
+          )
+        )
+      );
+
+      return channels.length > 0 ? channels : ['linkedin'];
+    })();
+    const normalizedTargetType =
+      targetType === 'organization' || targetType === 'person' ? targetType : 'person';
 
     const { data: post, error } = await supabase
       .from('posts')
@@ -86,6 +109,15 @@ export async function POST(request: Request) {
         base_image_asset_id: imageAssetId || null,
         status: 'draft',
         scheduled_for: scheduledFor || null,
+        publish_channels: normalizedPublishChannels,
+        target_type: normalizedTargetType,
+        target_urn: typeof targetUrn === 'string' && targetUrn.trim() ? targetUrn.trim() : null,
+        facebook_page_id:
+          typeof facebookPageId === 'string' && facebookPageId.trim() ? facebookPageId.trim() : null,
+        instagram_account_id:
+          typeof instagramAccountId === 'string' && instagramAccountId.trim()
+            ? instagramAccountId.trim()
+            : null,
         last_edited_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

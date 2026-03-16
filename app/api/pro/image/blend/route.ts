@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildBlendedSvg, type BlendMode } from "@/lib/studio/blender";
+import sharp from "sharp";
 
 const inputSchema = z.object({
   brandId: z.string().uuid(),
@@ -24,26 +24,54 @@ const inputSchema = z.object({
   overlayColor: z.string().optional(),
 });
 
-async function uploadSvg(options: { path: string; data: string }) {
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim();
-  if (!bucket) return null;
+type Placement = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center";
 
-  const admin = createAdminClient();
-  const upload = await admin.storage
-    .from(bucket)
-    .upload(options.path, Buffer.from(options.data), {
-      contentType: "image/svg+xml",
-      upsert: true,
-    });
+const PLACEMENT_OFFSETS: Record<Placement, { xPct: number; yPct: number }> = {
+  "top-left": { xPct: 0.04, yPct: 0.04 },
+  "top-right": { xPct: 0.78, yPct: 0.04 },
+  "bottom-left": { xPct: 0.04, yPct: 0.78 },
+  "bottom-right": { xPct: 0.78, yPct: 0.78 },
+  center: { xPct: 0.4, yPct: 0.4 },
+};
 
-  if (upload.error) {
-    throw new Error(`Storage upload failed: ${upload.error.message}`);
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const ab = await res.arrayBuffer();
+    return Buffer.from(ab);
+  } catch {
+    return null;
   }
-
-  const { data } = admin.storage.from(bucket).getPublicUrl(options.path);
-  return data.publicUrl || null;
 }
 
+async function uploadPng(options: { path: string; data: Buffer }) {
+  const buckets = ["brand-assets", "images"];
+  const admin = createAdminClient();
+
+  for (const bucket of buckets) {
+    const { error: uploadError } = await admin.storage
+      .from(bucket)
+      .upload(options.path, options.data, {
+        contentType: "image/png",
+        upsert: true,
+      });
+
+    if (!uploadError) {
+      const { data } = admin.storage.from(bucket).getPublicUrl(options.path);
+      return data.publicUrl || null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * POST /api/pro/image/blend
+ *
+ * Composites a logo onto a base image using sharp (real PNG output).
+ * Replaces the old SVG-based approach which had cross-origin rendering issues.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -57,26 +85,122 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const svg = buildBlendedSvg({
-      baseImageUrl: input.baseImageUrl,
-      canvasWidth: input.canvasWidth,
-      canvasHeight: input.canvasHeight,
-      overlayColor: input.overlayColor,
-      overlayOpacity: input.overlayOpacity,
-      logo: {
-        logoUrl: input.logoUrl,
-        blendMode: input.blendMode as BlendMode | undefined,
-        opacity: input.logoOpacity,
-        placement: input.logoPlacement,
-        scale: input.logoScale,
-        padding: input.logoPadding,
-      },
-    });
+    const W = input.canvasWidth ?? 1200;
+    const H = input.canvasHeight ?? 628;
+    const logoOpacity = input.logoOpacity ?? 0.92;
+    const logoScale = input.logoScale ?? 1;
+    const logoPadding = input.logoPadding ?? 16;
+    const placement: Placement = input.logoPlacement ?? "top-right";
 
+    // Fetch both images in parallel
+    const [baseBuffer, logoBuffer] = await Promise.all([
+      fetchImageBuffer(input.baseImageUrl),
+      fetchImageBuffer(input.logoUrl),
+    ]);
+
+    if (!baseBuffer) {
+      return NextResponse.json(
+        { error: "Could not fetch the base image." },
+        { status: 400 }
+      );
+    }
+
+    if (!logoBuffer) {
+      return NextResponse.json(
+        { error: "Could not fetch the logo image." },
+        { status: 400 }
+      );
+    }
+
+    // Resize base image to exact canvas dimensions
+    const base = await sharp(baseBuffer)
+      .resize(W, H, { fit: "cover" })
+      .png()
+      .toBuffer();
+
+    // Calculate logo dimensions
+    const logoTargetW = Math.round(W * 0.18 * logoScale);
+    const logoTargetH = Math.round(H * 0.18 * logoScale);
+
+    // Resize logo with transparency preserved
+    const logo = await sharp(logoBuffer)
+      .resize(logoTargetW, logoTargetH, {
+        fit: "contain",
+        withoutEnlargement: false,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .ensureAlpha()
+      .png()
+      .toBuffer();
+
+    // Apply opacity to logo if not full
+    let logoWithOpacity = logo;
+    if (logoOpacity < 1) {
+      // Multiply alpha channel by the desired opacity
+      const logoMeta = await sharp(logo).metadata();
+      const lw = logoMeta.width || logoTargetW;
+      const lh = logoMeta.height || logoTargetH;
+
+      // Create a semi-transparent overlay to reduce opacity
+      const opacityMask = await sharp({
+        create: {
+          width: lw,
+          height: lh,
+          channels: 4,
+          background: {
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: Math.round(logoOpacity * 255),
+          },
+        },
+      })
+        .png()
+        .toBuffer();
+
+      logoWithOpacity = await sharp(logo)
+        .composite([{ input: opacityMask, blend: "dest-in" }])
+        .png()
+        .toBuffer();
+    }
+
+    // Calculate position
+    const pos = PLACEMENT_OFFSETS[placement];
+    const left = Math.round(W * pos.xPct + logoPadding);
+    const top = Math.round(H * pos.yPct + logoPadding);
+
+    // Composite logo onto base image
+    // Note: sharp's composite `blend` option supports: over, multiply, screen, overlay, etc.
+    const sharpBlend = mapBlendMode(input.blendMode ?? "normal");
+
+    const composited = await sharp(base)
+      .composite([
+        {
+          input: logoWithOpacity,
+          left,
+          top,
+          blend: sharpBlend,
+        },
+      ])
+      .png({ quality: 90 })
+      .toBuffer();
+
+    // Upload to storage
     const timestamp = Date.now();
-    const filePath = `brands/${input.brandId}/blends/blend-${timestamp}.svg`;
-    const publicUrl = await uploadSvg({ path: filePath, data: svg });
-    const fileUrl = publicUrl ?? `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    const filePath = `brands/${input.brandId}/blends/blend-${timestamp}.png`;
+    const publicUrl = await uploadPng({ path: filePath, data: composited });
+
+    if (!publicUrl) {
+      // Fallback: return as base64 data URL
+      const base64 = composited.toString("base64");
+      const dataUrl = `data:image/png;base64,${base64}`;
+
+      return NextResponse.json({
+        asset_id: null,
+        file_url: dataUrl,
+        blend_mode: input.blendMode ?? "normal",
+      });
+    }
 
     const { data: asset, error: assetError } = await supabase
       .from("image_assets")
@@ -85,27 +209,32 @@ export async function POST(request: Request) {
         created_by: user.id,
         asset_type: "composed",
         source: "library",
-        file_url: fileUrl,
-        width: input.canvasWidth ?? 1200,
-        height: input.canvasHeight ?? 628,
+        file_url: publicUrl,
+        width: W,
+        height: H,
         metadata: {
           blend_mode: input.blendMode ?? "normal",
           logo_url: input.logoUrl,
           base_image_url: input.baseImageUrl,
-          storage_path: publicUrl ? filePath : null,
+          storage_path: filePath,
         },
       })
       .select("id, file_url")
       .single();
 
     if (assetError || !asset) {
-      return NextResponse.json({ error: "Failed to save blended asset" }, { status: 500 });
+      // Still return the URL even if DB insert fails
+      return NextResponse.json({
+        asset_id: null,
+        file_url: publicUrl,
+        blend_mode: input.blendMode ?? "normal",
+      });
     }
 
     if (input.postId) {
       await supabase
         .from("posts")
-        .update({ base_image_asset_id: asset.id, image_url: fileUrl })
+        .update({ base_image_asset_id: asset.id, image_url: publicUrl })
         .eq("id", input.postId);
     }
 
@@ -115,16 +244,43 @@ export async function POST(request: Request) {
       action: "image_blended",
       entity_type: "image_asset",
       entity_id: asset.id,
-      metadata: { blend_mode: input.blendMode ?? "normal", logo_url: input.logoUrl },
+      metadata: {
+        blend_mode: input.blendMode ?? "normal",
+        logo_url: input.logoUrl,
+      },
     });
 
     return NextResponse.json({
       asset_id: asset.id,
-      file_url: fileUrl,
+      file_url: publicUrl,
       blend_mode: input.blendMode ?? "normal",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * Maps our blend mode names to sharp's supported composite blend operations.
+ */
+function mapBlendMode(
+  mode: string
+): "over" | "multiply" | "screen" | "overlay" | "soft-light" {
+  switch (mode) {
+    case "multiply":
+      return "multiply";
+    case "screen":
+      return "screen";
+    case "overlay":
+      return "overlay";
+    case "soft-light":
+      return "soft-light";
+    case "luminosity":
+    case "color-dodge":
+      // sharp doesn't support these directly — fall back to overlay
+      return "overlay";
+    default:
+      return "over";
   }
 }

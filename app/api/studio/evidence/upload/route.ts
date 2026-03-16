@@ -8,16 +8,16 @@ import {
   requireStudioAuth,
   studioErrorResponse,
 } from '@/lib/studio/server-auth';
+import {
+  EVIDENCE_STORAGE_BUCKET,
+  dedupeTags,
+  extractPdfImagesIntoEvidence,
+  insertEvidenceRow,
+} from '@/lib/studio/pdf-extraction';
 
 export const runtime = 'nodejs';
-const EVIDENCE_STORAGE_BUCKET =
-  process.env.STUDIO_EVIDENCE_BUCKET?.trim() || 'brand-evidence';
-const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
-const MAX_PDF_CONTENT_CHARS = 40_000;
-const MAX_PDF_IMAGE_EXTRACTION_BYTES = 40 * 1024 * 1024;
-const MAX_EXTRACTED_IMAGES_PER_PDF = 12;
-const MIN_EXTRACTED_IMAGE_SIZE_PX = 96;
-const MAX_EXTRACTED_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+const MAX_PDF_CONTENT_CHARS = 120_000;
 
 type PdfKnowledgeSync = {
   source_id: string | null;
@@ -35,15 +35,6 @@ type PdfKnowledgeSync = {
   };
 };
 
-type ParsedPdfImage = {
-  pageNumber: number;
-  imageIndex: number;
-  width: number;
-  height: number;
-  data: Buffer;
-  hash: string;
-};
-
 function errorMessage(error: unknown): string {
   if (!error || typeof error !== 'object') return '';
   const maybeMessage = (error as { message?: unknown }).message;
@@ -58,27 +49,28 @@ function isBucketMissingError(error: unknown): boolean {
   );
 }
 
+function isStorageLimitError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return (
+    message.includes('maximum allowed size') ||
+    message.includes('file size limit') ||
+    message.includes('quota') ||
+    message.includes('storage limit') ||
+    message.includes('insufficient storage') ||
+    message.includes('not enough space')
+  );
+}
+
+function isStoragePathConflictError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return message.includes('already exists') || message.includes('duplicate');
+}
+
 async function ensureEvidenceBucket(
   admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin']
 ) {
   const existing = await admin.storage.getBucket(EVIDENCE_STORAGE_BUCKET);
   if (!existing.error && existing.data) {
-    const updated = await admin.storage.updateBucket(EVIDENCE_STORAGE_BUCKET, {
-      public: false,
-      fileSizeLimit: '300MB',
-      allowedMimeTypes: [
-        'application/pdf',
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'image/gif',
-        'image/svg+xml',
-      ],
-    });
-
-    if (updated.error && !errorMessage(updated.error).includes('already exists')) {
-      throw new Error(updated.error.message || 'Failed to update storage bucket');
-    }
     return;
   }
   if (existing.error && !isBucketMissingError(existing.error)) {
@@ -87,7 +79,6 @@ async function ensureEvidenceBucket(
 
   const created = await admin.storage.createBucket(EVIDENCE_STORAGE_BUCKET, {
     public: false,
-    fileSizeLimit: '300MB',
     allowedMimeTypes: [
       'application/pdf',
       'image/jpeg',
@@ -138,81 +129,72 @@ function normalizePdfText(text: string) {
     .trim();
 }
 
-function dedupeTags(tags: string[]) {
-  const normalized = tags.map((tag) => tag.trim()).filter(Boolean);
-  return Array.from(new Set(normalized));
+function scorePdfParagraphForKnowledge(paragraph: string) {
+  let score = Math.min(paragraph.length, 900) / 120;
+
+  if (/\d/.test(paragraph)) score += 3;
+  if (/%|\$|£|€|roi|revenue|pipeline|conversion|growth|reduction|increase|decrease|customers?|users?|teams?|days?|weeks?|months?/i.test(paragraph)) {
+    score += 4;
+  }
+  if (/product|feature|capability|benefit|problem|solution|workflow|platform|integration|security|pricing|case study|testimonial|launch|release|spec/i.test(paragraph)) {
+    score += 3;
+  }
+  if (paragraph.length < 60) score -= 2;
+
+  return score;
 }
 
-async function insertEvidenceRow(
-  admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin'],
-  params: {
-    brandId: string;
-    userId: string;
-    isPdf: boolean;
-    title: string;
-    description: string;
-    bucket: string;
-    tags: string[];
-    storagePath: string;
+function buildKnowledgeDensePdfText(text: string, maxChars: number) {
+  if (text.length <= maxChars) return text;
+
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return text.slice(0, maxChars);
   }
-) {
-  const fullPayload = {
-    brand_id: params.brandId,
-    owner_user_id: params.userId,
-    type: params.isPdf ? 'pdf' : 'image',
-    title: params.title,
-    description: params.description || null,
-    bucket: params.bucket,
-    tags: params.tags,
-    file_path: params.storagePath,
+
+  const scored = paragraphs.map((paragraph, index) => ({
+    paragraph,
+    index,
+    score: scorePdfParagraphForKnowledge(paragraph),
+  }));
+
+  const selectedIndexes = new Set<number>();
+  let usedChars = 0;
+
+  const trySelect = (index: number) => {
+    if (selectedIndexes.has(index)) return;
+    const paragraph = paragraphs[index];
+    const nextSize = usedChars === 0 ? paragraph.length : usedChars + 2 + paragraph.length;
+    if (nextSize > maxChars) return;
+    selectedIndexes.add(index);
+    usedChars = nextSize;
   };
 
-  let attempt = await admin
-    .from('evidence_assets')
-    .insert(fullPayload)
-    .select('*')
-    .single();
+  trySelect(0);
+  trySelect(paragraphs.length - 1);
 
-  if (attempt.error && isMissingTableOrRelationError(attempt.error, 'evidence_assets')) {
-    return { inserted: null, usedFallback: true };
+  for (const item of [...scored].sort((a, b) => b.score - a.score || a.index - b.index)) {
+    trySelect(item.index);
+    if (usedChars >= maxChars * 0.88) break;
   }
 
-  if (attempt.error && isMissingColumnError(attempt.error, ['bucket', 'tags', 'description'])) {
-    const withoutOptionalColumns = {
-      brand_id: params.brandId,
-      owner_user_id: params.userId,
-      type: params.isPdf ? 'pdf' : 'image',
-      title: params.title,
-      file_path: params.storagePath,
-    };
-
-    attempt = await admin
-      .from('evidence_assets')
-      .insert(withoutOptionalColumns)
-      .select('*')
-      .single();
+  if (usedChars < maxChars) {
+    const step = Math.max(1, Math.floor(paragraphs.length / 8));
+    for (let index = 0; index < paragraphs.length; index += step) {
+      trySelect(index);
+      if (usedChars >= maxChars) break;
+    }
   }
 
-  if (attempt.error && isMissingColumnError(attempt.error, ['owner_user_id'])) {
-    const legacyPayload = {
-      brand_id: params.brandId,
-      type: params.isPdf ? 'pdf' : 'image',
-      title: params.title,
-      file_path: params.storagePath,
-    };
+  const selectedParagraphs = Array.from(selectedIndexes)
+    .sort((a, b) => a - b)
+    .map((index) => paragraphs[index]);
 
-    attempt = await admin
-      .from('evidence_assets')
-      .insert(legacyPayload)
-      .select('*')
-      .single();
-  }
-
-  if (attempt.error) {
-    throw new Error(attempt.error.message || 'Failed to create evidence row');
-  }
-
-  return { inserted: attempt.data, usedFallback: false };
+  return selectedParagraphs.join('\n\n').slice(0, maxChars);
 }
 
 async function ingestPdfKnowledgeSource(
@@ -222,7 +204,7 @@ async function ingestPdfKnowledgeSource(
     userId: string;
     evidenceId: string | null;
     title: string;
-    storagePath: string;
+    storagePath: string | null;
     fileName: string;
     fileBuffer: Buffer;
   }
@@ -262,7 +244,7 @@ async function ingestPdfKnowledgeSource(
     };
   }
 
-  const clipped = normalized.slice(0, MAX_PDF_CONTENT_CHARS);
+  const clipped = buildKnowledgeDensePdfText(normalized, MAX_PDF_CONTENT_CHARS);
   const excerpt = clipped.slice(0, 2500);
   const contentHash = crypto.createHash('sha256').update(clipped).digest('hex');
   const sourceUrl = `evidence://pdf/${params.evidenceId}`;
@@ -281,7 +263,9 @@ async function ingestPdfKnowledgeSource(
       evidence_file_path: params.storagePath,
       source_file_name: params.fileName,
       pages: totalPages,
-      ingest_version: 'studio_pdf_v1',
+      ingest_version: 'studio_pdf_v2',
+      source_text_chars: normalized.length,
+      indexed_text_chars: clipped.length,
     },
     created_by: params.userId,
   };
@@ -350,216 +334,6 @@ async function ingestPdfKnowledgeSource(
   };
 }
 
-async function parsePdfEmbeddedImages(fileBuffer: Buffer) {
-  if (fileBuffer.byteLength > MAX_PDF_IMAGE_EXTRACTION_BYTES) {
-    return {
-      status: 'skipped' as const,
-      detail: `PDF is larger than ${Math.round(
-        MAX_PDF_IMAGE_EXTRACTION_BYTES / (1024 * 1024)
-      )}MB, so image extraction was skipped for performance.`,
-      images: [] as ParsedPdfImage[],
-      foundCount: 0,
-    };
-  }
-
-  const parser = new PDFParse({ data: fileBuffer });
-  try {
-    const parsed = await parser.getImage({
-      imageThreshold: MIN_EXTRACTED_IMAGE_SIZE_PX,
-      imageDataUrl: false,
-      imageBuffer: true,
-    });
-
-    const pages = Array.isArray(parsed.pages) ? parsed.pages : [];
-    const hashes = new Set<string>();
-    const images: ParsedPdfImage[] = [];
-    let foundCount = 0;
-
-    for (const page of pages) {
-      const pageNumber = typeof page.pageNumber === 'number' ? page.pageNumber : 0;
-      const pageImages = Array.isArray(page.images) ? page.images : [];
-
-      for (let i = 0; i < pageImages.length; i += 1) {
-        const image = pageImages[i];
-        const imageData = image?.data;
-        if (!(imageData instanceof Uint8Array) || imageData.byteLength === 0) {
-          continue;
-        }
-
-        foundCount += 1;
-        const buffer = Buffer.from(imageData);
-        if (buffer.byteLength > MAX_EXTRACTED_IMAGE_BYTES) {
-          continue;
-        }
-
-        const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-        if (hashes.has(hash)) {
-          continue;
-        }
-        hashes.add(hash);
-
-        const width = typeof image.width === 'number' ? image.width : 0;
-        const height = typeof image.height === 'number' ? image.height : 0;
-
-        images.push({
-          pageNumber,
-          imageIndex: i + 1,
-          width,
-          height,
-          data: buffer,
-          hash,
-        });
-
-        if (images.length >= MAX_EXTRACTED_IMAGES_PER_PDF) {
-          break;
-        }
-      }
-
-      if (images.length >= MAX_EXTRACTED_IMAGES_PER_PDF) {
-        break;
-      }
-    }
-
-    return {
-      status: 'ok' as const,
-      detail: null,
-      images,
-      foundCount,
-    };
-  } catch (error) {
-    return {
-      status: 'extract_failed' as const,
-      detail: error instanceof Error ? error.message : 'Could not extract images from PDF.',
-      images: [] as ParsedPdfImage[],
-      foundCount: 0,
-    };
-  } finally {
-    await parser.destroy().catch(() => undefined);
-  }
-}
-
-async function extractPdfImagesIntoEvidence(
-  admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin'],
-  params: {
-    brandId: string;
-    userId: string;
-    parentEvidenceId: string;
-    parentTitle: string;
-    fileBuffer: Buffer;
-    bucket: string;
-    tags: string[];
-  }
-) {
-  const parsed = await parsePdfEmbeddedImages(params.fileBuffer);
-  if (parsed.status === 'skipped') {
-    return {
-      status: 'skipped' as const,
-      found_count: 0,
-      saved_count: 0,
-      failed_count: 0,
-      skipped_count: 0,
-      detail: parsed.detail,
-    };
-  }
-
-  if (parsed.status === 'extract_failed') {
-    return {
-      status: 'extract_failed' as const,
-      found_count: 0,
-      saved_count: 0,
-      failed_count: 0,
-      skipped_count: 0,
-      detail: parsed.detail,
-    };
-  }
-
-  if (parsed.images.length === 0) {
-    return {
-      status: 'none_found' as const,
-      found_count: parsed.foundCount,
-      saved_count: 0,
-      failed_count: 0,
-      skipped_count: 0,
-    };
-  }
-
-  let savedCount = 0;
-  let failedCount = 0;
-  let skippedCount = 0;
-  const batchId = Date.now();
-
-  for (let i = 0; i < parsed.images.length; i += 1) {
-    const image = parsed.images[i];
-    const imageName = `pdf-${batchId}-${i + 1}-p${image.pageNumber || 0}-${image.imageIndex}.png`;
-    const storagePath = `${params.userId}/${params.brandId}/pdf-extract/${imageName}`;
-
-    const upload = await admin.storage
-      .from(EVIDENCE_STORAGE_BUCKET)
-      .upload(storagePath, image.data, {
-        contentType: 'image/png',
-        upsert: false,
-      });
-
-    if (upload.error) {
-      failedCount += 1;
-      continue;
-    }
-
-    const imageTags = dedupeTags([
-      ...params.tags,
-      'pdf-extracted',
-      image.pageNumber > 0 ? `pdf-page-${image.pageNumber}` : 'pdf-page-unknown',
-    ]).slice(0, 20);
-
-    const imageTitle = `${params.parentTitle} • Extracted image ${savedCount + 1}`;
-    const sizeHint =
-      image.width > 0 && image.height > 0
-        ? `${image.width}x${image.height}px`
-        : 'size unavailable';
-    const imageDescription = `Extracted from PDF "${params.parentTitle}" (page ${image.pageNumber || '?'
-      }, ${sizeHint}). Source evidence: ${params.parentEvidenceId}.`;
-
-    const insert = await insertEvidenceRow(admin, {
-      brandId: params.brandId,
-      userId: params.userId,
-      isPdf: false,
-      title: imageTitle,
-      description: imageDescription,
-      bucket: params.bucket,
-      tags: imageTags,
-      storagePath,
-    });
-
-    if (insert.usedFallback || !insert.inserted) {
-      skippedCount += 1;
-      continue;
-    }
-
-    savedCount += 1;
-  }
-
-  const status =
-    savedCount > 0
-      ? ('saved' as const)
-      : failedCount > 0 || skippedCount > 0
-        ? ('extract_failed' as const)
-        : ('none_found' as const);
-
-  return {
-    status,
-    found_count: parsed.foundCount,
-    saved_count: savedCount,
-    failed_count: failedCount,
-    skipped_count: skippedCount,
-    detail:
-      parsed.images.length >= MAX_EXTRACTED_IMAGES_PER_PDF
-        ? `Saved first ${MAX_EXTRACTED_IMAGES_PER_PDF} extracted images from this PDF.`
-        : status === 'extract_failed'
-          ? 'Images were found in the PDF, but they could not be saved as evidence.'
-          : undefined,
-  };
-}
-
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -593,7 +367,7 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: 'File size exceeds 300MB limit' },
+        { error: 'File size exceeds 1GB limit' },
         { status: 400 }
       );
     }
@@ -603,29 +377,48 @@ export async function POST(request: Request) {
     await ensureEvidenceBucket(admin);
 
     const cleanName = sanitizeFileName(file.name || `evidence-${Date.now()}`);
-    const storagePath = `${userId}/${brandId}/${Date.now()}-${cleanName}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
+    let storagePath = `${userId}/${brandId}/${Date.now()}-${cleanName}`;
+    let persistedStoragePath: string | null = storagePath;
+    let storedInBucket = true;
+    let storageWarning: string | null = null;
 
-    let upload = await admin.storage
-      .from(EVIDENCE_STORAGE_BUCKET)
-      .upload(storagePath, fileBuffer, {
-        contentType: mime || undefined,
-        upsert: false,
-      });
+    const uploadToStorage = async (path: string) =>
+      admin.storage
+        .from(EVIDENCE_STORAGE_BUCKET)
+        .upload(path, fileBuffer, {
+          contentType: mime || undefined,
+          upsert: false,
+        });
+
+    let upload = await uploadToStorage(storagePath);
 
     // Self-heal deployments where the storage bucket was not created yet.
     if (upload.error && isBucketMissingError(upload.error)) {
       await ensureEvidenceBucket(admin);
-      upload = await admin.storage
-        .from(EVIDENCE_STORAGE_BUCKET)
-        .upload(storagePath, fileBuffer, {
-          contentType: mime || undefined,
-          upsert: false,
-        });
+      upload = await uploadToStorage(storagePath);
+    }
+
+    // If a path collision happens (same timestamp/name), retry once with a nonce.
+    if (upload.error && isStoragePathConflictError(upload.error)) {
+      storagePath = `${userId}/${brandId}/${Date.now()}-${crypto.randomUUID()}-${cleanName}`;
+      upload = await uploadToStorage(storagePath);
+      if (!upload.error) {
+        persistedStoragePath = storagePath;
+      }
     }
 
     if (upload.error) {
-      throw new Error(upload.error.message || 'Failed to upload evidence file');
+      const uploadMessage = upload.error.message || 'Failed to upload evidence file';
+      if (isPdf && isStorageLimitError(upload.error)) {
+        storedInBucket = false;
+        // Keep a synthetic path so the PDF row can exist on schemas that require file_path for type='pdf'.
+        persistedStoragePath = `indexed-only/${userId}/${brandId}/${Date.now()}-${cleanName}`;
+        storageWarning =
+          'PDF text was indexed, but the original file could not be stored in Supabase Storage because of current storage limits.';
+      } else {
+        throw new Error(uploadMessage);
+      }
     }
 
     const titleValue = title || cleanName;
@@ -636,8 +429,8 @@ export async function POST(request: Request) {
       title: titleValue,
       description,
       bucket,
-      tags,
-      storagePath,
+      tags: storedInBucket ? tags : dedupeTags([...tags, 'indexed-only', 'storage-limit-fallback']),
+      storagePath: persistedStoragePath,
     });
     const inserted = insertResult.inserted;
 
@@ -649,7 +442,7 @@ export async function POST(request: Request) {
         userId,
         evidenceId: inserted && typeof inserted.id === 'string' ? inserted.id : null,
         title: titleValue,
-        storagePath,
+        storagePath: persistedStoragePath,
         fileName: cleanName,
         fileBuffer,
       });
@@ -684,9 +477,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const signed = await admin.storage
-      .from(EVIDENCE_STORAGE_BUCKET)
-      .createSignedUrl(storagePath, 60 * 60);
+    const signed = storedInBucket && persistedStoragePath
+      ? await admin.storage
+          .from(EVIDENCE_STORAGE_BUCKET)
+          .createSignedUrl(persistedStoragePath, 60 * 60)
+      : { data: { signedUrl: null } };
 
     return NextResponse.json({
       evidence: {
@@ -695,12 +490,13 @@ export async function POST(request: Request) {
           brand_id: brandId,
           type: isPdf ? 'pdf' : 'image',
           title: titleValue,
-          file_path: storagePath,
+          file_path: persistedStoragePath,
           created_at: new Date().toISOString(),
         }),
-        signed_url: signed.data?.signedUrl || null,
+        signed_url: storedInBucket && persistedStoragePath ? signed.data?.signedUrl || null : null,
       },
       knowledge_sync: knowledgeSync,
+      storage_warning: storageWarning,
       compatibility_mode: insertResult.usedFallback ? 'legacy_no_evidence_assets_table' : null,
     });
   } catch (error) {

@@ -13,6 +13,11 @@ const inputSchema = z.object({
   imagePrompt: z.string().optional(),
   imageUrl: z.string().nullable().optional(),
   imageAssetId: z.string().uuid().nullable().optional(),
+  publishChannels: z.array(z.enum(['linkedin', 'facebook', 'instagram'])).optional(),
+  targetType: z.enum(['person', 'organization']).optional(),
+  targetUrn: z.string().nullable().optional(),
+  facebookPageId: z.string().nullable().optional(),
+  instagramAccountId: z.string().nullable().optional(),
 });
 
 function normalizeHashtags(hashtags: string[] | undefined) {
@@ -79,6 +84,22 @@ export async function POST(request: Request) {
         post_content: content,
         image_url: input.imageUrl || null,
         base_image_asset_id: input.imageAssetId || null,
+        ...(input.publishChannels
+          ? {
+              publish_channels:
+                Array.from(new Set(input.publishChannels)).length > 0
+                  ? Array.from(new Set(input.publishChannels))
+                  : ['linkedin'],
+            }
+          : {}),
+        ...(input.targetType ? { target_type: input.targetType } : {}),
+        ...(input.targetUrn !== undefined ? { target_urn: input.targetUrn || null } : {}),
+        ...(input.facebookPageId !== undefined
+          ? { facebook_page_id: input.facebookPageId || null }
+          : {}),
+        ...(input.instagramAccountId !== undefined
+          ? { instagram_account_id: input.instagramAccountId || null }
+          : {}),
         content_version: currentVersion + 1,
         last_edited_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

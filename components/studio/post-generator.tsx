@@ -48,6 +48,18 @@ interface PostGeneratorProps {
   logoUrl?: string;
   productId?: string | null;
   productName?: string | null;
+  analysisProfile?: {
+    tone?: string | null;
+    postTypes?: string[];
+    contentPillars?: string[];
+    targetAudience?: string | null;
+    businessFocus?: string | null;
+    tagline?: string | null;
+    website?: string | null;
+    brandDescription?: string | null;
+    ctaStyle?: string | null;
+    visualDensity?: string | null;
+  };
   evidenceContext?: Array<{
     id: string;
     title: string;
@@ -104,6 +116,9 @@ interface OutcomeBrief {
   proof: string;
   kpiTarget: string;
 }
+
+const DOCUMENT_LED_PROMPT_REGEX =
+  /\b(pdf|document|documents|file|files|brochure|catalog|catalogue|datasheet|data sheet|spec sheet|manual|deck|summary|summar(?:y|ize|ise)|provided|attached|uploaded)\b/i;
 
 // ---------------------------------------------------------------------------
 // Content Frameworks — proven LinkedIn post structures
@@ -347,6 +362,53 @@ const POST_STYLE_PRESETS = [
 ] as const;
 
 type PostStructureStyle = (typeof POST_STYLE_PRESETS)[number]['id'];
+
+function normalizeAnalysisToken(value: string | null | undefined) {
+  return (value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function mapAnalysisToneToPostTone(value: string | null | undefined): string | null {
+  switch (normalizeAnalysisToken(value)) {
+    case 'casual':
+    case 'conversational':
+      return 'conversational';
+    case 'thought-leader':
+      return 'educational';
+    case 'professional-founder':
+      return 'storytelling';
+    case 'corporate':
+    case 'professional':
+    case 'sales-oriented':
+      return 'professional';
+    default:
+      return null;
+  }
+}
+
+function mapAnalysisPostTypesToStyle(postTypes: string[] | null | undefined): PostStructureStyle | null {
+  const normalized = new Set((postTypes || []).map((item) => normalizeAnalysisToken(item)));
+
+  if (normalized.has('personal')) return 'story-led';
+  if (normalized.has('product')) return 'problem-solution';
+  if (normalized.has('industry-insights')) return 'how-to';
+  if (normalized.has('thought-leadership') || normalized.has('hiring') || normalized.has('announcement')) {
+    return 'natural';
+  }
+
+  return null;
+}
+
+function mapAnalysisPostTypesToFramework(postTypes: string[] | null | undefined): string | null {
+  const normalized = new Set((postTypes || []).map((item) => normalizeAnalysisToken(item)));
+
+  if (normalized.has('personal')) return 'story';
+  if (normalized.has('product')) return 'product-spotlight';
+  if (normalized.has('announcement')) return 'feature-drop';
+  if (normalized.has('industry-insights')) return 'datainsight';
+  if (normalized.has('thought-leadership')) return 'thought-leadership';
+
+  return null;
+}
 
 const CHANNEL_OPTIONS: Array<{
   id: PostChannel;
@@ -728,15 +790,27 @@ type ApiGeneratedOption = {
   notes?: string;
 };
 
+function cleanPostTextForDisplay(value: string | undefined): string {
+  if (!value) return '';
+  return value
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, '$1: $2')
+    .replace(/<((?:https?:\/\/)[^>]+)>/gi, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*/g, '')
+    .trim();
+}
+
 function mapApiOptionToPost(opt: ApiGeneratedOption): GeneratedPost {
   return {
-    headline: opt.headline,
-    body: opt.body,
-    cta: opt.cta,
+    headline: cleanPostTextForDisplay(opt.headline),
+    body: cleanPostTextForDisplay(opt.body),
+    cta: cleanPostTextForDisplay(opt.cta),
     hashtags: (opt.hashtags || []).map((tag) => tag.replace(/^#/, '')),
-    imagePrompt: opt.image_prompt || opt.headline,
-    variantLabel: opt.variant_label,
-    testHypothesis: opt.test_hypothesis,
+    imagePrompt: cleanPostTextForDisplay(opt.image_prompt || opt.headline),
+    variantLabel: cleanPostTextForDisplay(opt.variant_label),
+    testHypothesis: cleanPostTextForDisplay(opt.test_hypothesis),
     qualityScore: typeof opt.quality_score === 'number' ? opt.quality_score : undefined,
     qualityBreakdown: opt.quality_breakdown
       ? {
@@ -747,8 +821,10 @@ function mapApiOptionToPost(opt: ApiGeneratedOption): GeneratedPost {
         readability: Number(opt.quality_breakdown.readability || 0),
       }
       : undefined,
-    riskFlags: Array.isArray(opt.risk_flags) ? opt.risk_flags : undefined,
-    notes: opt.notes,
+    riskFlags: Array.isArray(opt.risk_flags)
+      ? opt.risk_flags.map((item) => cleanPostTextForDisplay(item)).filter(Boolean)
+      : undefined,
+    notes: cleanPostTextForDisplay(opt.notes),
   };
 }
 
@@ -779,6 +855,7 @@ export function PostGenerator({
   logoUrl,
   productId,
   productName,
+  analysisProfile,
   evidenceContext = [],
   evidenceIds = [],
   brandComplianceRules,
@@ -838,6 +915,28 @@ export function PostGenerator({
 
   // Auto-save draft ref
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appliedAnalysisDefaultsRef = useRef({
+    tone: false,
+    style: false,
+    framework: false,
+    website: false,
+  });
+  const analyzedToneDefault = useMemo(
+    () => mapAnalysisToneToPostTone(analysisProfile?.tone),
+    [analysisProfile?.tone]
+  );
+  const analyzedStyleDefault = useMemo(
+    () => mapAnalysisPostTypesToStyle(analysisProfile?.postTypes),
+    [analysisProfile?.postTypes]
+  );
+  const analyzedFrameworkDefault = useMemo(
+    () => mapAnalysisPostTypesToFramework(analysisProfile?.postTypes),
+    [analysisProfile?.postTypes]
+  );
+  const analyzedWebsiteDefault = useMemo(
+    () => normalizeOptionalUrl(analysisProfile?.website || ''),
+    [analysisProfile?.website]
+  );
 
   const buildPostWithChannelVariants = useCallback(
     (post: GeneratedPost): GeneratedPost => {
@@ -943,6 +1042,21 @@ export function PostGenerator({
       .join('\n');
   }, [evidenceContext]);
 
+  const visibleEvidenceSources = useMemo(
+    () =>
+      evidenceContext.slice(0, 4).map((item) => ({
+        ...item,
+        typeLabel: item.type.replace(/[_-]+/g, ' ').trim() || 'source',
+        displaySummary:
+          typeof item.summary === 'string' && item.summary.trim()
+            ? item.summary.trim()
+            : `${item.title} will still be passed into the prompt as a grounding source.`,
+      })),
+    [evidenceContext]
+  );
+
+  const hiddenEvidenceCount = Math.max(0, evidenceContext.length - visibleEvidenceSources.length);
+
   const complianceChecks = useMemo(() => {
     if (!activePreviewPost) return [];
     return runComplianceChecks({
@@ -969,6 +1083,59 @@ export function PostGenerator({
     if (!defaults) return;
     setEmojiRange({ min: defaults.emojiMin, max: defaults.emojiMax });
   }, [selectedTone]);
+
+  useEffect(() => {
+    appliedAnalysisDefaultsRef.current = {
+      tone: false,
+      style: false,
+      framework: false,
+      website: false,
+    };
+  }, [brandId]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.tone) return;
+    if (selectedTone !== 'professional') {
+      appliedAnalysisDefaultsRef.current.tone = true;
+      return;
+    }
+    if (!analyzedToneDefault) return;
+    setSelectedTone(analyzedToneDefault);
+    appliedAnalysisDefaultsRef.current.tone = true;
+  }, [analyzedToneDefault, selectedTone]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.style) return;
+    if (postStyle !== 'natural') {
+      appliedAnalysisDefaultsRef.current.style = true;
+      return;
+    }
+    if (!analyzedStyleDefault) return;
+    setPostStyle(analyzedStyleDefault);
+    appliedAnalysisDefaultsRef.current.style = true;
+  }, [analyzedStyleDefault, postStyle]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.framework) return;
+    if (selectedFramework) {
+      appliedAnalysisDefaultsRef.current.framework = true;
+      return;
+    }
+    if (!analyzedFrameworkDefault) return;
+    setSelectedFramework(analyzedFrameworkDefault);
+    appliedAnalysisDefaultsRef.current.framework = true;
+  }, [analyzedFrameworkDefault, selectedFramework]);
+
+  useEffect(() => {
+    if (appliedAnalysisDefaultsRef.current.website) return;
+    if (websiteLink.trim()) {
+      appliedAnalysisDefaultsRef.current.website = true;
+      return;
+    }
+    if (!analyzedWebsiteDefault) return;
+    setWebsiteLink(analyzedWebsiteDefault);
+    appliedAnalysisDefaultsRef.current.website = true;
+  }, [analyzedWebsiteDefault, websiteLink]);
 
   useEffect(() => {
     if (!selectedOutputChannels.includes(primaryChannel)) {
@@ -1005,7 +1172,6 @@ export function PostGenerator({
       } catch { /* storage quota exceeded – ignore */ }
     }, 800);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, selectedTone, postStyle, postLength, emojiRange.min, emojiRange.max, selectedFramework, brandId]);
 
   // ─── Restore draft from localStorage on mount / brandId change ───
@@ -1190,7 +1356,7 @@ export function PostGenerator({
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({} as Record<string, string>));
-        const detail = errData.error || errData.detail || '';
+        const detail = errData.detail || errData.error || '';
         if (response.status === 405) {
           throw new Error('Post generator route is unavailable (405). Refresh and try again.');
         }
@@ -1425,9 +1591,19 @@ export function PostGenerator({
           ])
         )
         : [primaryChannel];
+      const documentLedPrompt =
+        evidenceContext.length > 0 && DOCUMENT_LED_PROMPT_REGEX.test(normalizedPrompt);
+      const evidenceTitles = evidenceContext
+        .slice(0, 6)
+        .map((item) => item.title)
+        .filter(Boolean);
       const channelPrompt = [
         normalizedPrompt,
-        evidenceBrief ? `Evidence locker context:\n${evidenceBrief}` : null,
+        documentLedPrompt
+          ? 'Selected PDFs are the main source for this post. Infer the topic, product, and proof points from those PDFs and write the post from that material.'
+          : null,
+        evidenceTitles.length ? `Selected PDF titles: ${evidenceTitles.join(' | ')}` : null,
+        evidenceBrief ? `Knowledge base context:\n${evidenceBrief}` : null,
         `Primary channel: ${primaryChannel}.`,
         `Generate copy for these channels: ${channels.join(', ')}.`,
         CHANNEL_PROMPT_HINTS[primaryChannel],
@@ -1452,7 +1628,14 @@ export function PostGenerator({
       if (rankedPosts.length === 0) throw new Error('No posts generated');
 
       const aiVariantsByChannel = await fetchAdditionalChannelVariants(
-        [normalizedPrompt, evidenceBrief ? `Evidence locker context:\n${evidenceBrief}` : null]
+        [
+          normalizedPrompt,
+          documentLedPrompt
+            ? 'Use the selected PDFs as the main source of truth for the post topic and proof.'
+            : null,
+          evidenceTitles.length ? `Selected PDF titles: ${evidenceTitles.join(' | ')}` : null,
+          evidenceBrief ? `Knowledge base context:\n${evidenceBrief}` : null,
+        ]
           .filter(Boolean)
           .join('\n\n'),
         rankedPosts.length
@@ -1675,6 +1858,19 @@ export function PostGenerator({
   const renderSocialPreview = (post: GeneratedPost, channel: PostChannel) => {
     const content = getPostVariantForChannel(post, channel);
     const channelLabel = channel === 'linkedin' ? 'LinkedIn' : channel === 'facebook' ? 'Facebook' : 'Instagram';
+    const normalizePreviewText = (value: string) =>
+      value
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, '$1: $2')
+        .replace(/<((?:https?:\/\/)[^>]+)>/gi, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\*/g, '');
+
+    const normalizedHeadline = normalizePreviewText(content.headline || '');
+    const normalizedBody = normalizePreviewText(content.body || '');
+    const normalizedCta = normalizePreviewText(content.cta || '');
+
     return (
       <div className="w-full max-w-[620px] rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_-32px_rgba(15,23,42,0.45)]200">
         <div className="px-5 pt-4 pb-1">
@@ -1707,14 +1903,18 @@ export function PostGenerator({
 
         {/* Post Content */}
         <div className="px-5 pb-4">
-          <p className="whitespace-pre-wrap text-[16px] leading-7 text-slate-800">
-            {content.headline && <span className="font-semibold block mb-2">{content.headline}</span>}
-            {content.body}
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-7 text-slate-800">
+            {normalizedHeadline && (
+              <span className="mb-2 block break-words [overflow-wrap:anywhere] font-semibold">
+                {normalizedHeadline}
+              </span>
+            )}
+            {normalizedBody}
           </p>
           {content.hashtags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {content.hashtags.map((tag) => (
-                <span key={tag} className="text-cyan-600 text-sm">
+                <span key={tag} className="break-all text-sm text-cyan-600">
                   #{tag}
                 </span>
               ))}
@@ -1736,15 +1936,15 @@ export function PostGenerator({
         )}
 
         {/* CTA Bar */}
-        {content.cta && (
+        {normalizedCta && (
           <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
             <Button
               variant="outline"
               size="sm"
-              className="w-full border-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-50/30"
+              className="h-auto w-full whitespace-normal break-words [overflow-wrap:anywhere] border-2 px-3 py-3 text-left text-sm font-semibold leading-relaxed text-cyan-700 hover:bg-cyan-50/30"
               style={{ borderColor: brandColors[0] || '#0A66C2' }}
             >
-              {content.cta}
+              {normalizedCta}
             </Button>
           </div>
         )}
@@ -1856,8 +2056,55 @@ export function PostGenerator({
             </div>
           </div>
           {evidenceContext.length > 0 ? (
-            <div className="mt-3 rounded-xl border border-cyan-200/80 bg-cyan-50/80 px-4 py-2.5 text-xs text-cyan-800">
-              Evidence grounding active: {evidenceContext.length} selected source{evidenceContext.length === 1 ? '' : 's'}.
+            <div className="mt-3 space-y-3">
+              <div className="rounded-xl border border-cyan-200/80 bg-cyan-50/80 px-4 py-2.5 text-xs text-cyan-800">
+                Evidence grounding active: {evidenceContext.length} selected source{evidenceContext.length === 1 ? '' : 's'}.
+              </div>
+              <div className="rounded-2xl border border-cyan-200/70 bg-white/85 p-4 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-700">
+                      Grounding Sources
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      These summaries are sent into generation, so you can see exactly what evidence is steering the output.
+                    </p>
+                  </div>
+                  <Badge className="w-fit border-cyan-200 bg-cyan-50 text-cyan-700">
+                    {visibleEvidenceSources.length} visible
+                  </Badge>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {visibleEvidenceSources.map((source, index) => (
+                    <div
+                      key={source.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            Source {index + 1}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {source.title}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="capitalize border-slate-200 text-slate-600">
+                          {source.typeLabel}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        {source.displaySummary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {hiddenEvidenceCount > 0 ? (
+                  <p className="mt-3 text-xs text-slate-500">
+                    +{hiddenEvidenceCount} more selected source{hiddenEvidenceCount === 1 ? '' : 's'} will also be passed into generation.
+                  </p>
+                ) : null}
+              </div>
             </div>
           ) : null}
           {productName ? (
@@ -1912,7 +2159,7 @@ export function PostGenerator({
             <Textarea
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="Describe your post topic in detail — the more specific, the better the AI output.&#10;&#10;Examples:&#10;• Share 5 lessons from growing our team from 2 to 20&#10;• Announce our new AI feature that saves marketers 3 hours/week&#10;• Tell the story of how we pivoted and grew 10x"
+              placeholder="Describe your post topic in detail — the more specific, the better the AI output.&#10;&#10;Examples:&#10;• Make a LinkedIn post about ABB TruONE ATS using the selected PDF summary and product details&#10;• Write a post from the uploaded PDF about our change-over switch product line&#10;• Announce our new AI feature that saves marketers 3 hours/week"
               className="min-h-[150px] text-base leading-7 bg-white/9570 border-2 border-cyan-200 placeholder:text-gray-400 focus-visible:ring-cyan-50"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.ctrlKey) {

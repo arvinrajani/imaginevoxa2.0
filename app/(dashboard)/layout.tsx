@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,7 +13,6 @@ import {
   Settings,
   Activity,
   AlertTriangle,
-  BarChart3,
   CreditCard,
   LogOut,
   Menu,
@@ -28,8 +27,11 @@ import {
   LayoutTemplate,
   Building2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
+import type { BillingSnapshot } from '@/lib/billing/client';
+import { useBillingSnapshot } from '@/lib/billing/use-billing-snapshot';
 import { createClient } from '@/lib/supabase/client';
 import { GlobalBrandSelector } from '@/components/dashboard/global-brand-selector';
 
@@ -47,12 +49,6 @@ const baseNavigation = [
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ];
 
-const PLAN_LIMITS = {
-  starter: { credits: 25, name: 'Starter' },
-  pro: { credits: 30, name: 'Pro' },
-  business: { credits: 60, name: 'Pro+' }
-};
-
 export default function AppLayout({
   children,
 }: {
@@ -61,10 +57,13 @@ export default function AppLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [credits, setCredits] = useState({ used: 0, total: 25 });
-  const [userPlan, setUserPlan] = useState<'starter' | 'pro' | 'business'>('starter');
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const {
+    data: billing,
+    error: billingError,
+    refetch: refetchBilling,
+  } = useBillingSnapshot();
+  const previousBillingRef = useRef<BillingSnapshot | null>(null);
 
   const navigation = useMemo(() => baseNavigation, []);
 
@@ -86,7 +85,16 @@ export default function AppLayout({
     );
   }, [pathname]);
 
-  const creditPercentage = credits.total > 0 ? (credits.used / credits.total) * 100 : 0;
+  const userPlan = billing?.plan ?? 'starter';
+  const creditsRemaining = billing?.creditsRemaining ?? 0;
+  const creditsTotal = billing?.creditsTotal ?? 0;
+  const creditsUsed = billing?.creditsUsed ?? 0;
+  const creditsUnlimited = billing?.creditsUnlimited ?? false;
+  const creditPercentage =
+    !creditsUnlimited && creditsTotal > 0 ? (creditsUsed / creditsTotal) * 100 : 0;
+  const primaryAlert = billing?.alerts[0] ?? null;
+  const isUnauthorized =
+    billingError instanceof Error && billingError.message.toLowerCase().includes('unauthorized');
 
   useEffect(() => {
     let active = true;
@@ -94,8 +102,18 @@ export default function AppLayout({
     const loginPath = `/login?next=${encodeURIComponent(pathname || '/app')}`;
 
     const redirectToLogin = () => {
+      if (typeof window !== 'undefined') {
+        window.location.replace(loginPath);
+        return;
+      }
       router.replace(loginPath);
     };
+
+    const authTimeout = window.setTimeout(() => {
+      if (!active) return;
+      setAuthLoading(false);
+      redirectToLogin();
+    }, 4000);
 
     const resolveSessionUser = async () => {
       const maxAttempts = 8;
@@ -126,80 +144,21 @@ export default function AppLayout({
     const checkAuth = async () => {
       try {
         const authUser = await resolveSessionUser();
+        window.clearTimeout(authTimeout);
+        if (!active) return;
+        setAuthLoading(false);
 
         if (!authUser) {
           redirectToLogin();
           return;
         }
-
-        // Profile data is best-effort and should not block authenticated access.
-        let profile: { full_name?: string | null; plan?: string | null } | null = null;
-        try {
-          const { data: profileRows, error: profileError } = await supabase
-            .from('profiles')
-            .select('full_name, plan')
-            .eq('id', authUser.id)
-            .limit(1);
-          if (!profileError) {
-            profile = profileRows?.[0] ?? null;
-          }
-        } catch (error) {
-          console.warn('Profile lookup failed, continuing with defaults.', error);
+        if (isUnauthorized) {
+          redirectToLogin();
         }
-
-        const rawPlan = String(profile?.plan ?? authUser.user_metadata?.plan ?? '').trim().toLowerCase();
-        const normalizedPlan = rawPlan.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-        const isBusinessPlan =
-          normalizedPlan.includes('business') ||
-          normalizedPlan.includes('pro+') ||
-          normalizedPlan.includes('pro plus');
-        const isStarterPlan =
-          normalizedPlan.includes('starter') ||
-          normalizedPlan.includes('free');
-        const isProPlan =
-          normalizedPlan.includes('pro') ||
-          normalizedPlan.includes('professional');
-
-        const plan: 'starter' | 'pro' | 'business' = isBusinessPlan
-          ? 'business'
-          : isStarterPlan
-            ? 'starter'
-            : isProPlan
-              ? 'pro'
-              : 'pro';
-        if (!active) return;
-        setUserPlan(plan);
-
-        setUser({
-          email: authUser.email || '',
-          name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
-        });
-
-        // Post usage is also best-effort; keep app accessible if table/policies are not ready.
-        let postsThisMonth = 0;
-        try {
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-          const { data: posts, error: postsError } = await supabase
-            .from('posts')
-            .select('id')
-            .eq('user_id', authUser.id)
-            .gte('created_at', startOfMonth.toISOString());
-
-          if (!postsError) {
-            postsThisMonth = posts?.length || 0;
-          }
-        } catch (error) {
-          console.warn('Posts lookup failed, continuing with defaults.', error);
-        }
-
-        if (!active) return;
-        const planCredits = PLAN_LIMITS[plan].credits;
-        setCredits({ used: postsThisMonth, total: planCredits });
-        setIsLoading(false);
       } catch {
+        window.clearTimeout(authTimeout);
         if (!active) return;
+        setAuthLoading(false);
         redirectToLogin();
       }
     };
@@ -209,14 +168,78 @@ export default function AppLayout({
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         redirectToLogin();
+        return;
       }
+      void refetchBilling();
     });
 
     return () => {
       active = false;
+      window.clearTimeout(authTimeout);
       authListener.subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [isUnauthorized, pathname, refetchBilling, router]);
+
+  useEffect(() => {
+    if (!billing) return;
+
+    const previous = previousBillingRef.current;
+    if (previous) {
+      if (previous.plan !== billing.plan) {
+        toast.success('Plan updated', {
+          description: `You are now on the ${billing.planName} plan.`,
+        });
+      }
+
+      if (
+        !billing.creditsUnlimited &&
+        !previous.creditsUnlimited &&
+        billing.creditsRemaining > previous.creditsRemaining
+      ) {
+        const creditDelta = billing.creditsRemaining - previous.creditsRemaining;
+        toast.success('Credits refreshed', {
+          description: `${creditDelta} credit${creditDelta === 1 ? '' : 's'} added. ${billing.creditsRemaining} available now.`,
+        });
+      }
+
+      if (
+        !billing.creditsUnlimited &&
+        previous.creditsRemaining > 3 &&
+        billing.creditsRemaining <= 3
+      ) {
+        toast.warning('Credits running low', {
+          description: `Only ${billing.creditsRemaining} credit${billing.creditsRemaining === 1 ? '' : 's'} remain this billing period.`,
+        });
+      }
+
+      const previousStatus = String(previous.subscriptionStatus || '').toLowerCase();
+      const currentStatus = String(billing.subscriptionStatus || '').toLowerCase();
+
+      if (
+        currentStatus &&
+        currentStatus !== previousStatus &&
+        ['active', 'trialing'].includes(currentStatus) &&
+        previousStatus &&
+        !['active', 'trialing'].includes(previousStatus)
+      ) {
+        toast.success('Billing updated', {
+          description: 'Your subscription is active again.',
+        });
+      }
+
+      if (
+        currentStatus &&
+        currentStatus !== previousStatus &&
+        !['active', 'trialing'].includes(currentStatus)
+      ) {
+        toast.error('Payment needs attention', {
+          description: `Subscription status: ${currentStatus.replace(/_/g, ' ')}.`,
+        });
+      }
+    }
+
+    previousBillingRef.current = billing;
+  }, [billing]);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -235,7 +258,7 @@ export default function AppLayout({
     router.push(href);
   };
 
-  if (isLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -290,30 +313,47 @@ export default function AppLayout({
               }`}>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium opacity-90">
-                  {PLAN_LIMITS[userPlan].name} Plan
+                  {billing?.planName || 'Starter'} Plan
                 </span>
                 <CreditCard className="h-4 w-4 opacity-80" />
               </div>
               <div className="flex items-baseline gap-1 mb-3">
-                <span className="text-3xl font-bold">{Math.max(0, credits.total - credits.used)}</span>
-                <span className="opacity-70">/ {credits.total}</span>
+                <span className="text-3xl font-bold">
+                  {creditsUnlimited ? '∞' : Math.max(0, creditsRemaining)}
+                </span>
+                <span className="opacity-70">
+                  {creditsUnlimited ? 'available' : `/ ${creditsTotal}`}
+                </span>
               </div>
               <div className="h-2 bg-white/20 rounded-full overflow-hidden mb-3">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.max(0, Math.min(100, 100 - creditPercentage))}%` }}
+                  animate={{ width: creditsUnlimited ? '100%' : `${Math.max(0, Math.min(100, 100 - creditPercentage))}%` }}
                   transition={{ duration: 1, ease: 'easeOut' }}
                   className="h-full bg-white rounded-full"
                 />
               </div>
-              {credits.total - credits.used <= 3 && (
+              {!creditsUnlimited && creditsRemaining <= 3 && (
                 <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50/20 border border-red-400/30 px-2.5 py-2 text-xs text-red-200">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
                   <span>
-                    Only <strong>{credits.total - credits.used}</strong> credit{credits.total - credits.used === 1 ? '' : 's'} left this month.
+                    Only <strong>{creditsRemaining}</strong> credit{creditsRemaining === 1 ? '' : 's'} left this billing period.
                   </span>
                 </div>
               )}
+              {primaryAlert ? (
+                <div className={`mb-3 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${primaryAlert.tone === 'error'
+                    ? 'border-red-400/30 bg-red-50/20 text-red-100'
+                    : primaryAlert.tone === 'warning'
+                      ? 'border-amber-300/40 bg-amber-50/20 text-amber-50'
+                      : primaryAlert.tone === 'success'
+                        ? 'border-emerald-300/40 bg-emerald-50/20 text-emerald-50'
+                        : 'border-white/20 bg-white/10 text-white'
+                  }`}>
+                  <Bell className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{primaryAlert.title}</span>
+                </div>
+              ) : null}
               {userPlan !== 'business' && (
                 <Link
                   href="/pricing"
@@ -364,14 +404,14 @@ export default function AppLayout({
                   ? 'bg-gradient-to-br from-violet-400 to-blue-500'
                   : 'bg-gradient-to-br from-gray-500 to-gray-600'
                 }`}>
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                {billing?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.name || 'User'}
+                  {billing?.name || 'User'}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  {user?.email || 'No email'}
+                  {billing?.email || 'No email'}
                 </p>
                 <p className={`text-[11px] truncate ${userPlan === 'business'
                   ? 'text-amber-600'
@@ -379,7 +419,7 @@ export default function AppLayout({
                     ? 'text-cyan-600'
                     : 'text-gray-500'
                   }`}>
-                  {PLAN_LIMITS[userPlan].name} Plan
+                  {billing?.planName || 'Starter'} Plan
                 </p>
               </div>
               <button

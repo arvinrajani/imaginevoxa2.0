@@ -769,7 +769,8 @@ export default function ChatbotSettingsPage() {
                             const isDeleting = deletingAssetId === pdf.id;
                             const isLegacySource = pdf.id.startsWith('source:');
                             const legacyMeta = legacyPdfMetaById[pdf.id];
-                            const canProcess = !isLegacySource || Boolean(legacyMeta?.filePath);
+                            const isStorageFallback = typeof pdf.file_path === 'string' && pdf.file_path.startsWith('indexed-only/');
+                            const canProcess = !isStorageFallback && (!isLegacySource || Boolean(legacyMeta?.filePath));
 
                             return (
                                 <div
@@ -815,7 +816,7 @@ export default function ChatbotSettingsPage() {
                                             {isProcessing ? (
                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                             ) : null}
-                                            {isProcessing ? 'Processing...' : canProcess ? 'Process' : 'Re-upload to Process'}
+                                            {isProcessing ? 'Processing...' : isStorageFallback ? 'Re-upload (Storage Full)' : canProcess ? 'Process' : 'Re-upload to Process'}
                                         </Button>
                                         {isProcessed && (
                                             <Button

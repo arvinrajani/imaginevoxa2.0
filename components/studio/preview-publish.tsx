@@ -24,11 +24,15 @@ import {
   Instagram,
   Heart,
   Bookmark,
-  ChevronDown,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 
@@ -48,6 +52,22 @@ interface ConfirmedPost {
   variantLabel?: string;
 }
 
+type PublishedChannelState = {
+  label: string;
+  sublabel?: string;
+  permalinkUrl?: string | null;
+  publishedAt: string;
+};
+
+type PersistedPostPublishState = {
+  publish_results?: unknown;
+  target_type?: string | null;
+  target_urn?: string | null;
+  facebook_page_id?: string | null;
+  instagram_account_id?: string | null;
+  linkedin_post_urn?: string | null;
+};
+
 interface PreviewPublishProps {
   confirmedPost: ConfirmedPost | null;
   confirmedImageUrl: string | null;
@@ -55,6 +75,7 @@ interface PreviewPublishProps {
   brandColors?: string[];
   logoUrl?: string;
   brandId: string;
+  draftPostId?: string | null;
   onGoToStep: (step: number) => void;
   selectedChannels?: PostChannel[];
   primaryChannel?: PostChannel;
@@ -77,8 +98,12 @@ interface LinkedInConnectionState {
 interface MetaPage {
   id: string;
   name: string;
+  category?: string | null;
+  picture_url?: string | null;
   instagram_business_account_id?: string | null;
+  instagram_name?: string | null;
   instagram_username?: string | null;
+  instagram_profile_picture_url?: string | null;
 }
 
 interface MetaConnectionState {
@@ -96,6 +121,120 @@ interface SignedInProfile {
   avatarUrl?: string;
 }
 
+function asObjectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? ({ ...value } as Record<string, unknown>)
+    : {};
+}
+
+function asStringOrNull(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getLinkedInPermalink(postUrn: string | null) {
+  return postUrn ? `https://www.linkedin.com/feed/update/${postUrn}/` : 'https://www.linkedin.com/feed/';
+}
+
+function normalizePublishedChannelState(
+  channel: PostChannel,
+  state: unknown,
+  fallback: {
+    brandName: string;
+    personName: string;
+  }
+): PublishedChannelState | null {
+  const record = asObjectRecord(state);
+  const publishedAt =
+    asStringOrNull(record.published_at) || asStringOrNull(record.publishedAt) || null;
+
+  if (!publishedAt) {
+    return null;
+  }
+
+  if (channel === 'linkedin') {
+    const targetType = asStringOrNull(record.target_type) || 'person';
+    const targetLabel =
+      asStringOrNull(record.target_label) ||
+      (targetType === 'organization' ? fallback.brandName : fallback.personName);
+
+    return {
+      label: targetLabel,
+      sublabel:
+        targetType === 'organization'
+          ? 'LinkedIn company page'
+          : 'LinkedIn personal profile',
+      permalinkUrl:
+        asStringOrNull(record.permalink_url) ||
+        getLinkedInPermalink(asStringOrNull(record.linkedin_post_urn)),
+      publishedAt,
+    };
+  }
+
+  if (channel === 'facebook') {
+    return {
+      label: asStringOrNull(record.page_name) || `${fallback.brandName} Page`,
+      sublabel: 'Facebook Page',
+      permalinkUrl: asStringOrNull(record.permalink_url),
+      publishedAt,
+    };
+  }
+
+  const username = asStringOrNull(record.username);
+  return {
+    label: username ? `@${username.replace(/^@/, '')}` : `@${fallback.brandName.replace(/\s+/g, '').toLowerCase()}`,
+    sublabel: asStringOrNull(record.owner_page_name)
+      ? `via ${asStringOrNull(record.owner_page_name)}`
+      : 'Instagram Business',
+    permalinkUrl: asStringOrNull(record.permalink_url),
+    publishedAt,
+  };
+}
+
+/**
+ * Renders post body text with proper spacing for paragraphs, bullet points,
+ * and numbered lists — matching how LinkedIn/Facebook actually display posts.
+ */
+function FormattedPostBody({ text, className }: { text: string; className?: string }) {
+  if (!text) return null;
+
+  const paragraphs = text.split(/\n{2,}/);
+
+  return (
+    <div className={className}>
+      {paragraphs.map((paragraph, pIdx) => {
+        const lines = paragraph.split('\n');
+        return (
+          <div key={pIdx} className={pIdx > 0 ? 'mt-3' : ''}>
+            {lines.map((line, lIdx) => {
+              const trimmed = line.trim();
+              const isBullet = /^[•\-\*▸▹►→]\s/.test(trimmed);
+              const isNumbered = /^\d+[.)]\s/.test(trimmed);
+
+              if (isBullet || isNumbered) {
+                return (
+                  <div key={lIdx} className="flex gap-2 mt-1 first:mt-0">
+                    <span className="flex-shrink-0 text-slate-500 select-none w-4 text-right">
+                      {isBullet ? '\u2022' : trimmed.match(/^\d+[.)]/)?.[0] || ''}
+                    </span>
+                    <span>{trimmed.replace(/^[•\-\*▸▹►→]\s*/, '').replace(/^\d+[.)]\s*/, '')}</span>
+                  </div>
+                );
+              }
+
+              return (
+                <span key={lIdx}>
+                  {lIdx > 0 && <br />}
+                  {line}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -107,18 +246,23 @@ export function PreviewPublish({
   brandColors = ['#0A66C2'],
   logoUrl,
   brandId,
+  draftPostId = null,
   onGoToStep,
   selectedChannels = ['linkedin'],
   primaryChannel = 'linkedin',
 }: PreviewPublishProps) {
   const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState(false);
   const [publishTarget, setPublishTarget] = useState<'person' | 'org'>('person');
   const [selectedOrgUrn, setSelectedOrgUrn] = useState('');
   const [savingDraft, setSavingDraft] = useState(false);
   const [account, setAccount] = useState<SignedInProfile | null>(null);
   const [publishingFb, setPublishingFb] = useState(false);
   const [publishingIg, setPublishingIg] = useState(false);
+  const [draftPostIdState, setDraftPostIdState] = useState<string | null>(draftPostId);
+  const [selectedFacebookPageId, setSelectedFacebookPageId] = useState('');
+  const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState('');
+  const [savingMetaDefaults, setSavingMetaDefaults] = useState<null | 'facebook' | 'instagram'>(null);
+  const [publishResults, setPublishResults] = useState<Partial<Record<PostChannel, PublishedChannelState>>>({});
   const [previewPlatform, setPreviewPlatform] = useState<PostChannel>(primaryChannel);
   const [meta, setMeta] = useState<MetaConnectionState>({
     loading: true,
@@ -138,6 +282,15 @@ export function PreviewPublish({
   // Must be declared here (not after early returns) to follow Rules of Hooks
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editHeadline, setEditHeadline] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [editCta, setEditCta] = useState('');
+  const [editHashtags, setEditHashtags] = useState('');
+  // Mutable post — allows inline edits to flow through to publish
+  const [postOverrides, setPostOverrides] = useState<Partial<ConfirmedPost> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,15 +408,31 @@ export function PreviewPublish({
           setMeta({ loading: false, connected: false, expired: false, pages: [], defaultFacebookPageId: null, defaultInstagramAccountId: null });
           return;
         }
+        const pages = Array.isArray(data.pages) ? (data.pages as MetaPage[]) : [];
+        const nextFacebookPageId =
+          data.default_facebook_page_id || pages[0]?.id || null;
+        const nextInstagramAccountId =
+          data.default_instagram_account_id ||
+          pages.find((page) => page.instagram_business_account_id)?.instagram_business_account_id ||
+          null;
         const tokenExpired = data.token_expires_at ? new Date(data.token_expires_at).getTime() <= Date.now() : false;
         setMeta({
           loading: false,
-          connected: Boolean(data.connected) && !tokenExpired,
+          connected: Boolean(data.connected) && pages.length > 0 && !tokenExpired,
           expired: tokenExpired,
-          pages: Array.isArray(data.pages) ? data.pages : [],
-          defaultFacebookPageId: data.default_facebook_page_id || null,
-          defaultInstagramAccountId: data.default_instagram_account_id || null,
+          pages,
+          defaultFacebookPageId: nextFacebookPageId,
+          defaultInstagramAccountId: nextInstagramAccountId,
         });
+        setSelectedFacebookPageId((prev) =>
+          prev && pages.some((page) => page.id === prev) ? prev : nextFacebookPageId || ''
+        );
+        setSelectedInstagramAccountId((prev) =>
+          prev &&
+          pages.some((page) => page.instagram_business_account_id === prev)
+            ? prev
+            : nextInstagramAccountId || ''
+        );
       } catch {
         if (cancelled) return;
         setMeta({ loading: false, connected: false, expired: false, pages: [], defaultFacebookPageId: null, defaultInstagramAccountId: null });
@@ -280,23 +449,182 @@ export function PreviewPublish({
     };
   }, [selectedChannels]);
 
+  useEffect(() => {
+    if (draftPostId) {
+      setDraftPostIdState(draftPostId);
+    }
+  }, [draftPostId]);
+
+  useEffect(() => {
+    if (!draftPostIdState) return;
+
+    let cancelled = false;
+
+    const loadPersistedPublishState = async () => {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('posts')
+          .select(
+            'publish_results, target_type, target_urn, facebook_page_id, instagram_account_id, linkedin_post_urn'
+          )
+          .eq('id', draftPostIdState)
+          .maybeSingle();
+        const post = (data as PersistedPostPublishState | null) || null;
+
+        if (cancelled || error || !post) return;
+
+        if (post.target_type === 'organization') {
+          setPublishTarget('org');
+        }
+
+        if (post.target_urn) {
+          setSelectedOrgUrn(post.target_urn);
+        }
+
+        if (post.facebook_page_id) {
+          setSelectedFacebookPageId(post.facebook_page_id);
+        }
+
+        if (post.instagram_account_id) {
+          setSelectedInstagramAccountId(post.instagram_account_id);
+        }
+
+        const persistedResults = asObjectRecord(post.publish_results);
+        const nextResults: Partial<Record<PostChannel, PublishedChannelState>> = {};
+
+        const linkedinResult =
+          normalizePublishedChannelState('linkedin', persistedResults.linkedin, {
+            brandName,
+            personName: account?.name || brandName,
+          }) ||
+          (post.linkedin_post_urn
+            ? {
+                label: account?.name || brandName,
+                sublabel: 'LinkedIn personal profile',
+                permalinkUrl: getLinkedInPermalink(post.linkedin_post_urn),
+                publishedAt: new Date().toISOString(),
+              }
+            : null);
+
+        if (linkedinResult) {
+          nextResults.linkedin = linkedinResult;
+        }
+
+        const facebookResult = normalizePublishedChannelState('facebook', persistedResults.facebook, {
+          brandName,
+          personName: account?.name || brandName,
+        });
+        if (facebookResult) {
+          nextResults.facebook = facebookResult;
+        }
+
+        const instagramResult = normalizePublishedChannelState('instagram', persistedResults.instagram, {
+          brandName,
+          personName: account?.name || brandName,
+        });
+        if (instagramResult) {
+          nextResults.instagram = instagramResult;
+        }
+
+        if (Object.keys(nextResults).length > 0) {
+          setPublishResults((prev) => ({ ...nextResults, ...prev }));
+        }
+      } catch {
+        // Silent fallback: publish still works without persisted hydration.
+      }
+    };
+
+    void loadPersistedPublishState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.name, brandName, draftPostIdState]);
+
+  useEffect(() => {
+    if (!selectedChannels.includes(previewPlatform)) {
+      setPreviewPlatform(selectedChannels[0] || primaryChannel || 'linkedin');
+    }
+  }, [previewPlatform, primaryChannel, selectedChannels]);
+
+  // Effective post (applies inline edits if any)
+  const effectivePost = useMemo(() => {
+    if (!confirmedPost) return null;
+    if (!postOverrides) return confirmedPost;
+    return { ...confirmedPost, ...postOverrides };
+  }, [confirmedPost, postOverrides]);
+
   // Build the full post text
   const fullPostText = useMemo(() => {
-    if (!confirmedPost) return '';
+    if (!effectivePost) return '';
     const parts: string[] = [];
-    if (confirmedPost.headline) parts.push(confirmedPost.headline);
-    if (confirmedPost.body) parts.push(confirmedPost.body);
-    if (confirmedPost.cta) parts.push(confirmedPost.cta);
-    if (confirmedPost.hashtags?.length) {
-      parts.push(confirmedPost.hashtags.map((t) => `#${t}`).join(' '));
+    if (effectivePost.headline) parts.push(effectivePost.headline);
+    if (effectivePost.body) parts.push(effectivePost.body);
+    if (effectivePost.cta) parts.push(effectivePost.cta);
+    if (effectivePost.hashtags?.length) {
+      parts.push(effectivePost.hashtags.map((t) => `#${t}`).join(' '));
     }
     return parts.join('\n\n');
-  }, [confirmedPost]);
+  }, [effectivePost]);
+
+  const startEditing = () => {
+    if (!effectivePost) return;
+    setEditHeadline(effectivePost.headline || '');
+    setEditBody(effectivePost.body || '');
+    setEditCta(effectivePost.cta || '');
+    setEditHashtags(effectivePost.hashtags?.map((t) => `#${t}`).join(' ') || '');
+    setIsEditing(true);
+  };
+
+  const saveEdits = () => {
+    const parsedHashtags = editHashtags
+      .split(/[\s,]+/)
+      .map((t) => t.replace(/^#/, '').trim())
+      .filter(Boolean);
+    setPostOverrides({
+      headline: editHeadline.trim(),
+      body: editBody.trim(),
+      cta: editCta.trim(),
+      hashtags: parsedHashtags,
+    });
+    setIsEditing(false);
+    toast.success('Post updated');
+  };
+
+  const cancelEdits = () => {
+    setIsEditing(false);
+  };
 
   const imageToShow = confirmedImageUrl || confirmedPost?.imageUrl;
+  const facebookPages = meta.pages;
+  const instagramAccounts = useMemo(
+    () =>
+      meta.pages
+        .filter((page) => page.instagram_business_account_id)
+        .map((page) => ({
+          id: page.instagram_business_account_id as string,
+          username: page.instagram_username || null,
+          name: page.instagram_name || null,
+          profilePictureUrl: page.instagram_profile_picture_url || null,
+          pageId: page.id,
+          pageName: page.name,
+        })),
+    [meta.pages]
+  );
   const selectedOrganization =
     linkedin.organizations.find((org) => org.urn === selectedOrgUrn) ||
     linkedin.organizations[0] ||
+    null;
+  const selectedFacebookPage =
+    facebookPages.find((page) => page.id === selectedFacebookPageId) ||
+    facebookPages.find((page) => page.id === meta.defaultFacebookPageId) ||
+    facebookPages[0] ||
+    null;
+  const selectedInstagramAccount =
+    instagramAccounts.find((account) => account.id === selectedInstagramAccountId) ||
+    instagramAccounts.find((account) => account.id === meta.defaultInstagramAccountId) ||
+    instagramAccounts[0] ||
     null;
   const canPostAsOrganization = linkedin.organizations.length > 0;
   const displayAuthorName =
@@ -304,6 +632,17 @@ export function PreviewPublish({
       ? account?.name || brandName
       : selectedOrganization?.name || brandName;
   const displayAvatarUrl = publishTarget === 'person' ? account?.avatarUrl || logoUrl : logoUrl;
+  const facebookPreviewName = selectedFacebookPage?.name || brandName;
+  const facebookPreviewAvatar = selectedFacebookPage?.picture_url || logoUrl || account?.avatarUrl;
+  const instagramPreviewHandle =
+    selectedInstagramAccount?.username ||
+    displayAuthorName
+      .toLowerCase()
+      .replace(/[^a-z0-9._]/g, '')
+      .slice(0, 30) ||
+    'brand';
+  const instagramPreviewAvatar =
+    selectedInstagramAccount?.profilePictureUrl || logoUrl || account?.avatarUrl;
 
   useEffect(() => {
     if (publishTarget === 'org' && !canPostAsOrganization) {
@@ -316,36 +655,133 @@ export function PreviewPublish({
     toast.success('Post copied to clipboard');
   };
 
+  const syncMetaDefaults = async (payload: {
+    defaultFacebookPageId?: string | null;
+    defaultInstagramAccountId?: string | null;
+  }) => {
+    const target =
+      payload.defaultInstagramAccountId !== undefined ? 'instagram' : 'facebook';
+    setSavingMetaDefaults(target);
+
+    try {
+      const response = await fetch('/api/meta/connection', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          (data as { error?: string } | null)?.error || 'Failed to update Meta publish defaults'
+        );
+      }
+
+      const pages = Array.isArray((data as { pages?: unknown[] })?.pages)
+        ? ((data as { pages: MetaPage[] }).pages as MetaPage[])
+        : [];
+
+      setMeta({
+        loading: false,
+        connected: Boolean((data as { connected?: boolean })?.connected),
+        expired: false,
+        pages,
+        defaultFacebookPageId:
+          (data as { default_facebook_page_id?: string | null })?.default_facebook_page_id || null,
+        defaultInstagramAccountId:
+          (data as { default_instagram_account_id?: string | null })?.default_instagram_account_id ||
+          null,
+      });
+    } catch (error) {
+      toast.error('Could not save Meta defaults', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setSavingMetaDefaults(null);
+    }
+  };
+
+  const ensureDraftPost = async () => {
+    if (!effectivePost) {
+      throw new Error('Nothing to save yet.');
+    }
+
+    const payload = {
+      brandId,
+      prompt: effectivePost.headline,
+      headline: effectivePost.headline,
+      body: effectivePost.body,
+      cta: effectivePost.cta,
+      hashtags: effectivePost.hashtags,
+      imageUrl: imageToShow,
+      imagePrompt: effectivePost.imagePrompt,
+      publishChannels: selectedChannels,
+      targetType: publishTarget === 'org' ? 'organization' : 'person',
+      targetUrn: publishTarget === 'org' ? selectedOrganization?.urn || null : linkedin.memberUrn || null,
+      facebookPageId: selectedFacebookPage?.id || selectedFacebookPageId || null,
+      instagramAccountId:
+        selectedInstagramAccount?.id || selectedInstagramAccountId || null,
+    };
+
+    if (draftPostIdState) {
+      const updateResponse = await fetch('/api/pro/post/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: draftPostIdState,
+          ...payload,
+        }),
+      });
+
+      if (updateResponse.ok) {
+        const updateData = await updateResponse.json();
+        const postId = updateData.postId || draftPostIdState;
+        setDraftPostIdState(postId);
+        return postId as string;
+      }
+
+      const updateError = await updateResponse.json().catch(() => ({}));
+      throw new Error(updateError.error || 'Failed to update draft');
+    }
+
+    const createResponse = await fetch('/api/pro/post/save-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!createResponse.ok) {
+      const errorPayload = await createResponse.json().catch(() => ({}));
+      throw new Error(errorPayload.error || 'Failed to save draft');
+    }
+
+    const createData = await createResponse.json();
+    const postId = createData.postId as string | undefined;
+    if (!postId) {
+      throw new Error('No post ID returned');
+    }
+
+    setDraftPostIdState(postId);
+    return postId;
+  };
+
   const saveDraft = async () => {
     if (!confirmedPost || savingDraft) return;
     setSavingDraft(true);
     try {
-      const response = await fetch('/api/pro/post/save-draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandId,
-          prompt: confirmedPost.headline,
-          headline: confirmedPost.headline,
-          body: confirmedPost.body,
-          cta: confirmedPost.cta,
-          hashtags: confirmedPost.hashtags,
-          imageUrl: imageToShow,
-          imagePrompt: confirmedPost.imagePrompt,
-        }),
+      const postId = await ensureDraftPost();
+      toast.success('Saved as draft', { description: `Post ID: ${postId}` });
+    } catch (error) {
+      toast.error('Failed to save draft', {
+        description: error instanceof Error ? error.message : 'Unknown error',
       });
-      if (!response.ok) throw new Error('Failed to save');
-      const data = await response.json();
-      toast.success('Saved as draft', { description: `Post ID: ${data.postId}` });
-    } catch {
-      toast.error('Failed to save draft');
     } finally {
       setSavingDraft(false);
     }
   };
 
   const publishToLinkedIn = async () => {
-    if (!confirmedPost) return;
+    if (!effectivePost) return;
     if (!linkedin.connected) {
       toast.error('LinkedIn not connected', {
         description: linkedin.expired
@@ -361,50 +797,56 @@ export function PreviewPublish({
 
     setPublishing(true);
     try {
-      // First save as draft to get a post ID
-      const saveRes = await fetch('/api/pro/post/save-draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandId,
-          prompt: confirmedPost.headline,
-          headline: confirmedPost.headline,
-          body: confirmedPost.body,
-          cta: confirmedPost.cta,
-          hashtags: confirmedPost.hashtags,
-          imageUrl: imageToShow,
-          imagePrompt: confirmedPost.imagePrompt,
-        }),
-      });
+      const postId = await ensureDraftPost();
 
-      if (!saveRes.ok) throw new Error('Failed to save post before publishing');
-      const saveData = await saveRes.json();
-      const postId = saveData.postId;
-
-      if (!postId) throw new Error('No post ID returned');
-
-      // Now publish via LinkedIn API
-      const publishRes = await fetch('/api/post', {
+      const publishRes = await fetch('/api/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           postId,
-          targetType: publishTarget,
+          autoPost: true,
+          targetType: publishTarget === 'org' ? 'organization' : 'person',
           targetUrn: publishTarget === 'org' ? selectedOrganization?.urn : undefined,
+          imageUrl: imageToShow || undefined,
         }),
       });
 
-      if (!publishRes.ok) {
-        const errData = await publishRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to publish to LinkedIn');
+      const publishData = await publishRes.json().catch(() => ({}));
+
+      if (!publishRes.ok || publishData?.status === 'failed') {
+        throw new Error(
+          publishData?.message || publishData?.error || 'Failed to publish to LinkedIn'
+        );
       }
 
-      setPublished(true);
+      if (publishData?.status !== 'posted') {
+        throw new Error(
+          publishData?.message || 'LinkedIn accepted the request but did not confirm publication.'
+        );
+      }
+
+      const linkedinPostUrn =
+        typeof publishData?.linkedin_post_urn === 'string' ? publishData.linkedin_post_urn : null;
+      setPublishResults((prev) => ({
+        ...prev,
+        linkedin: {
+          label:
+            publishTarget === 'org'
+              ? selectedOrganization?.name || brandName
+              : account?.name || brandName,
+          sublabel:
+            publishTarget === 'org'
+              ? 'LinkedIn company page'
+              : 'LinkedIn personal profile',
+          permalinkUrl: getLinkedInPermalink(linkedinPostUrn),
+          publishedAt: new Date().toISOString(),
+        },
+      }));
       toast.success('🎉 Published to LinkedIn!', {
         description: 'Your post is now live on LinkedIn.',
       });
-    } catch (err: any) {
-      const message = err?.message || 'Publishing failed';
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Publishing failed';
       if (message.includes('not connected') || message.includes('Unauthorized')) {
         toast.error('LinkedIn not connected', {
           description: 'Please connect your LinkedIn account first.',
@@ -426,23 +868,40 @@ export function PreviewPublish({
     if (!confirmedPost || !meta.connected) return;
     setPublishingFb(true);
     try {
+      const postId = await ensureDraftPost();
       const res = await fetch('/api/meta/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel: 'facebook',
+          postId,
           message: fullPostText,
           imageUrl: imageToShow || null,
-          facebookPageId: meta.defaultFacebookPageId,
+          facebookPageId: selectedFacebookPage?.id || selectedFacebookPageId || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Facebook publishing failed');
+      setPublishResults((prev) => ({
+        ...prev,
+        facebook: {
+          label: data.pageName || selectedFacebookPage?.name || 'Facebook Page',
+          sublabel: 'Facebook Page',
+          permalinkUrl: data.permalinkUrl || null,
+          publishedAt: new Date().toISOString(),
+        },
+      }));
+      if (typeof data.warning === 'string' && data.warning.trim()) {
+        toast.warning('Facebook published with a warning', {
+          description: data.warning,
+        });
+      }
       toast.success('Published to Facebook!', {
         description: `Posted to ${data.pageName || 'your page'}`,
       });
-    } catch (err: any) {
-      toast.error('Facebook publish failed', { description: err?.message || 'Unknown error' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Facebook publish failed', { description: message });
     } finally {
       setPublishingFb(false);
     }
@@ -457,23 +916,45 @@ export function PreviewPublish({
     }
     setPublishingIg(true);
     try {
+      const postId = await ensureDraftPost();
       const res = await fetch('/api/meta/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel: 'instagram',
+          postId,
           message: fullPostText,
           imageUrl: imageToShow,
-          instagramAccountId: meta.defaultInstagramAccountId,
+          instagramAccountId: selectedInstagramAccount?.id || selectedInstagramAccountId || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Instagram publishing failed');
+      setPublishResults((prev) => ({
+        ...prev,
+        instagram: {
+          label:
+            data.igUsername
+              ? `@${data.igUsername}`
+              : selectedInstagramAccount?.username
+                ? `@${selectedInstagramAccount.username}`
+                : '@instagram',
+          sublabel: data.pageName ? `via ${data.pageName}` : 'Instagram Business',
+          permalinkUrl: data.permalinkUrl || null,
+          publishedAt: new Date().toISOString(),
+        },
+      }));
+      if (typeof data.warning === 'string' && data.warning.trim()) {
+        toast.warning('Instagram published with a warning', {
+          description: data.warning,
+        });
+      }
       toast.success('Published to Instagram!', {
         description: data.igUsername ? `@${data.igUsername}` : 'Your post is now live!',
       });
-    } catch (err: any) {
-      toast.error('Instagram publish failed', { description: err?.message || 'Unknown error' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Instagram publish failed', { description: message });
     } finally {
       setPublishingIg(false);
     }
@@ -505,51 +986,17 @@ export function PreviewPublish({
     );
   }
 
-  // ─── Published success state ───
-  if (published) {
-    return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <Card className="p-10 text-center max-w-md bg-emerald-50/60 border-emerald-200/80 shadow-sm">
-          <div className="w-18 h-18 rounded-full bg-gradient-to-br from-emerald-500 to-green-500 mx-auto flex items-center justify-center mb-5 w-[72px] h-[72px]">
-            <CheckCircle2 className="w-10 h-10 text-white" />
-          </div>
-          <h3 className="text-2xl font-bold text-emerald-800 mb-2">Published! 🎉</h3>
-          <p className="text-sm text-emerald-600 mb-6">
-            Your post is now live on LinkedIn and reaching your audience.
-          </p>
-          <div className="flex gap-2 justify-center">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPublished(false);
-                onGoToStep(0);
-              }}
-              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Create Another Post
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => window.open('https://www.linkedin.com/feed/', '_blank')}
-              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              View on LinkedIn
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   // LinkedIn truncates feed posts at ~210 chars then shows "...see more"
   const LINKEDIN_TRUNCATE = 210;
 
-  const postBodyText = [confirmedPost.headline, confirmedPost.body].filter(Boolean).join('\n\n');
+  const postBodyText = [effectivePost!.headline, effectivePost!.body].filter(Boolean).join('\n\n');
   const isTruncatable = postBodyText.length > LINKEDIN_TRUNCATE;
   const charCount = fullPostText.length;
   const wordCount = fullPostText.split(/\s+/).filter(Boolean).length;
+  const hashtagCount = effectivePost!.hashtags?.length || 0;
+  const hasPublishableCopy = Boolean(
+    effectivePost!.headline?.trim() || effectivePost!.body?.trim()
+  );
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
   const charStatus: 'good' | 'warn' | 'danger' =
     charCount > 3000 ? 'danger' : charCount > 2500 ? 'warn' : 'good';
@@ -557,25 +1004,136 @@ export function PreviewPublish({
   // Estimated reach calculation  
   const reachScore = (() => {
     let score = 0;
-    if (confirmedPost.body) score += 30;
-    if (confirmedPost.headline) score += 15;
-    if (confirmedPost.cta) score += 10;
+    if (effectivePost!.body) score += 30;
+    if (effectivePost!.headline) score += 15;
+    if (effectivePost!.cta) score += 10;
     if (imageToShow) score += 25;
-    if ((confirmedPost.hashtags?.length || 0) >= 3) score += 10;
-    if ((confirmedPost.hashtags?.length || 0) >= 5) score += 5;
+    if ((effectivePost!.hashtags?.length || 0) >= 3) score += 10;
+    if ((effectivePost!.hashtags?.length || 0) >= 5) score += 5;
     if (charCount > 150 && charCount < 2000) score += 5;
     return Math.min(100, score);
   })();
 
-  const checklist = [
-    { label: 'Post content is ready', done: Boolean(confirmedPost?.body) },
-    { label: 'Headline is strong', done: Boolean(confirmedPost?.headline) },
-    { label: 'Image is attached', done: Boolean(imageToShow) },
-    { label: 'Hashtags are included', done: (confirmedPost?.hashtags?.length || 0) > 0 },
-    { label: 'Call-to-action is clear', done: Boolean(confirmedPost?.cta) },
-    { label: 'Under 3,000 characters', done: charCount <= 3000 },
+  const readinessItems = [
+    {
+      label: 'Post content is ready',
+      done: hasPublishableCopy,
+      severity: 'error' as const,
+      detail: 'Add a headline or body before trying to publish.',
+    },
+    {
+      label: 'Headline is present',
+      done: Boolean(effectivePost!.headline?.trim()),
+      severity: 'warning' as const,
+      detail: 'A clear headline improves scan rate and preview quality.',
+    },
+    {
+      label: 'Call-to-action is clear',
+      done: Boolean(effectivePost!.cta?.trim()),
+      severity: 'warning' as const,
+      detail: 'Add a CTA if you want the post to drive response or clicks.',
+    },
+    {
+      label: 'Hashtag count is healthy',
+      done: hashtagCount > 0 && hashtagCount <= 8,
+      severity: 'warning' as const,
+      detail:
+        hashtagCount === 0
+          ? 'Add 1 to 5 hashtags to improve discoverability.'
+          : 'Keep hashtags to 8 or fewer for a cleaner feed post.',
+    },
+    {
+      label: 'Under 3,000 characters',
+      done: charCount <= 3000,
+      severity: 'error' as const,
+      detail: 'Trim the copy before LinkedIn publishing.',
+    },
+    ...(selectedChannels.includes('linkedin')
+      ? [
+        {
+          label: 'LinkedIn is connected',
+          done: linkedin.connected,
+          severity: 'error' as const,
+          detail: 'Connect LinkedIn before publishing from Studio.',
+        },
+      ]
+      : []),
+    ...(selectedChannels.includes('linkedin') && publishTarget === 'org'
+      ? [
+        {
+          label: 'Company page is selected',
+          done: Boolean(selectedOrganization?.urn),
+          severity: 'error' as const,
+          detail: 'Choose the LinkedIn organization page you want to publish from.',
+        },
+      ]
+      : []),
+    ...(selectedChannels.includes('facebook')
+      ? [
+        {
+          label: 'Facebook is connected',
+          done: meta.connected && Boolean(selectedFacebookPage?.id),
+          severity: 'error' as const,
+          detail: meta.connected
+            ? 'Choose the Facebook page you want to publish from.'
+            : 'Connect Facebook before publishing there.',
+        },
+      ]
+      : []),
+    ...(selectedChannels.includes('instagram')
+      ? [
+        {
+          label: 'Instagram business account is connected',
+          done: meta.connected && Boolean(selectedInstagramAccount?.id),
+          severity: 'error' as const,
+          detail: meta.connected
+            ? 'Choose the Instagram Business or Creator account you want to publish from.'
+            : 'Connect Instagram before publishing there.',
+        },
+        {
+          label: 'Instagram image is attached',
+          done: Boolean(imageToShow),
+          severity: 'error' as const,
+          detail: 'Instagram publishing requires an image.',
+        },
+      ]
+      : []),
   ];
-  const checklistDone = checklist.filter((c) => c.done).length;
+  const checklistDone = readinessItems.filter((item) => item.done).length;
+  const blockingIssues = readinessItems.filter((item) => !item.done && item.severity === 'error');
+  const warningIssues = readinessItems.filter((item) => !item.done && item.severity === 'warning');
+  const readinessSummary =
+    blockingIssues.length > 0
+      ? 'Fix the blocking items before publishing.'
+      : warningIssues.length > 0
+        ? 'Publish is available, but there are a few quality improvements left.'
+        : 'Everything checks out for publishing.';
+  const linkedinAlreadyPublished = Boolean(publishResults.linkedin);
+  const facebookAlreadyPublished = Boolean(publishResults.facebook);
+  const instagramAlreadyPublished = Boolean(publishResults.instagram);
+  const linkedinPublishBlocked =
+    publishing ||
+    !confirmedPost ||
+    !hasPublishableCopy ||
+    charCount > 3000 ||
+    !linkedin.connected ||
+    (publishTarget === 'org' && !selectedOrganization?.urn) ||
+    linkedinAlreadyPublished;
+  const facebookPublishBlocked =
+    publishingFb ||
+    !confirmedPost ||
+    !hasPublishableCopy ||
+    !meta.connected ||
+    !selectedFacebookPage?.id ||
+    facebookAlreadyPublished;
+  const instagramPublishBlocked =
+    publishingIg ||
+    !confirmedPost ||
+    !hasPublishableCopy ||
+    !meta.connected ||
+    !selectedInstagramAccount?.id ||
+    instagramAlreadyPublished ||
+    !imageToShow;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
@@ -671,6 +1229,77 @@ export function PreviewPublish({
           </div>
         </div>
 
+        {/* ─── Edit Post Inline ─── */}
+        {isEditing ? (
+          <Card className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto p-5 space-y-4 border border-purple-200 bg-purple-50/30`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-purple-600" />
+                Edit Post
+              </h3>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={cancelEdits} className="h-8 text-xs text-gray-500">
+                  <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                </Button>
+                <Button size="sm" onClick={saveEdits} className="h-8 text-xs bg-purple-600 hover:bg-purple-700 text-white">
+                  <Check className="w-3.5 h-3.5 mr-1" /> Save Changes
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Headline</label>
+                <Input
+                  value={editHeadline}
+                  onChange={(e) => setEditHeadline(e.target.value)}
+                  className="text-sm font-semibold bg-white border-slate-300"
+                  maxLength={200}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Body</label>
+                <Textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  className="text-sm bg-white border-slate-300 min-h-[160px]"
+                  rows={8}
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Use blank lines for paragraph breaks. Start lines with - or * for bullet points.</p>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Call to Action</label>
+                <Input
+                  value={editCta}
+                  onChange={(e) => setEditCta(e.target.value)}
+                  className="text-sm bg-white border-slate-300"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">Hashtags</label>
+                <Input
+                  value={editHashtags}
+                  onChange={(e) => setEditHashtags(e.target.value)}
+                  placeholder="#marketing #growth #linkedin"
+                  className="text-sm bg-white border-slate-300"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Space-separated hashtags</p>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto flex justify-end mb-1`}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={startEditing}
+              className="h-8 text-xs border-slate-300 text-slate-600 hover:text-purple-700 hover:border-purple-300 hover:bg-purple-50"
+            >
+              <Pencil className="w-3.5 h-3.5 mr-1.5" />
+              Edit Post
+            </Button>
+          </div>
+        )}
+
         {/* ─── LinkedIn Feed Simulation ─── */}
         {previewPlatform === 'linkedin' && (
           <div className={`${previewMode === 'mobile' ? 'max-w-[400px]' : 'max-w-[560px]'} mx-auto transition-all duration-300 overflow-hidden`}>
@@ -739,10 +1368,10 @@ export function PreviewPublish({
                     if (!isTruncatable || previewExpanded) {
                       return (
                         <>
-                          {confirmedPost.headline && (
-                            <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
+                          {effectivePost!.headline && (
+                            <span className="font-semibold block mb-2">{effectivePost!.headline}</span>
                           )}
-                          {confirmedPost.body}
+                          <FormattedPostBody text={effectivePost!.body || ''} />
                         </>
                       );
                     }
@@ -763,17 +1392,17 @@ export function PreviewPublish({
                     );
                   })()}
                 </div>
-                {confirmedPost.cta && (previewExpanded || !isTruncatable) && (
+                {effectivePost!.cta && (previewExpanded || !isTruncatable) && (
                   <div
                     className="mt-3 text-[14px] font-medium text-slate-700 min-w-0"
                     style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
                   >
-                    {confirmedPost.cta}
+                    {effectivePost!.cta}
                   </div>
                 )}
-                {(previewExpanded || !isTruncatable) && confirmedPost.hashtags?.length > 0 && (
+                {(previewExpanded || !isTruncatable) && (effectivePost!.hashtags?.length || 0) > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1">
-                    {confirmedPost.hashtags.map((tag) => (
+                    {effectivePost!.hashtags!.map((tag) => (
                       <span key={tag} className="text-[#0A66C2] text-[14px] font-medium hover:underline cursor-pointer">
                         #{tag}
                       </span>
@@ -870,20 +1499,20 @@ export function PreviewPublish({
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0 ring-2 ring-white shadow-md"
                   style={{
-                    background: displayAvatarUrl
+                    background: facebookPreviewAvatar
                       ? undefined
                       : `linear-gradient(135deg, ${brandColors[0] || '#1877F2'}, ${brandColors[1] || '#0F172A'})`,
                   }}
                 >
-                  {displayAvatarUrl ? (
+                  {facebookPreviewAvatar ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={displayAvatarUrl} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                    <img src={facebookPreviewAvatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
                   ) : (
-                    <span className="text-xs">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                    <span className="text-xs">{(facebookPreviewName || 'U').slice(0, 2).toUpperCase()}</span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-slate-900 text-[15px] leading-tight">{displayAuthorName}</span>
+                  <span className="font-semibold text-slate-900 text-[15px] leading-tight">{facebookPreviewName}</span>
                   <div className="text-[12px] text-gray-400 flex items-center gap-1">
                     <span>Just now</span>
                     <span>·</span>
@@ -899,18 +1528,18 @@ export function PreviewPublish({
 
               {/* Post Text */}
               <div className="px-3 pb-3 min-w-0 overflow-hidden">
-                <div className="text-[15px] leading-[1.4] whitespace-pre-wrap text-slate-900 break-words">
-                  {confirmedPost.headline && (
-                    <span className="font-semibold block mb-1.5">{confirmedPost.headline}</span>
+                <div className="text-[15px] leading-[1.4] text-slate-900 break-words">
+                  {effectivePost!.headline && (
+                    <span className="font-semibold block mb-2">{effectivePost!.headline}</span>
                   )}
-                  {confirmedPost.body}
+                  <FormattedPostBody text={effectivePost!.body || ''} />
                 </div>
-                {confirmedPost.cta && (
-                  <div className="mt-2 text-[14px] font-medium text-slate-700">{confirmedPost.cta}</div>
+                {effectivePost!.cta && (
+                  <div className="mt-2 text-[14px] font-medium text-slate-700">{effectivePost!.cta}</div>
                 )}
-                {confirmedPost.hashtags?.length > 0 && (
+                {(effectivePost!.hashtags?.length || 0) > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {confirmedPost.hashtags.map((tag) => (
+                    {effectivePost!.hashtags!.map((tag) => (
                       <span key={tag} className="text-[#1877F2] text-[14px] font-medium hover:underline cursor-pointer">
                         #{tag}
                       </span>
@@ -992,22 +1621,22 @@ export function PreviewPublish({
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0"
                   style={{
-                    background: displayAvatarUrl
+                    background: instagramPreviewAvatar
                       ? undefined
                       : 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)',
-                    padding: displayAvatarUrl ? 0 : '1px',
+                    padding: instagramPreviewAvatar ? 0 : '1px',
                   }}
                 >
-                  {displayAvatarUrl ? (
+                  {instagramPreviewAvatar ? (
                     <div className="rounded-full p-[2px]" style={{ background: 'linear-gradient(135deg, #833AB4, #FD1D1D, #FCB045)' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={displayAvatarUrl} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-white" />
+                      <img src={instagramPreviewAvatar} alt="Profile" className="w-7 h-7 rounded-full object-cover border-2 border-white" />
                     </div>
                   ) : (
-                    <span className="text-[10px]">{(displayAuthorName || 'U').slice(0, 2).toUpperCase()}</span>
+                    <span className="text-[10px]">{instagramPreviewHandle.slice(0, 2).toUpperCase()}</span>
                   )}
                 </div>
-                <span className="font-semibold text-slate-900 text-[13px]">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
+                <span className="font-semibold text-slate-900 text-[13px]">{instagramPreviewHandle}</span>
                 <button className="ml-auto text-gray-500 hover:text-slate-600 p-1">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
@@ -1053,16 +1682,16 @@ export function PreviewPublish({
               {/* Caption */}
               <div className="px-3 pb-3">
                 <div className="text-[13px] leading-[1.4] text-slate-900">
-                  <span className="font-semibold mr-1">{displayAuthorName.toLowerCase().replace(/\s+/g, '')}</span>
-                  {confirmedPost.headline && <span className="font-medium">{confirmedPost.headline} </span>}
-                  {confirmedPost.body}
+                  <span className="font-semibold mr-1">{instagramPreviewHandle}</span>
+                  {effectivePost!.headline && <span className="font-medium">{effectivePost!.headline} </span>}
+                  <FormattedPostBody text={effectivePost!.body || ''} className="inline" />
                 </div>
-                {confirmedPost.cta && (
-                  <div className="mt-1 text-[13px] text-slate-700">{confirmedPost.cta}</div>
+                {effectivePost!.cta && (
+                  <div className="mt-1 text-[13px] text-slate-700">{effectivePost!.cta}</div>
                 )}
-                {confirmedPost.hashtags?.length > 0 && (
+                {(effectivePost!.hashtags?.length || 0) > 0 && (
                   <div className="mt-1 text-[13px] text-[#00376B]">
-                    {confirmedPost.hashtags.map((tag) => `#${tag.replace(/^#/, '')}`).join(' ')}
+                    {effectivePost!.hashtags!.map((tag) => `#${tag.replace(/^#/, '')}`).join(' ')}
                   </div>
                 )}
                 <div className="mt-1 text-[11px] text-gray-500 uppercase">Just now</div>
@@ -1111,28 +1740,55 @@ export function PreviewPublish({
                 <CheckCircle2 className="w-3.5 h-3.5 text-gray-500" />
                 Pre-Publish Checklist
               </h4>
-              <Badge className={`text-[10px] ${checklistDone === checklist.length
+              <Badge className={`text-[10px] ${checklistDone === readinessItems.length
                   ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                   : 'bg-slate-100 text-slate-600 border-slate-200'
                 }`}>
-                {checklistDone}/{checklist.length}
+                {checklistDone}/{readinessItems.length}
               </Badge>
             </div>
+            <p className="mb-3 text-xs text-slate-500">{readinessSummary}</p>
             <div className="space-y-2">
-              {checklist.map((item) => (
-                <div key={item.label} className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors ${item.done ? 'bg-emerald-50/60' : 'bg-amber-50/40'
-                  }`}>
+              {readinessItems.map((item) => (
+                <div
+                  key={item.label}
+                  className={`rounded-lg p-2.5 transition-colors ${item.done
+                      ? 'bg-emerald-50/60'
+                      : item.severity === 'error'
+                        ? 'bg-red-50/60'
+                        : 'bg-amber-50/50'
+                    }`}
+                >
+                  <div className="flex items-center gap-2.5">
                   {item.done ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                   ) : (
-                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${item.severity === 'error' ? 'text-red-500' : 'text-amber-500'}`} />
                   )}
-                  <span className={`text-sm ${item.done ? 'text-slate-700' : 'text-amber-700 font-medium'}`}>
+                    <span className={`text-sm ${item.done
+                        ? 'text-slate-700'
+                        : item.severity === 'error'
+                          ? 'text-red-700 font-medium'
+                          : 'text-amber-700 font-medium'
+                      }`}>
                     {item.label}
-                  </span>
+                    </span>
+                  </div>
+                  {!item.done ? (
+                    <p className={`mt-1 pl-6 text-xs ${item.severity === 'error' ? 'text-red-600' : 'text-amber-700'}`}>
+                      {item.detail}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
+            {(blockingIssues.length > 0 || warningIssues.length > 0) && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {blockingIssues.length > 0
+                  ? `${blockingIssues.length} blocking issue${blockingIssues.length === 1 ? '' : 's'} need attention.`
+                  : `${warningIssues.length} improvement${warningIssues.length === 1 ? '' : 's'} recommended before publishing.`}
+              </div>
+            )}
           </Card>
         </div>
       </div>
@@ -1175,10 +1831,10 @@ export function PreviewPublish({
               </p>
               <div className="flex items-center gap-1.5 mt-2">
                 {[
-                  { label: 'Content', done: Boolean(confirmedPost.body) },
+                  { label: 'Content', done: Boolean(effectivePost!.body) },
                   { label: 'Image', done: Boolean(imageToShow) },
-                  { label: 'CTA', done: Boolean(confirmedPost.cta) },
-                  { label: 'Tags', done: (confirmedPost.hashtags?.length || 0) > 0 },
+                  { label: 'CTA', done: Boolean(effectivePost!.cta) },
+                  { label: 'Tags', done: (effectivePost!.hashtags?.length || 0) > 0 },
                 ].map((f) => (
                   <span key={f.label} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${f.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-gray-500'
                     }`}>
@@ -1288,7 +1944,7 @@ export function PreviewPublish({
                       {meta.loading
                         ? 'Checking Facebook...'
                         : meta.connected
-                          ? `Facebook connected${meta.pages.length > 0 ? ` (${meta.pages[0].name})` : ''}`
+                          ? `Facebook connected${selectedFacebookPage?.name ? ` (${selectedFacebookPage.name})` : ''}`
                           : meta.expired
                             ? 'Facebook token expired'
                             : 'Facebook not connected'}
@@ -1310,39 +1966,38 @@ export function PreviewPublish({
               {/* Instagram connection status */}
               {selectedChannels.includes('instagram') && (
                 <div
-                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${meta.connected && meta.defaultInstagramAccountId
+                  className={`rounded-xl border px-3.5 py-2.5 flex items-center gap-2.5 ${meta.connected && selectedInstagramAccount?.id
                       ? 'border-emerald-200 bg-emerald-50/80'
                       : meta.expired
                         ? 'border-amber-200 bg-amber-50/80'
-                        : meta.connected && !meta.defaultInstagramAccountId
+                        : meta.connected && !selectedInstagramAccount?.id
                           ? 'border-amber-200 bg-amber-50/80'
                           : 'border-rose-200 bg-rose-50/80'
                     }`}
                 >
                   <Instagram className="w-4 h-4 text-[#E4405F] flex-shrink-0" />
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.connected && meta.defaultInstagramAccountId ? 'bg-emerald-500 animate-pulse' :
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.connected && selectedInstagramAccount?.id ? 'bg-emerald-500 animate-pulse' :
                       meta.expired ? 'bg-amber-50' :
                         meta.connected ? 'bg-amber-50' : 'bg-rose-500'
                     }`} />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-xs font-semibold ${meta.connected && meta.defaultInstagramAccountId
+                      className={`text-xs font-semibold ${meta.connected && selectedInstagramAccount?.id
                           ? 'text-emerald-700'
                           : meta.expired
                             ? 'text-amber-700'
-                            : meta.connected && !meta.defaultInstagramAccountId
+                            : meta.connected && !selectedInstagramAccount?.id
                               ? 'text-amber-700'
                               : 'text-rose-700'
                         }`}
                     >
                       {meta.loading
                         ? 'Checking Instagram...'
-                        : meta.connected && meta.defaultInstagramAccountId
-                          ? (() => {
-                            const igPage = meta.pages.find(p => p.instagram_business_account_id === meta.defaultInstagramAccountId);
-                            return igPage?.instagram_username ? `Instagram connected (@${igPage.instagram_username})` : 'Instagram connected';
-                          })()
-                          : meta.connected && !meta.defaultInstagramAccountId
+                        : meta.connected && selectedInstagramAccount?.id
+                          ? selectedInstagramAccount?.username
+                            ? `Instagram connected (@${selectedInstagramAccount.username})`
+                            : 'Instagram connected'
+                          : meta.connected && !selectedInstagramAccount?.id
                             ? 'No Instagram Business account linked'
                             : meta.expired
                               ? 'Meta token expired'
@@ -1418,6 +2073,66 @@ export function PreviewPublish({
                 )}
               </>
             )}
+
+            {selectedChannels.includes('facebook') && meta.connected && facebookPages.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-semibold text-gray-400">Facebook page</label>
+                  {savingMetaDefaults === 'facebook' && (
+                    <span className="text-[10px] text-slate-500">Saving default...</span>
+                  )}
+                </div>
+                <select
+                  value={selectedFacebookPage?.id || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedFacebookPageId(value);
+                    void syncMetaDefaults({ defaultFacebookPageId: value || null });
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                  disabled={savingMetaDefaults !== null}
+                >
+                  {facebookPages.map((page) => (
+                    <option key={page.id} value={page.id}>
+                      {page.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500">
+                  Facebook posts will publish as {selectedFacebookPage?.name || 'your selected page'}.
+                </p>
+              </div>
+            )}
+
+            {selectedChannels.includes('instagram') && meta.connected && instagramAccounts.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-semibold text-gray-400">Instagram account</label>
+                  {savingMetaDefaults === 'instagram' && (
+                    <span className="text-[10px] text-slate-500">Saving default...</span>
+                  )}
+                </div>
+                <select
+                  value={selectedInstagramAccount?.id || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedInstagramAccountId(value);
+                    void syncMetaDefaults({ defaultInstagramAccountId: value || null });
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 focus:ring-2 focus:ring-pink-100 focus:border-pink-400"
+                  disabled={savingMetaDefaults !== null}
+                >
+                  {instagramAccounts.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.username ? `@${item.username}` : item.name || 'Instagram account'} via {item.pageName}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500">
+                  Instagram posts will publish as {selectedInstagramAccount?.username ? `@${selectedInstagramAccount.username}` : 'your selected account'}.
+                </p>
+              </div>
+            )}
           </div>
         </Card>
 
@@ -1461,7 +2176,7 @@ export function PreviewPublish({
             </div>
             <div className="text-center p-3 bg-gradient-to-br from-cyan-500 to-cyan-100/50 rounded-xl border border-cyan-100">
               <div className="text-xl font-black text-cyan-700">
-                {confirmedPost.hashtags?.length || 0}
+                {effectivePost!.hashtags?.length || 0}
               </div>
               <div className="text-[10px] text-cyan-600 font-semibold uppercase tracking-wide">Hashtags</div>
             </div>
@@ -1481,23 +2196,64 @@ export function PreviewPublish({
         </Card>
 
         {/* ─── PUBLISH BUTTONS ─── */}
+        {Object.keys(publishResults).length > 0 && (
+          <Card className="p-4 border border-emerald-200 bg-emerald-50/60">
+            <h3 className="font-bold text-sm text-emerald-800">Published Channels</h3>
+            <div className="mt-3 space-y-2">
+              {Object.entries(publishResults).map(([channel, result]) => {
+                if (!result) return null;
+                return (
+                  <div
+                    key={channel}
+                    className="rounded-xl border border-emerald-200 bg-white/80 px-3 py-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                          {channel}
+                        </p>
+                        <p className="truncate text-sm font-semibold text-slate-900">{result.label}</p>
+                        {result.sublabel ? (
+                          <p className="truncate text-[11px] text-slate-500">{result.sublabel}</p>
+                        ) : null}
+                      </div>
+                      {result.permalinkUrl ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => window.open(result.permalinkUrl || '', '_blank')}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          View
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         <div className="space-y-2">
           {/* LinkedIn Publish */}
           {selectedChannels.includes('linkedin') && (
             <Button
               onClick={publishToLinkedIn}
-              disabled={
-                publishing ||
-                !confirmedPost ||
-                !linkedin.connected ||
-                (publishTarget === 'org' && !selectedOrganization?.urn)
-              }
+              disabled={linkedinPublishBlocked}
               className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#0A66C2] via-blue-500 to-cyan-500 hover:from-[#094F9E] hover:via-blue-600 hover:to-cyan-600 shadow-lg hover:shadow-xl hover:shadow-blue-50/25 transition-all rounded-xl border border-blue-600/20"
             >
               {publishing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Publishing...
+                </>
+              ) : linkedinAlreadyPublished ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Published to LinkedIn
                 </>
               ) : (
                 <>
@@ -1512,17 +2268,18 @@ export function PreviewPublish({
           {selectedChannels.includes('facebook') && (
             <Button
               onClick={publishToFacebook}
-              disabled={
-                publishingFb ||
-                !confirmedPost ||
-                !meta.connected
-              }
+              disabled={facebookPublishBlocked}
               className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#1877F2] to-[#42A5F5] hover:from-[#1565C0] hover:to-[#2196F3] shadow-lg hover:shadow-xl hover:shadow-blue-50/25 transition-all rounded-xl border border-blue-600/20"
             >
               {publishingFb ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Publishing...
+                </>
+              ) : facebookAlreadyPublished ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Published to Facebook
                 </>
               ) : (
                 <>
@@ -1537,19 +2294,18 @@ export function PreviewPublish({
           {selectedChannels.includes('instagram') && (
             <Button
               onClick={publishToInstagram}
-              disabled={
-                publishingIg ||
-                !confirmedPost ||
-                !meta.connected ||
-                !meta.defaultInstagramAccountId ||
-                !imageToShow
-              }
+              disabled={instagramPublishBlocked}
               className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCB045] hover:from-[#6A1B9A] hover:via-[#D50000] hover:to-[#F9A825] shadow-lg hover:shadow-xl hover:shadow-purple-50/25 transition-all rounded-xl border border-purple-600/20"
             >
               {publishingIg ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Publishing...
+                </>
+              ) : instagramAlreadyPublished ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Published to Instagram
                 </>
               ) : (
                 <>
@@ -1562,11 +2318,25 @@ export function PreviewPublish({
         </div>
 
         <p className="text-[11px] text-center text-gray-500">
-          {linkedin.connected && selectedChannels.includes('linkedin')
-            ? `LinkedIn: Publishing${publishTarget === 'org' ? ` as ${selectedOrganization?.name || 'organization'}` : ' to your personal profile'}`
-            : selectedChannels.includes('linkedin')
-              ? 'Connect LinkedIn first to publish'
-              : 'Preview your post across platforms'}
+          {[
+            selectedChannels.includes('linkedin')
+              ? linkedin.connected
+                ? `LinkedIn: ${publishTarget === 'org' ? selectedOrganization?.name || 'organization page' : 'personal profile'}`
+                : 'LinkedIn not connected'
+              : null,
+            selectedChannels.includes('facebook')
+              ? meta.connected
+                ? `Facebook: ${selectedFacebookPage?.name || 'choose a page'}`
+                : 'Facebook not connected'
+              : null,
+            selectedChannels.includes('instagram')
+              ? meta.connected
+                ? `Instagram: ${selectedInstagramAccount?.username ? `@${selectedInstagramAccount.username}` : 'choose an account'}`
+                : 'Instagram not connected'
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || 'Preview your post across platforms'}
         </p>
       </div>
     </div>

@@ -41,6 +41,11 @@ type ReferenceItem = {
   summary?: string;
 };
 
+function isAutoPlaceholderBrand(brand: Pick<Brand, 'name'> | null | undefined) {
+  if (!brand) return false;
+  return typeof brand.name === 'string' && brand.name.trim() === 'My Brand';
+}
+
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -172,25 +177,9 @@ export default function SimpleStudioPage() {
           throw error;
         }
 
-        let resolvedBrands = (data || []) as Brand[];
-
-        if (resolvedBrands.length === 0) {
-          const { data: createdBrand, error: createError } = await supabase
-            .from('brands')
-            .insert({
-              owner_user_id: user.id,
-              name: 'My Brand',
-              description: 'Default brand for Studio',
-            })
-            .select('id, name, owner_user_id')
-            .single();
-
-          if (createError || !createdBrand) {
-            throw createError || new Error('Failed to create default brand.');
-          }
-
-          resolvedBrands = [createdBrand as Brand];
-        }
+        const resolvedBrands = ((data || []) as Brand[]).filter(
+          (brand) => !isAutoPlaceholderBrand(brand)
+        );
 
         setBrands(resolvedBrands);
         setSelectedBrandId((current) => current || resolvedBrands[0]?.id || '');

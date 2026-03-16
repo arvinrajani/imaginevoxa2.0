@@ -98,12 +98,22 @@ export async function POST(request: Request) {
         body: JSON.stringify({ postId: post.id, autoPost: true }),
       }, 3);
 
-      if (!publishResponse.ok) {
-        const errorText = await publishResponse.text();
-        return NextResponse.json({ error: `LinkedIn publish failed: ${errorText}` }, { status: 502 });
+      const payload = await publishResponse.json().catch(() => null);
+
+      if (
+        !publishResponse.ok ||
+        !payload ||
+        typeof payload !== "object" ||
+        (payload as { status?: string }).status !== "posted"
+      ) {
+        const message =
+          (payload &&
+            typeof payload === "object" &&
+            (((payload as { message?: string }).message || (payload as { error?: string }).error) ?? null)) ||
+          "LinkedIn publish failed.";
+        return NextResponse.json({ error: `LinkedIn publish failed: ${message}` }, { status: 502 });
       }
 
-      const payload = await publishResponse.json();
       return NextResponse.json({ status: "published", result: payload });
     }
 

@@ -9,6 +9,7 @@ import {
 
 const inputSchema = z.object({
   channel: z.enum(["facebook", "instagram"]),
+  postId: z.string().uuid().optional().nullable(),
   message: z.string().min(1, "Post message is required"),
   imageUrl: z.string().url().optional().nullable(),
   facebookPageId: z.string().optional().nullable(),
@@ -20,6 +21,24 @@ function isMissingMetaTable(message: string | undefined) {
   return /relation\s+"?[^"\s]*meta_connections[^"\s]*"?\s+does\s+not\s+exist/i.test(
     message
   );
+}
+
+function mergePublishChannels(value: unknown, channel: "facebook" | "instagram") {
+  const channels = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  if (!channels.includes(channel)) {
+    channels.push(channel);
+  }
+
+  return channels;
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? ({ ...value } as Record<string, unknown>)
+    : {};
 }
 
 export async function POST(request: Request) {
@@ -35,6 +54,24 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const publishPost =
+      input.postId
+        ? await supabase
+            .from("posts")
+            .select("id, user_id, publish_channels, publish_results")
+            .eq("id", input.postId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : null;
+
+    if (publishPost?.error) {
+      return NextResponse.json({ error: "Failed to load the selected post." }, { status: 500 });
+    }
+
+    if (input.postId && !publishPost?.data) {
+      return NextResponse.json({ error: "Post not found." }, { status: 404 });
     }
 
     // Load Meta connection
@@ -88,6 +125,7 @@ export async function POST(request: Request) {
 
     // ─── Facebook Publishing ───
     if (input.channel === "facebook") {
+      let persistenceWarning: string | null = null;
       const targetPageId =
         input.facebookPageId ||
         connection.default_facebook_page_id ||
@@ -115,16 +153,53 @@ export async function POST(request: Request) {
         );
       }
 
+      if (input.postId && publishPost?.data) {
+        const publishResults = asRecord(publishPost.data.publish_results);
+        publishResults.facebook = {
+          status: "published",
+          published_at: new Date().toISOString(),
+          page_id: page.id,
+          page_name: page.name,
+          post_id: result.postId || null,
+          object_id: result.objectId || null,
+          permalink_url: result.permalinkUrl || null,
+        };
+
+        const { error: postUpdateError } = await supabase
+          .from("posts")
+          .update({
+            status: "posted",
+            posted_at: new Date().toISOString(),
+            facebook_page_id: page.id,
+            facebook_post_id: result.postId || null,
+            publish_channels: mergePublishChannels(publishPost.data.publish_channels, "facebook"),
+            publish_results: publishResults,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", input.postId)
+          .eq("user_id", user.id);
+
+        if (postUpdateError) {
+          persistenceWarning = "Facebook published, but saving the publish result failed.";
+          console.error("Facebook publish persistence error:", postUpdateError);
+        }
+      }
+
       return NextResponse.json({
         success: true,
         channel: "facebook",
         postId: result.postId,
+        objectId: result.objectId,
+        permalinkUrl: result.permalinkUrl || null,
         pageName: page.name,
+        pageId: page.id,
+        warning: persistenceWarning,
       });
     }
 
     // ─── Instagram Publishing ───
     if (input.channel === "instagram") {
+      let persistenceWarning: string | null = null;
       const targetIgId =
         input.instagramAccountId ||
         connection.default_instagram_account_id ||
@@ -176,13 +251,51 @@ export async function POST(request: Request) {
         );
       }
 
+      if (input.postId && publishPost?.data) {
+        const publishResults = asRecord(publishPost.data.publish_results);
+        publishResults.instagram = {
+          status: "published",
+          published_at: new Date().toISOString(),
+          account_id: targetIgId,
+          username: ownerPage.instagram_username || null,
+          owner_page_id: ownerPage.id,
+          owner_page_name: ownerPage.name,
+          media_id: result.mediaId || null,
+          creation_id: result.creationId || null,
+          permalink_url: result.permalinkUrl || null,
+        };
+
+        const { error: postUpdateError } = await supabase
+          .from("posts")
+          .update({
+            status: "posted",
+            posted_at: new Date().toISOString(),
+            instagram_account_id: targetIgId,
+            instagram_media_id: result.mediaId || null,
+            publish_channels: mergePublishChannels(publishPost.data.publish_channels, "instagram"),
+            publish_results: publishResults,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", input.postId)
+          .eq("user_id", user.id);
+
+        if (postUpdateError) {
+          persistenceWarning = "Instagram published, but saving the publish result failed.";
+          console.error("Instagram publish persistence error:", postUpdateError);
+        }
+      }
+
       return NextResponse.json({
         success: true,
         channel: "instagram",
         mediaId: result.mediaId,
         creationId: result.creationId,
+        permalinkUrl: result.permalinkUrl || null,
         pageName: ownerPage.name,
+        pageId: ownerPage.id,
+        instagramAccountId: targetIgId,
         igUsername: ownerPage.instagram_username,
+        warning: persistenceWarning,
       });
     }
 

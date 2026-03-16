@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
     // Best-effort queue registration for reliable retries in cron.
     // Scheduling itself should still succeed even if queue table or service role is not configured.
-    let queue = {
+    const queue = {
       enabled: false,
       enqueued: false,
       warning: null as string | null,

@@ -16,6 +16,7 @@ type CreateImageRequest = {
   logoUrl?: string;
   logoPlacement?: 'overlay' | 'infuse' | 'none';
   postText?: string;
+  postImagePrompt?: string;
   customPrompt?: string;
   generationNonce?: number;
   imageAspect?: 'landscape' | 'square' | 'portrait';
@@ -39,6 +40,41 @@ function asTrimmedString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function asObjectRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function asStringList(value: unknown, max = 10): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
+
+function mergeDistinctStrings(...values: Array<string[] | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const list of values) {
+    if (!Array.isArray(list)) continue;
+
+    for (const item of list) {
+      const normalized = typeof item === 'string' ? item.trim() : '';
+      const key = normalized.toLowerCase();
+      if (!normalized || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(normalized);
+    }
+  }
+
+  return merged;
 }
 
 function resolveLogoUrl(raw: unknown): string | null {
@@ -95,8 +131,9 @@ function deriveSceneBrief(options: {
   productName?: string;
   headline?: string;
   postText?: string;
+  postImagePrompt?: string;
 }) {
-  const raw = `${options.productName || ''} ${options.headline || ''} ${options.postText || ''}`.toLowerCase();
+  const raw = `${options.productName || ''} ${options.headline || ''} ${options.postImagePrompt || ''} ${options.postText || ''}`.toLowerCase();
 
   const sceneByKeyword: Array<{ keywords: string[]; scene: string }> = [
     {
@@ -221,14 +258,15 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CreateImageRequest;
 
     const brandId = body.brandId?.trim() || '';
-    const brandName = body.brandName?.trim() || '';
+    const requestedBrandName = body.brandName?.trim() || '';
     const productName = body.productName?.trim() || '';
-    const brandColors = Array.isArray(body.brandColors) ? body.brandColors.filter(Boolean) : [];
+    const requestedBrandColors = Array.isArray(body.brandColors) ? body.brandColors.filter(Boolean) : [];
     const tone = body.tone?.trim() || 'professional';
     const style = body.style?.trim() || 'text-overlay';
     const providedLogoUrl = body.logoUrl?.trim() || '';
     const customPrompt = body.customPrompt?.trim() || '';
     const postText = body.postText?.trim() || '';
+    const postImagePrompt = body.postImagePrompt?.trim() || '';
     const logoPlacement = (['overlay', 'infuse', 'none'].includes(body.logoPlacement || '') ? body.logoPlacement : 'overlay') as 'overlay' | 'infuse' | 'none';
     const imageAspect = (['landscape', 'square', 'portrait'].includes(body.imageAspect || '') ? body.imageAspect : 'landscape') as 'landscape' | 'square' | 'portrait';
     const generationNonce = Number.isFinite(body.generationNonce)
@@ -238,7 +276,6 @@ export async function POST(request: Request) {
 
     const derived = deriveWordingFromPost(postText);
     const displayHeadline = (body.headline?.trim() || derived.headline || '').slice(0, 80);
-    const displayTagline = (body.tagline?.trim() || derived.tagline || '').slice(0, 120);
 
     if (!postText) {
       return NextResponse.json(
@@ -263,17 +300,87 @@ export async function POST(request: Request) {
 
     const db = createAdminClient();
 
+    let brandRow:
+      | {
+          name?: string | null;
+          description?: string | null;
+          website?: string | null;
+          industry?: string | null;
+        }
+      | null = null;
     let brandKitLogoUrl: string | null = null;
-    if (brandId) {
-      const { data: latestKit } = await db
-        .from('brand_kits')
-        .select('logo_assets')
-        .eq('brand_id', brandId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    let analyzedBrandColors: string[] = [];
+    let marketingDnaContext:
+      | {
+          tone: string | null;
+          imageStyle: string | null;
+          postTypes: string[];
+          ctaStyle: string | null;
+          visualDensity: string | null;
+          tagline: string | null;
+          brandName: string | null;
+          brandDescription: string | null;
+          targetAudience: string | null;
+          businessFocus: string | null;
+          keyOfferings: string[];
+          contentPillars: string[];
+          website: string | null;
+        }
+      | null = null;
 
-      brandKitLogoUrl = resolveLogoUrl(latestKit?.logo_assets);
+    if (brandId) {
+      const [brandRes, latestKitRes, latestDnaRes] = await Promise.all([
+        db
+          .from('brands')
+          .select('name, description, website, industry')
+          .eq('id', brandId)
+          .maybeSingle(),
+        db
+          .from('brand_kits')
+          .select('logo_assets')
+          .eq('brand_id', brandId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        db
+          .from('marketing_dna')
+          .select('tone, image_style, post_types, cta_style, visual_density, primary_colors, accent_colors, evidence, created_at')
+          .eq('brand_id', brandId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      brandRow = brandRes.data || null;
+      brandKitLogoUrl = resolveLogoUrl(latestKitRes.data?.logo_assets);
+
+      const marketingDna = latestDnaRes.data || null;
+      const marketingDnaEvidence = asObjectRecord(marketingDna?.evidence);
+
+      if (marketingDna) {
+        marketingDnaContext = {
+          tone: asTrimmedString(marketingDna.tone),
+          imageStyle: asTrimmedString(marketingDna.image_style),
+          postTypes: asStringList(marketingDna.post_types),
+          ctaStyle: asTrimmedString(marketingDna.cta_style),
+          visualDensity: asTrimmedString(marketingDna.visual_density),
+          tagline: asTrimmedString(marketingDnaEvidence.tagline),
+          brandName: asTrimmedString(marketingDnaEvidence.brand_name),
+          brandDescription: asTrimmedString(marketingDnaEvidence.brand_description),
+          targetAudience: asTrimmedString(marketingDnaEvidence.target_audience),
+          businessFocus: asTrimmedString(marketingDnaEvidence.business_focus),
+          keyOfferings: asStringList(marketingDnaEvidence.key_offerings),
+          contentPillars: asStringList(marketingDnaEvidence.content_pillars),
+          website: asTrimmedString(marketingDnaEvidence.website) || asTrimmedString(brandRow?.website),
+        };
+
+        analyzedBrandColors = mergeDistinctStrings(
+          asStringList(marketingDna.primary_colors),
+          asStringList(marketingDna.accent_colors),
+          asStringList(marketingDnaEvidence.primary_colors),
+          asStringList(marketingDnaEvidence.accent_colors)
+        );
+      }
 
       if (!brandKitLogoUrl) {
         const { data: latestLogoAsset } = await db
@@ -288,6 +395,34 @@ export async function POST(request: Request) {
         brandKitLogoUrl = asTrimmedString(latestLogoAsset?.file_url);
       }
     }
+
+    const effectiveBrandName =
+      requestedBrandName ||
+      marketingDnaContext?.brandName ||
+      asTrimmedString(brandRow?.name) ||
+      '';
+    const effectiveBrandColors = requestedBrandColors.length
+      ? requestedBrandColors
+      : analyzedBrandColors;
+    const analyzedTagline = marketingDnaContext?.tagline || '';
+    const displayTagline = (body.tagline?.trim() || derived.tagline || analyzedTagline).slice(0, 120);
+    const analyzedContextLines = [
+      marketingDnaContext?.brandDescription ? `- Brand summary: ${marketingDnaContext.brandDescription}` : null,
+      marketingDnaContext?.businessFocus ? `- Business focus: ${marketingDnaContext.businessFocus}` : null,
+      marketingDnaContext?.targetAudience ? `- Target audience: ${marketingDnaContext.targetAudience}` : null,
+      marketingDnaContext?.tagline ? `- Tagline: ${marketingDnaContext.tagline}` : null,
+      marketingDnaContext?.tone ? `- Analyzed tone: ${marketingDnaContext.tone}` : null,
+      marketingDnaContext?.imageStyle ? `- Preferred image style: ${marketingDnaContext.imageStyle}` : null,
+      marketingDnaContext?.visualDensity ? `- Visual density: ${marketingDnaContext.visualDensity}` : null,
+      marketingDnaContext?.ctaStyle ? `- CTA style: ${marketingDnaContext.ctaStyle}` : null,
+      marketingDnaContext?.postTypes.length ? `- Common post types: ${marketingDnaContext.postTypes.join(', ')}` : null,
+      marketingDnaContext?.contentPillars.length ? `- Content pillars: ${marketingDnaContext.contentPillars.join(', ')}` : null,
+      marketingDnaContext?.keyOfferings.length ? `- Key offerings: ${marketingDnaContext.keyOfferings.join(', ')}` : null,
+      marketingDnaContext?.website ? `- Website: ${marketingDnaContext.website}` : null,
+      asTrimmedString(brandRow?.industry) ? `- Industry: ${asTrimmedString(brandRow?.industry)}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     const effectiveLogoUrl = providedLogoUrl || brandKitLogoUrl || '';
     const hasLogo = Boolean(effectiveLogoUrl);
@@ -313,55 +448,83 @@ export async function POST(request: Request) {
       portrait: '1080x1350 portrait',
     };
 
-    const colorDirective = brandColors.length
-      ? `Brand color palette: ${brandColors.join(', ')}. Weave these colors throughout the image backgrounds, accent blocks, gradients, and visual elements.`
+    const dominantBrandColors = effectiveBrandColors.slice(0, 4);
+    const colorDirective = effectiveBrandColors.length
+      ? `Brand color palette (hard requirement): ${effectiveBrandColors.join(', ')}. These are the approved brand colors for this image and must be visibly used across the composition.`
+      : '';
+    const colorPriorityDirective = dominantBrandColors.length
+      ? `Primary palette priority: ${dominantBrandColors.join(' -> ')}. Treat these as the hero colors, not optional accents.`
+      : '';
+    const brandNamingDirective = effectiveBrandName
+      ? [
+          `BRAND NAMING RULES:`,
+          `- Ensure the brand name is visibly present somewhere in the final composition, either through the main headline, brand label, product branding, or the supplied logo.`,
+          `- If any visible text, label, badge, product marking, signage, or title appears in the image, use the exact brand name "${effectiveBrandName}".`,
+          productName
+            ? `- If the product name appears in visible text or on the product itself, use the exact product name "${productName}".`
+            : null,
+          displayHeadline
+            ? `- For layouts with text, the primary visible headline should follow this exact wording: "${displayHeadline}".`
+            : null,
+          displayTagline
+            ? `- Use this supporting line only when it remains large and readable: "${displayTagline}".`
+            : null,
+          `- Never invent alternate company names, sub-brands, or fake UI/product labels.`,
+          `- Never change spelling, punctuation, or capitalization of the brand or product names.`,
+        ]
+          .filter(Boolean)
+          .join('\n')
       : '';
 
     const toneMap: Record<string, string> = {
       professional:
-        'Clean corporate aesthetic. Navy and dark tones, sophisticated typography, executive feel.',
+        'Clean corporate aesthetic with authority. Use disciplined spacing, polished surfaces, structured hierarchy, and executive-level restraint. Think McKinsey presentation meets Apple keynote — minimal but powerful.',
       bold:
-        'High-impact and attention-grabbing. Strong contrast, large text hierarchy, vibrant accents.',
+        'High-impact and unapologetically attention-grabbing. Use strong contrast, oversized visual hierarchy, and confident motion cues. Think Nike campaign energy — assertive, clear, and modern.',
       creative:
-        'Artistic and expressive. Unexpected compositions and visual flair while remaining readable.',
+        'Artistic and expressive with unexpected visual surprises. Use dynamic asymmetric compositions, textured layers, and visual storytelling. Think Spotify Wrapped or Airbnb brand imagery, but keep it brand-native.',
       minimal:
-        'Ultra-clean with generous whitespace. Refined and elegant, minimal distractions.',
+        'Ultra-clean with generous whitespace as a design element. Use one focal element, refined spacing, and elegant restraint where less communicates more. Think Muji or Aesop.',
       warm:
-        'Warm and approachable. Soft gradients, human-centered composition, friendly visual mood.',
+        'Warm, human, and approachable. Use inviting lighting, organic shapes, and human-centered composition. Think Mailchimp or Notion brand imagery — friendly and trustworthy.',
       tech:
-        'Futuristic and digital. Structured geometry, modern depth, data-inspired visuals.',
+        'Futuristic and digitally native. Use structured geometry, clean interface-inspired forms, data-visualization rhythm, and precision detailing. Think Stripe or Linear design language without overriding the brand palette.',
       luxury:
-        'Premium and exclusive. High-contrast polish, subtle texture, elevated visual language.',
+        'Premium and exclusive. Use subtle material richness, dramatic lighting, deep contrast, and meticulous finishing. Think Rolex or Porsche — every element should whisper quality.',
     };
 
     const toneDirection = toneMap[tone] || toneMap.professional;
 
     const styleMap: Record<string, string> = {
       'text-overlay':
-        'Design a strong text-safe hero composition with clear negative space for editable overlays and crisp, in-focus visual detail.',
+        'Design a striking hero composition where 30-40% of the canvas has clean negative space or a subtle gradient zone specifically reserved for text overlays. The remaining area should have a vivid, in-focus visual scene. Think conference keynote slide meets editorial magazine cover — the text zone should feel intentional, not empty.',
       'photo-blend':
-        'Use a concrete, high-detail, in-focus professional photo scene with a visible subject and clean high-contrast text-safe space. No soft-focus blur, no haze, and no abstract blurred wash.',
+        'Create a photorealistic, editorial-quality scene shot at eye level or slightly elevated angle. The subject must be tack-sharp with visible textures (fabric weave, metal brushing, screen pixels). Include a natural text-safe zone created by depth of field, a wall, sky, or surface — not by artificial blur. Think Bloomberg Businessweek or Fast Company photography.',
       'abstract-brand':
-        'Use abstract branded gradients and shapes as the main background with clean overlay zones and sharp edges.',
+        'Create a bold abstract composition using geometric shapes, flowing gradients, and brand-colored elements as the hero visual. Sharp edges, clean intersections, and intentional negative space for text. Think Stripe or Linear marketing visuals — abstract but structured, modern, and brand-native.',
       'split-layout':
-        'Use a sharp split composition: one side realistic, concrete visual scene with a clear subject, one side reserved text-safe zone. No abstract blur wash.',
+        'Sharp 60/40 or 50/50 split composition: one zone contains a realistic, detailed scene with a clear subject and environment; the other zone is a clean, solid or subtly textured panel reserved for text. The split line should be clean (vertical, diagonal, or curved) and feel designed. No abstract blur wash on either side.',
       infographic:
-        'Create an infographic-like layout with modular blocks and one clear text-safe card area. Use crisp icons and high contrast.',
+        'Create a modular, structured layout with distinct visual blocks: a hero data visualization area, icon-driven info panels, and one prominent text-safe card zone. Use crisp flat icons, clean divider lines, and high contrast between sections. Think annual report infographic meets modern dashboard design.',
       cinematic:
-        'Use dramatic lighting and cinematic composition with controlled contrast for later text overlays, while keeping details sharp.',
+        'Dramatic, widescreen cinematic composition with intentional lighting: strong key light creating defined shadows and highlights. Shallow depth of field with the hero subject razor-sharp. Atmospheric elements (subtle haze, volumetric light rays, bokeh) add mood without obscuring detail. Think movie poster or Netflix thumbnail — one frame tells the whole story.',
     };
 
     const styleDirection = styleMap[style] || styleMap['text-overlay'];
+    const postImageAnchor = postImagePrompt.replace(/\s+/g, ' ').trim().slice(0, 220);
     const semanticAnchor =
       productName ||
+      postImageAnchor ||
       displayHeadline ||
+      marketingDnaContext?.businessFocus ||
       postText.replace(/\s+/g, ' ').trim().slice(0, 220) ||
-      brandName ||
+      effectiveBrandName ||
       'professional business growth';
     const sceneBrief = deriveSceneBrief({
-      brandName,
+      brandName: effectiveBrandName,
       productName,
       headline: displayHeadline,
+      postImagePrompt,
       postText,
     });
 
@@ -370,70 +533,120 @@ export async function POST(request: Request) {
     const variationSalt = `${generationNonce}-${Date.now().toString(36).slice(-6)}`;
 
     const imagePrompt = `
-You are a world-class graphic designer specializing in LinkedIn visual content. Create a scroll-stopping, professionally designed image.
+You are an elite creative director and visual designer who has art-directed campaigns for Fortune 500 brands. You specialize in LinkedIn visual content that stops the scroll and drives engagement.
 
-DIMENSIONS: ${dimensionMap[imageAspect] || dimensionMap.landscape} format.
+Your mission: create a visually stunning, magazine-quality image that makes the viewer pause, feel something, and engage with the post.
 
-${customPrompt ? `PRIMARY CREATIVE DIRECTION FROM USER:
+CANVAS: ${dimensionMap[imageAspect] || dimensionMap.landscape} format.
+
+${effectiveBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
+BRAND IDENTITY — #1 PRIORITY (READ THIS FIRST)
+═══════════════════════════════════════════════════
+${effectiveBrandName ? `BRAND: "${effectiveBrandName}"
+- The brand name "${effectiveBrandName}" MUST appear as clearly readable text somewhere in the final image.
+- Place it in a high-contrast area so it is legible at LinkedIn feed size (552px wide).
+- Use it exactly as written — never invent alternate names, sub-brands, or fake labels.
+- It can appear as: a headline, a brand label/badge, a watermark, or text integrated into the design.
+- Minimum apparent size: equivalent to 28pt bold text relative to the canvas.` : ''}
+${effectiveBrandColors.length ? `
+BRAND COLORS (MANDATORY — these override ALL default color choices):
+Palette: ${effectiveBrandColors.join(', ')}
+Priority order: ${effectiveBrandColors.slice(0, 4).join(' → ')}
+
+COLOR RULES (NON-NEGOTIABLE):
+1. The DOMINANT color of the image (backgrounds, panels, large surfaces) MUST be from this palette.
+2. At least 60% of the image's color area must use these brand colors.
+3. Text-safe zones, gradients, overlays, cards, and panels MUST use brand colors — never fall back to generic navy, blue, purple, gold, teal, or black unless those exact hex values are in the palette above.
+4. Use the first 1-2 colors as hero/primary surfaces. Use remaining colors as accents and supporting elements.
+5. Environmental elements (lighting gels, material colors, background tones) should harmonize with the brand palette.
+6. NEVER substitute the brand palette with random or default colors. Every color decision starts from this palette.` : ''}
+${productName ? `\nPRODUCT: "${productName}" — if the product appears as visible text or on the product itself, use this exact name.` : ''}
+═══════════════════════════════════════════════════
+` : ''}
+
+${analyzedContextLines ? `BRAND INTELLIGENCE (use this to inform every design decision):
+${analyzedContextLines}
+This is the brand's DNA. Every color choice, composition style, and visual element should feel native to this brand.
+` : ''}
+
+${postImagePrompt ? `POST GENERATOR VISUAL BRIEF (PRIMARY MESSAGE ANCHOR):
+"${postImagePrompt}"
+This brief came directly from the post generator. The final image must clearly support this message.\n` : ''}
+
+${customPrompt ? `USER IMAGE REQUEST (CREATIVE REFINEMENT):
 "${customPrompt}"
-This is the most important instruction - follow it closely while maintaining quality.\n` : ''}
-POST CONTEXT:
+Use this to refine the scene, angle, composition, and mood while staying aligned with the post generator brief and confirmed post.\n` : ''}
+
+CONTENT CONTEXT:
 ${postContext || 'Use the provided headline and tagline as the post message.'}
 
-MESSAGE FOCUS (semantic guidance only):
-${displayHeadline ? `- Headline concept: ${displayHeadline}` : ''}
-${displayTagline ? `- Subtitle concept: ${displayTagline}` : ''}
-${productName ? `- Product focus: ${productName}` : ''}
-SUBJECT ANCHOR:
-- The visual must clearly relate to: "${semanticAnchor}"
+POST-TO-IMAGE ALIGNMENT RULES:
+- The final visual must make immediate sense beside the confirmed post headline and body.
+- If both a post generator brief and a user image request are provided, merge them.
+- The post generator brief defines the message/topic.
+- The user request refines how that topic is visualized.
+- Do not drift into a different topic, metaphor, or subject that weakens the post.
 
-SCENE BRIEF (MANDATORY):
+${brandNamingDirective ? `${brandNamingDirective}
+
+` : ''}
+
+VISUAL STORYTELLING BRIEF:
+${displayHeadline ? `- Core message: ${displayHeadline}` : ''}
+${displayTagline ? `- Supporting message: ${displayTagline}` : ''}
+${productName ? `- Product/service spotlight: ${productName}` : ''}
+
+SUBJECT ANCHOR (the image MUST visually represent this):
+- "${semanticAnchor}"
+- The viewer should immediately understand what this image is about without reading the post.
+
+SCENE CONSTRUCTION (MANDATORY):
 - ${sceneBrief}
-- Include at least one clear focal subject plus one supporting contextual element tied to the post topic.
+- Every image needs a clear HERO ELEMENT (the main visual subject) and SUPPORTING CONTEXT (environment, props, or secondary elements that reinforce the story).
+- Think like a photographer: what would you stage, light, and frame to tell this story in one shot?
 - No gradient-only or abstract-only outputs unless style is "abstract-brand".
+${effectiveBrandColors.length ? `- Use brand colors (${effectiveBrandColors.slice(0, 3).join(', ')}) as the dominant palette in the scene — in surfaces, lighting, materials, and environment.` : ''}
 
 ${logoPlacement === 'none' ? 'No logo needed in this image.' : ''}
 
-COMPOSITION RULES:
-- Create clean text-safe zones with strong contrast so editable text can be added in the editor.
-- Keep visual hierarchy obvious using shapes, depth, and spacing.
+COMPOSITION MASTERY:
+- Apply the rule of thirds for visual balance — place the hero element at an intersection point.
+- Create clean text-safe zones (top 20% or bottom 25%) with strong contrast for editable text overlay.
+- Use depth of field, layering, or environmental framing to create visual depth.
 - Keep all key visual elements inside an 85% central safe-area so LinkedIn crops stay balanced.
+- Use leading lines, color contrast, or light direction to guide the viewer's eye to the focal point.
 
 VISUAL STYLE: ${styleDirection}
-TONE: ${toneDirection}
+VISUAL TONE: ${toneDirection}
 
-${style === 'photo-blend' ? `PHOTO-BLEND HARD RULES:
-- Must look like a sharp real scene, not a blurred texture wash.
-- Subject edges and textures must remain readable at LinkedIn feed size.
-- Use realistic lighting and depth, but keep the frame in focus.
+${style === 'photo-blend' ? `PHOTO-BLEND EXECUTION RULES:
+- Must render as a sharp, high-fidelity photographic scene — not a blurred texture wash.
+- Subject edges, textures, and materials must be crisp and readable at LinkedIn feed size (typically 552px wide).
+- Use studio-quality lighting: directional key light, soft fill, and environmental ambient.
+- Maintain realistic depth of field but keep the primary subject tack-sharp.
+- Think editorial photography: Condé Nast, Bloomberg Businessweek, or Wired cover quality.
 ` : ''}
 
-${brandName ? `BRAND: "${brandName}". Reflect this brand\'s identity in the design.` : ''}
-${colorDirective}
-
-COLOR FIDELITY (IMPORTANT):
-- Make brand colors visibly present in major elements and accents.
-- Use at least two of the provided brand colors in clearly noticeable areas.
-- Do not replace the palette with unrelated random colors.
-
 ${variationDirective}
-UNIQUE VARIATION TOKEN: ${variationSalt}
+VARIATION SEED: ${variationSalt}
 
-QUALITY REQUIREMENTS:
-- Ultra-professional, modern, premium quality
-- Clean visual hierarchy with intentional whitespace
-- Immediately eye-catching in a LinkedIn feed
-- Should look like it was designed by a top creative agency
-- No stock photo feel - every element should feel intentional
-- Image must be crisp and sharp (no blur, no haze, no low-detail mush)
+QUALITY STANDARD (NON-NEGOTIABLE):
+- This image will represent a professional brand on LinkedIn — it must look like a $5,000 creative agency deliverable.
+- Ultra-sharp rendering: every edge clean, every texture detailed, every element intentional.
+- Modern design sensibility: current visual trends (2024-2026), not dated styles.
+- Professional lighting that creates mood and dimension — no flat, evenly-lit compositions.
+- Visual hierarchy that tells a story: primary subject → supporting elements → background atmosphere.
+- The image should trigger the viewer to stop scrolling within 0.3 seconds.
 
-AVOID:
-- Blurry or low-quality visuals
-- Watermarks or placeholder artifacts
-- Overly cluttered compositions
-- Generic clip-art style elements
-- Soft-focus backgrounds, intentional gaussian blur, or foggy haze
-- Large abstract blur blobs that hide detail
+ABSOLUTE PROHIBITIONS:
+- Blurry, soft-focus, or low-resolution output
+- Watermarks, stock photo badges, or placeholder artifacts
+- Cluttered compositions with competing visual elements
+- Generic clip-art, cartoon, or illustration-style elements (unless style explicitly calls for it)
+- Gaussian blur blobs, foggy haze, or dreamy soft-focus backgrounds
+- Abstract color gradients that communicate nothing about the topic
+- Cheesy visual metaphors (lightbulbs for ideas, handshakes for partnership, puzzle pieces for teamwork)
+- Human hands with incorrect finger counts or anatomical errors
 `.trim();
 
     const model = process.env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1';
@@ -491,7 +704,7 @@ CRITICAL LOGO RULES:
     ? 'INFUSE MODE: Make the logo a central, hero element of the design. It can be large and commanding — centered or prominently placed. It should feel like the image was designed AROUND the logo. Think of it like a brand-launch hero banner where the logo is the star.' 
     : 'OVERLAY MODE: Place the logo in a premium corner position (top-right or top-left preferred) with a clean backing — a subtle white/frosted card, clean negative space, or a contrasting panel. It should look like a professional watermark/brand stamp that belongs there by design.'}
 5. The logo should be CRISP and SHARP — high fidelity rendering with clean edges.
-6. Brand name: "${brandName || 'Brand'}"
+6. Brand name: "${effectiveBrandName || 'Brand'}"
 
 DO NOT:
 - Replace the logo with text spelling out the brand name
@@ -558,6 +771,8 @@ CLARITY OVERRIDE (MANDATORY):
 - No blur, no haze, no soft-focus treatment.
 - Prioritize edge clarity, texture detail, and subject separation.
 - Do not return abstract blur fields; return a concrete, identifiable visual scene tied to the subject anchor.
+${effectiveBrandColors.length ? `- REMINDER: Use brand colors (${effectiveBrandColors.slice(0, 4).join(', ')}) as the dominant palette. Do not fall back to generic colors.` : ''}
+${effectiveBrandName ? `- REMINDER: The brand name "${effectiveBrandName}" must appear as readable text in the image.` : ''}
 `.trim();
 
       const secondPass = await generateImageBase({
@@ -584,7 +799,7 @@ CLARITY OVERRIDE (MANDATORY):
           `VISUAL STYLE: ${styleMap['split-layout']}`
         )
         .concat(
-          `\nFALLBACK STYLE OVERRIDE (MANDATORY): Use a sharp split-layout with a clearly defined subject area and a separate clean text-safe area.`
+          `\nFALLBACK STYLE OVERRIDE (MANDATORY): Use a sharp split-layout with a clearly defined subject area and a separate clean text-safe area.${effectiveBrandColors.length ? ` Use brand colors (${effectiveBrandColors.slice(0, 4).join(', ')}) as the dominant palette.` : ''}${effectiveBrandName ? ` Include the brand name "${effectiveBrandName}" as readable text.` : ''}`
         );
 
       const fallbackPass = await generateImageBase({
@@ -760,6 +975,12 @@ FINAL QUALITY FALLBACK (MANDATORY):
               variation_directive: variationDirective,
               variation_salt: variationSalt,
               post_context_excerpt: postContext || null,
+              post_image_prompt: postImagePrompt || null,
+              user_image_prompt: customPrompt || null,
+              analyzed_tone: marketingDnaContext?.tone || null,
+              analyzed_image_style: marketingDnaContext?.imageStyle || null,
+              analyzed_content_pillars: marketingDnaContext?.contentPillars || [],
+              analyzed_target_audience: marketingDnaContext?.targetAudience || null,
             },
           })
           .select('id')

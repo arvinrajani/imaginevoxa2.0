@@ -85,8 +85,9 @@ export default function PostRemixer({ initialPost = '', onUsePost }: PostRemixer
       const data: RemixResult = await res.json();
       setResult(data);
       toast.success('3 remixed variations generated!');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to remix post');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to remix post';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -100,7 +101,7 @@ export default function PostRemixer({ initialPost = '', onUsePost }: PostRemixer
     setTimeout(() => setCopiedIdx(null), 2000);
   };
 
-  const usePost = (remix: RemixedPost) => {
+  const applyPost = (remix: RemixedPost) => {
     const text = `${remix.body}\n\n${remix.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}`;
     if (onUsePost) {
       onUsePost(text);
@@ -229,7 +230,7 @@ export default function PostRemixer({ initialPost = '', onUsePost }: PostRemixer
                         <Button
                           size="sm"
                           variant="default"
-                          onClick={() => usePost(remix)}
+                          onClick={() => applyPost(remix)}
                           className="h-8"
                         >
                           <ArrowRight className="h-3.5 w-3.5 mr-1" />

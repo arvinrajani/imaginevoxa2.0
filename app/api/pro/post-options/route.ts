@@ -64,7 +64,8 @@ const inputSchema = z.object({
     .optional(),
 });
 
-const MAX_SOURCE_CHARS = 1200;
+const MAX_SOURCE_CHARS = 3000;
+const MAX_SELECTED_EVIDENCE_CONTENT_CHARS = 9000;
 const PLACEHOLDER_TOKEN_REGEX =
   /\[(audience|pain|solution|proof|cta|before|intervention|result|lesson|opinion|context|framework)\]/gi;
 
@@ -111,7 +112,25 @@ const STOP_WORDS = new Set([
   "opinion",
   "context",
   "framework",
+  "pdf",
+  "document",
+  "documents",
+  "file",
+  "files",
+  "summary",
+  "summarize",
+  "summarise",
+  "provided",
+  "attached",
+  "based",
+  "according",
+  "post",
+  "make",
+  "create",
 ]);
+
+const DOCUMENT_LED_PROMPT_REGEX =
+  /\b(pdf|document|documents|file|files|brochure|catalog|catalogue|datasheet|data sheet|spec sheet|manual|deck|summary|summar(?:y|ize|ise)|provided|attached|uploaded)\b/i;
 
 type ToneId =
   | "professional"
@@ -278,6 +297,10 @@ function clamp(value: number, min: number, max: number) {
 function sanitizePromptText(value: string) {
   return value
     .replace(PLACEHOLDER_TOKEN_REGEX, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*/g, "")
     .replace(
       /\b(audience|pain|solution|proof|cta(?:\s*objective|\s*action)?|goal|kpi(?:\s*target)?|before|intervention|result|lesson|opinion|context|framework|practical next step)\s*:\s*/gi,
       ""
@@ -292,7 +315,12 @@ function sanitizePromptText(value: string) {
 function cleanGeneratedText(value: string) {
   return value
     .replace(/\r\n/g, "\n")
+    // Convert markdown links to plain-text label + URL for LinkedIn-friendly output.
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, "$1: $2")
+    .replace(/<((?:https?:\/\/)[^>]+)>/gi, "$1")
     .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
     .replace(/^\s*[*]\s+/gm, "👉 ")
     .replace(/\*/g, "")
     .replace(/[ \t]+\n/g, "\n")
@@ -480,6 +508,10 @@ function scoreRelevanceToPrompt(prompt: string, option: GeneratedOption) {
   const haystack = `${option.headline} ${option.hook} ${option.body}`.toLowerCase();
   const hits = keywords.filter((keyword) => haystack.includes(keyword)).length;
   return hits / keywords.length;
+}
+
+function isDocumentLedPrompt(prompt: string) {
+  return DOCUMENT_LED_PROMPT_REGEX.test(prompt);
 }
 
 function ensureBodyLength(body: string, length: LengthId, topic: string) {
@@ -782,20 +814,26 @@ function normalizeOption(params: {
   prompt: string;
   experimentMode: boolean;
 }) {
-  const headline = sanitizePromptText(params.option.headline || params.fallback.headline).slice(0, 180);
-  const hook = sanitizePromptText(params.option.hook || params.fallback.hook);
+  const headline = cleanGeneratedText(
+    sanitizePromptText(params.option.headline || params.fallback.headline)
+  ).slice(0, 180);
+  const hook = cleanGeneratedText(sanitizePromptText(params.option.hook || params.fallback.hook));
 
-  const rawBody = sanitizePromptText(params.option.body || params.fallback.body);
+  const rawBody = cleanGeneratedText(
+    sanitizePromptText(params.option.body || params.fallback.body)
+  );
   const cleanedBody =
     params.structureStyle === "problem-solution"
       ? rawBody
       : stripStructuredScaffolding(rawBody);
   const body = ensureBodyLength(cleanedBody, params.length, params.prompt);
 
-  const cta = sanitizePromptText(params.option.cta || params.fallback.cta);
+  const cta = cleanGeneratedText(sanitizePromptText(params.option.cta || params.fallback.cta));
   const hashtags = normalizeHashtags(params.option.hashtags || params.fallback.hashtags);
-  const image_prompt = sanitizePromptText(
-    params.option.image_prompt || params.fallback.image_prompt || `${headline}. ${body.slice(0, 180)}`
+  const image_prompt = cleanGeneratedText(
+    sanitizePromptText(
+      params.option.image_prompt || params.fallback.image_prompt || `${headline}. ${body.slice(0, 180)}`
+    )
   );
 
   return {
@@ -806,22 +844,28 @@ function normalizeOption(params: {
     hashtags,
     image_prompt,
     variant_label: params.experimentMode
-      ? sanitizePromptText(params.option.variant_label || params.fallback.variant_label || "Core")
+      ? cleanGeneratedText(
+          sanitizePromptText(params.option.variant_label || params.fallback.variant_label || "Core")
+        )
       : undefined,
     test_hypothesis: params.experimentMode
-      ? sanitizePromptText(
-          params.option.test_hypothesis ||
-            params.fallback.test_hypothesis ||
-            "This variation should improve engagement quality."
+      ? cleanGeneratedText(
+          sanitizePromptText(
+            params.option.test_hypothesis ||
+              params.fallback.test_hypothesis ||
+              "This variation should improve engagement quality."
+          )
         )
       : undefined,
     risk_flags: Array.isArray(params.option.risk_flags)
       ? params.option.risk_flags
           .filter((item): item is string => typeof item === "string")
-          .map((item) => sanitizePromptText(item))
+          .map((item) => cleanGeneratedText(sanitizePromptText(item)))
           .filter(Boolean)
       : [],
-    notes: params.option.notes ? sanitizePromptText(params.option.notes) : params.fallback.notes,
+    notes: params.option.notes
+      ? cleanGeneratedText(sanitizePromptText(params.option.notes))
+      : params.fallback.notes,
   } as GeneratedOption;
 }
 
@@ -932,6 +976,16 @@ export async function POST(request: Request) {
         .limit(1)
         .maybeSingle(),
     ]);
+
+    // ── Fetch evolved voice profile (if available) ──
+    const { data: voiceEvolution } = await supabase
+      .from("marketing_dna")
+      .select("evidence")
+      .eq("brand_id", input.brandId)
+      .eq("source", "voice-evolution")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     let productContext: { id: string; name: string; description: string | null } | null = null;
     if (input.productId) {
@@ -1059,6 +1113,17 @@ export async function POST(request: Request) {
     const lengthGuide = LENGTH_GUIDANCE[length];
     const intent = inferContentIntent(sanitizedPrompt, input.outcomeBrief);
     const skillMentions = extractSkillMentions(sanitizedPrompt, 6);
+    const evidenceTitles = selectedEvidenceAssets
+      .map((asset) => asContextString(asset.title))
+      .filter(Boolean)
+      .slice(0, 8);
+    const documentLedPrompt =
+      selectedEvidenceAssets.length > 0 && isDocumentLedPrompt(sanitizedPrompt);
+    const relevancePrompt = documentLedPrompt
+      ? [sanitizedPrompt, evidenceTitles.join(" "), sources.map((source) => source.title || "").join(" ")]
+          .filter(Boolean)
+          .join(" ")
+      : sanitizedPrompt;
 
     const sourcesPrompt = sources.length
       ? [
@@ -1072,9 +1137,26 @@ export async function POST(request: Request) {
         ].join("\n\n")
       : "No external sources provided. Use broad professional claims only; do not invent data points.";
 
+    // Build a map of evidence ID → full source content for PDFs so we can
+    // inject the actual extracted text (not just the metadata description).
+    const evidenceSourceContentMap = new Map<string, string>();
+    for (const source of sources) {
+      const metadata = asObjectRecord(source.metadata);
+      const evidenceAssetId = asContextString(metadata.evidence_asset_id);
+      if (evidenceAssetId && !evidenceSourceContentMap.has(evidenceAssetId)) {
+        const fullText = (source.content || source.content_excerpt || "").trim();
+        if (fullText.length > 80) {
+          evidenceSourceContentMap.set(
+            evidenceAssetId,
+            fullText.slice(0, MAX_SELECTED_EVIDENCE_CONTENT_CHARS)
+          );
+        }
+      }
+    }
+
     const evidencePrompt = selectedEvidenceAssets.length
       ? [
-          "Selected brand knowledge assets:",
+          "Selected brand knowledge assets (use these as primary source material for the post — extract key facts, figures, insights, and talking points):",
           ...selectedEvidenceAssets.slice(0, 12).map((asset, index) => {
             const tags = Array.isArray(asset.tags) && asset.tags.length
               ? ` [tags: ${asset.tags.join(", ")}]`
@@ -1084,52 +1166,100 @@ export async function POST(request: Request) {
               asContextString(asset.note_text) ||
               (asset.type === "url" ? asContextString(asset.url) : null) ||
               "No summary provided.";
-            return `${index + 1}. (${asset.type}) ${asset.title}${tags}\n${summary}`;
+            // For PDFs, append the actual extracted content so the model has
+            // real data to ground the post on.
+            const pdfContent = asset.type === "pdf"
+              ? evidenceSourceContentMap.get(asset.id)
+              : null;
+            const contentSection = pdfContent
+              ? `\n--- Extracted PDF content ---\n${pdfContent}\n--- End of extracted content ---`
+              : "";
+            return `${index + 1}. (${asset.type}) ${asset.title}${tags}\n${summary}${contentSection}`;
           }),
         ].join("\n\n")
       : null;
 
     const systemPrompt = [
-      "You are ImagineVoxa Pro, a principal-level LinkedIn ghostwriter and content strategist for B2B brands.",
+      "You are ImagineVoxa Pro, a principal-level LinkedIn ghostwriter, content strategist, and thought-leadership architect specializing in B2B brands that drive real business outcomes.",
       "Return JSON only and strictly follow schema.",
-      "Write complete, publication-ready copy. Never output placeholders like [audience] or [proof].",
-      "Every option must feel materially different while keeping the same core business intent.",
-      "The post must stay tightly aligned to the user prompt and selected brand knowledge.",
-      "Avoid generic filler. Prefer concrete specifics, practical details, and credible claims.",
-      `Brand naming rule: when you mention the brand/company, use this exact token only: "${canonicalBrandName}". Do not append words like Solutions, Inc, Group, etc unless they already exist in that exact token.`,
-      sources.length
-        ? "Knowledge grounding rule: treat provided sources/knowledge as primary truth. If data is uncertain, use conservative wording and avoid invented numbers."
+      "",
+      "CORE MANDATE:",
+      "- Write complete, publication-ready copy that sounds like a seasoned executive or respected industry voice — never like an AI or marketing bot.",
+      "- Every option must feel materially different (different hook angle, structure, emotional lever) while keeping the same core business intent.",
+      "- The post must stay tightly aligned to the user prompt and selected brand knowledge.",
+      "- Never output placeholders like [audience], [proof], or [X%]. Every claim, stat, and example must be concrete and real.",
+      "",
+      "CONTENT INTELLIGENCE:",
+      "- When PDF documents or knowledge assets are provided, deeply analyze them: extract key statistics, quotes, case study details, product features, metrics, client outcomes, and unique insights.",
+      "- Transform raw document data into compelling narrative — do not just summarize. Find the most interesting angle, the surprising stat, the counterintuitive insight.",
+      "- Cross-reference multiple sources when available to build a richer, more credible narrative.",
+      "- If a PDF contains data points, use specific numbers (e.g., '43% reduction' not 'significant reduction').",
+      sources.length || selectedEvidenceAssets.length
+        ? "Knowledge grounding rule: treat provided sources/knowledge/PDF content as primary truth. Mine them for specific facts, figures, and examples. If data is uncertain, use conservative wording and avoid invented numbers."
         : "No factual sources are provided. Do not invent statistics, client names, or precise claims.",
+      "",
+      "WRITING CRAFT:",
+      `- Brand naming rule: when you mention the brand/company, use this exact token only: "${canonicalBrandName}". Do not append words like Solutions, Inc, Group, etc unless they already exist in that exact token.`,
+      "- Open with a hook that creates an information gap, challenges a belief, or stakes a bold position — the first line must stop the scroll.",
+      "- Write in a natural human voice with rhythm: vary sentence length, use sentence fragments for punch, and let ideas breathe with whitespace.",
+      "- Replace vague claims with specific proof: instead of 'we help companies grow' say 'we helped 127 SaaS teams cut onboarding time by 40%'.",
+      "- End every post with a clear CTA that tells the reader exactly what to do next.",
+      "- Avoid corporate clichés: 'leverage', 'synergy', 'cutting-edge', 'game-changer', 'revolutionize', 'delighted to announce'.",
+      "- If the core prompt explicitly names a product, model, SKU, or product family, keep the post centered on that named product even when no structured product dropdown selection was made.",
+      selectedEvidenceAssets.length > 0
+        ? "- When the prompt names a product and PDF knowledge is attached, pull facts, features, specifications, proof points, and use cases for that product from the PDFs instead of drifting into generic brand copy."
+        : null,
+      documentLedPrompt
+        ? "- Document-led request detected: treat the selected PDFs as the primary topic source. Infer the core product, solution, or narrative from those documents even if the user's prompt wording is generic."
+        : null,
       `Structure style: ${STRUCTURE_STYLE_GUIDANCE[structureStyle]}`,
       productContext
-        ? `Product focus: all options must specifically reference and highlight the product "${productContext.name}".`
+        ? `Product focus: all options must specifically reference and highlight the product "${productContext.name}" with concrete capabilities and outcomes.`
+        : null,
+      productContext && selectedEvidenceAssets.length > 0
+        ? `Fusion rule: connect the selected product "${productContext.name}" directly to the uploaded PDF knowledge. Ground product claims in the document details, features, proof points, differentiators, use cases, and metrics whenever the source material supports them.`
         : null,
       solutionMode
-        ? "Each option must explicitly include: problem, mechanism/solution, proof signal, and CTA."
+        ? "Each option must explicitly include: problem (with felt pain), mechanism/solution (how it works), proof signal (data or example), and CTA."
         : null,
       structureStyle !== "problem-solution"
-        ? "Do not use rigid section labels like 'The challenge:' or 'The approach:'. Keep prose natural."
+        ? "Do not use rigid section labels like 'The challenge:' or 'The approach:'. Keep prose natural and flowing."
         : null,
       `Tone directive: ${TONE_DIRECTIVES[tone]}`,
-      `Emoji policy: use at least ${emojiPolicy.min} and up to ${emojiPolicy.max} emojis. Style: ${emojiPolicy.style}. Spread emojis naturally across hook, key pointers, and CTA.`,
-      "Formatting rule: never use markdown asterisk bullets (*) or markdown emphasis syntax (**).",
-      "Formatting rule: keep spacing clean with short paragraphs and visible line breaks.",
+      `Emoji policy: use at least ${emojiPolicy.min} and up to ${emojiPolicy.max} emojis. Style: ${emojiPolicy.style}. Spread emojis naturally across hook, key pointers, and CTA. Never cluster emojis together.`,
+      "",
+      "FORMATTING:",
+      "- Never use markdown asterisk bullets (*) or markdown emphasis syntax (**).",
+      "- Keep spacing clean: one idea per paragraph, 1-3 sentences max per block.",
+      "- Use line breaks generously — LinkedIn mobile readers need visual breathing room.",
+      "- List items should start with an emoji (e.g., '✅ ...', '→ ...') not dashes or bullets.",
       `Length requirement: ${lengthGuide.words} words. ${lengthGuide.guidance}`,
       input.audienceLevel
-        ? `Audience level: ${input.audienceLevel}. Calibrate vocabulary and examples accordingly.`
+        ? `Audience level: ${input.audienceLevel}. Calibrate vocabulary, technical depth, and examples accordingly.`
         : null,
       includeLinks
-        ? "If website/chatbot links are provided, include them exactly in the final CTA (no URL edits, no placeholders)."
+        ? "If website/chatbot links are provided, weave them naturally into the CTA (no URL edits, no placeholders). Make the link feel like a natural next step."
         : null,
-      "Image prompt rule: each option must provide a high-quality, production-ready image_prompt with subject, scene, composition, lighting, style, mood, and color direction.",
-      "Image prompt constraints: no text overlays, no logos, no watermarks, no UI screenshots, no charts with readable labels.",
+      "",
+      "IMAGE PROMPT ENGINEERING:",
+      "- Each option must provide a high-quality, production-ready image_prompt that a DALL-E or GPT-Image model can execute flawlessly.",
+      "- Structure: [subject] + [scene/environment] + [composition/framing] + [lighting] + [style/aesthetic] + [mood/atmosphere] + [color palette direction].",
+      "- The image must visually reinforce the post's core message — not be generic stock imagery.",
+      "- If the post discusses a specific product, feature, or outcome, the image should reflect that context.",
+      "- Constraints: no text overlays, no logos, no watermarks, no UI screenshots, no charts with readable labels, no human faces unless explicitly relevant.",
     ]
       .filter(Boolean)
-      .join(" ");
+      .join("\n");
 
     const userPrompt = [
       `Brand (exact name to preserve): ${canonicalBrandName}`,
       `Core prompt: ${sanitizedPrompt}`,
+      documentLedPrompt
+        ? "Document-led instruction: the user wants the post written from the selected PDF summaries/content. Use the PDFs to determine the topic, product, proof points, and angle."
+        : null,
+      evidenceTitles.length
+        ? `Selected PDF titles: ${evidenceTitles.join(" | ")}`
+        : null,
       `Detected intent: ${intent}`,
       skillMentions.length ? `Detected skill/domain mentions: ${skillMentions.join(", ")}` : null,
       intent === "hiring" || intent === "internship"
@@ -1183,6 +1313,21 @@ export async function POST(request: Request) {
             preferred_phrases: identity.preferred_phrases || [],
             do_not_use: identity.do_not_use || [],
           })}`
+        : null,
+      // ── Evolved voice context (from performance-based voice analysis) ──
+      voiceEvolution?.evidence?.evolved_voice
+        ? `Evolved brand voice (learned from top-performing posts):\n${JSON.stringify({
+            tone: voiceEvolution.evidence.evolved_voice.tone,
+            tone_keywords: voiceEvolution.evidence.evolved_voice.tone_keywords,
+            writing_style: voiceEvolution.evidence.evolved_voice.writing_style,
+            hook_patterns: voiceEvolution.evidence.evolved_voice.hook_patterns,
+            cta_patterns: voiceEvolution.evidence.evolved_voice.cta_patterns,
+            vocabulary_signature: voiceEvolution.evidence.evolved_voice.vocabulary_signature,
+            sentence_rhythm: voiceEvolution.evidence.evolved_voice.sentence_rhythm,
+          })}\nThis voice profile was derived from actual engagement data. Prioritize these patterns.`
+        : null,
+      voiceEvolution?.evidence?.voice_summary
+        ? `Brand voice summary: ${voiceEvolution.evidence.voice_summary}`
         : null,
       evidencePrompt,
       selectedEvidenceAssets.length > 0 && sources.length === 0
@@ -1248,6 +1393,8 @@ export async function POST(request: Request) {
     const model = process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4o-2024-08-06";
     let options: GeneratedOption[] = [];
     let aiFailureReason: string | null = null;
+    let fallbackUsed = false;
+    let fallbackReason: string | null = null;
 
     for (const temperature of [0.8, 0.45]) {
       try {
@@ -1268,17 +1415,39 @@ export async function POST(request: Request) {
       }
     }
 
+    const fallbackOptions = buildFallbackOptions({
+      prompt: relevancePrompt,
+      count: desiredCount,
+      tone,
+      length,
+      structureStyle,
+      framework: input.framework,
+      experimentMode,
+      experimentAxes,
+      outcomeBrief: input.outcomeBrief,
+      emojiPolicy,
+    });
+
     if (!options.length || options.length < desiredCount) {
-      return NextResponse.json(
-        {
-          error: "AI generation failed. No fallback content was used.",
-          detail: sanitizeFallbackReason(aiFailureReason) || "Model did not return enough options.",
-        },
-        { status: 502 }
-      );
+      fallbackUsed = true;
+      fallbackReason = sanitizeFallbackReason(aiFailureReason) || "Model did not return enough options.";
     }
 
-    const normalized = options.slice(0, desiredCount).map((option) => {
+    const normalized = Array.from({ length: desiredCount }).map((_, index) => {
+      const option = options[index] || {};
+      const fallback = fallbackOptions[index];
+
+      if (fallbackUsed) {
+        return normalizeOption({
+          option,
+          fallback,
+          length,
+          structureStyle,
+          prompt: relevancePrompt,
+          experimentMode,
+        });
+      }
+
       if (
         !option?.headline ||
         !option?.body ||
@@ -1306,7 +1475,7 @@ export async function POST(request: Request) {
             canonicalBrandName
           ),
           length,
-          sanitizedPrompt
+          relevancePrompt
         ),
         cta: appendLinksToCta(
           enforceCanonicalBrandName(cleanGeneratedText(sanitizePromptText(option.cta)), canonicalBrandName),
@@ -1338,17 +1507,25 @@ export async function POST(request: Request) {
       } as GeneratedOption;
     });
 
-    const lowRelevance = normalized.some(
-      (option) => scoreRelevanceToPrompt(sanitizedPrompt, option) < 0.2
+    const lowRelevance = !fallbackUsed && normalized.some(
+      (option) => scoreRelevanceToPrompt(relevancePrompt, option) < 0.2
     );
+    const finalOptions = lowRelevance
+      ? Array.from({ length: desiredCount }).map((_, index) =>
+          normalizeOption({
+            option: options[index] || {},
+            fallback: fallbackOptions[index],
+            length,
+            structureStyle,
+            prompt: relevancePrompt,
+            experimentMode,
+          })
+        )
+      : normalized;
+
     if (lowRelevance) {
-      return NextResponse.json(
-        {
-          error: "AI output did not match your prompt topic closely enough.",
-          detail: "Please make your prompt more specific and regenerate.",
-        },
-        { status: 502 }
-      );
+      fallbackUsed = true;
+      fallbackReason = "AI output did not match the requested topic closely enough.";
     }
 
     const dbCandidates: unknown[] = [];
@@ -1359,7 +1536,7 @@ export async function POST(request: Request) {
     }
     dbCandidates.push(supabase);
 
-    const primary = normalized[0];
+    const primary = finalOptions[0];
     // Full payload (requires migration to have run)
     const postPayloadFull = {
       user_id: user.id,
@@ -1416,7 +1593,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const optionsPayload = normalized.map((option, index) => ({
+    const optionsPayload = finalOptions.map((option, index) => ({
       post_id: post.id,
       option_index: index,
       title: option.headline,
@@ -1437,8 +1614,8 @@ export async function POST(request: Request) {
         emoji_policy: emojiPolicy,
         links: includeLinks ? normalizedLinks : null,
         evidence_ids: evidenceIds,
-        fallback_used: false,
-        fallback_reason: null,
+        fallback_used: fallbackUsed,
+        fallback_reason: fallbackReason,
       }),
       created_by: user.id,
     }));
@@ -1484,7 +1661,7 @@ export async function POST(request: Request) {
       entity_type: "post",
       entity_id: post.id,
       metadata: {
-        options_count: normalized.length,
+        options_count: finalOptions.length,
         model,
         source_ids: usedSourceIds,
         evidence_ids: evidenceIds,
@@ -1499,18 +1676,20 @@ export async function POST(request: Request) {
         product_id: productContext?.id ?? null,
         product_name: productContext?.name ?? null,
         links: includeLinks ? normalizedLinks : null,
-        fallback_used: false,
-        fallback_reason: null,
+        fallback_used: fallbackUsed,
+        fallback_reason: fallbackReason,
       },
     });
 
     return NextResponse.json({
       postId: post.id,
       post_id: post.id,
-      options: normalized,
-      fallback: false,
-      fallbackReason: null,
-      warning: null,
+      options: finalOptions,
+      fallback: fallbackUsed,
+      fallbackReason,
+      warning: fallbackUsed
+        ? "AI model response was incomplete, so a deterministic fallback template was used for one or more options."
+        : null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

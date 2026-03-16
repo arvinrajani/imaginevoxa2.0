@@ -121,6 +121,7 @@ interface ImageEditorProps {
 
 type ToolMode = 'select' | 'text' | 'shape' | 'crop';
 type Handle = 'tl' | 'tr' | 'bl' | 'br' | 'ml' | 'mr' | 'mt' | 'mb' | null;
+type SnapGuideLine = { x1: number; y1: number; x2: number; y2: number };
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -132,6 +133,7 @@ const MIN_CANVAS_SIZE = 320;
 const MAX_CANVAS_SIZE = 4096;
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 1.5;
+const LAYER_SNAP_THRESHOLD = 8;
 
 const PRESET_SIZES = [
   { label: 'LinkedIn Post', w: 1200, h: 628 },
@@ -269,6 +271,42 @@ function drawImageLayer(
   ctx.drawImage(img, drawX, drawY, drawW, drawH);
 }
 
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+) {
+  const lines: string[] = [];
+  const safeWidth = Math.max(maxWidth, 16);
+  const paragraphs = text.replace(/\r/g, '').split('\n');
+
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+
+    if (words.length === 0) {
+      lines.push('');
+      continue;
+    }
+
+    let currentLine = '';
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(testLine).width > safeWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+  }
+
+  return lines.length ? lines : [''];
+}
+
 // ---------------------------------------------------------------------------
 // Build brand-context prompt
 // ---------------------------------------------------------------------------
@@ -389,6 +427,8 @@ export function ImageEditor({
   const [newFontFamily, setNewFontFamily] = useState(FONT_OPTIONS[0]);
   const [newFontWeight, setNewFontWeight] = useState<string>('bold');
   const [newTextAlign, setNewTextAlign] = useState<'left' | 'center' | 'right'>('center');
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineTextDraft, setInlineTextDraft] = useState('');
 
   // Drag state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -615,6 +655,61 @@ export function ImageEditor({
     [updateLayers]
   );
 
+  const nudgeLayer = useCallback(
+    (layerId: string, dx: number, dy: number) => {
+      const layer = layers.find((entry) => entry.id === layerId);
+      if (!layer || layer.locked) return;
+      patchLayer(layerId, { x: layer.x + dx, y: layer.y + dy });
+    },
+    [layers, patchLayer]
+  );
+
+  const alignLayerToCanvas = useCallback(
+    (layerId: string, position: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+      const layer = layers.find((entry) => entry.id === layerId);
+      if (!layer) return;
+
+      if (position === 'left') patchLayer(layerId, { x: 0 });
+      if (position === 'center') patchLayer(layerId, { x: Math.round((canvasW - layer.width) / 2) });
+      if (position === 'right') patchLayer(layerId, { x: Math.round(canvasW - layer.width) });
+      if (position === 'top') patchLayer(layerId, { y: 0 });
+      if (position === 'middle') patchLayer(layerId, { y: Math.round((canvasH - layer.height) / 2) });
+      if (position === 'bottom') patchLayer(layerId, { y: Math.round(canvasH - layer.height) });
+    },
+    [layers, patchLayer, canvasW, canvasH]
+  );
+
+  const centerLayerInCanvas = useCallback(
+    (layerId: string) => {
+      const layer = layers.find((entry) => entry.id === layerId);
+      if (!layer) return;
+      patchLayer(layerId, {
+        x: Math.round((canvasW - layer.width) / 2),
+        y: Math.round((canvasH - layer.height) / 2),
+      });
+    },
+    [layers, patchLayer, canvasW, canvasH]
+  );
+
+  const moveLayerToExtreme = useCallback(
+    (layerId: string, direction: 'front' | 'back') => {
+      updateLayers((prev) => {
+        const index = prev.findIndex((entry) => entry.id === layerId);
+        if (index < 0) return prev;
+        const next = [...prev];
+        const [layer] = next.splice(index, 1);
+        if (!layer) return prev;
+        if (direction === 'front') {
+          next.push(layer);
+        } else {
+          next.unshift(layer);
+        }
+        return next;
+      });
+    },
+    [updateLayers]
+  );
+
   // -----------------------------------------------------------------------
   // Background removal
   // -----------------------------------------------------------------------
@@ -743,6 +838,39 @@ export function ImageEditor({
     setZoom(Number(nextZoom.toFixed(2)));
   }, [canvasW, canvasH]);
 
+  const snapLayerPositionToCanvas = useCallback(
+    (layer: Layer) => {
+      let nextX = layer.x;
+      let nextY = layer.y;
+
+      const layerLeft = layer.x;
+      const layerCenterX = layer.x + layer.width / 2;
+      const layerRight = layer.x + layer.width;
+      const layerTop = layer.y;
+      const layerCenterY = layer.y + layer.height / 2;
+      const layerBottom = layer.y + layer.height;
+
+      if (Math.abs(layerLeft) <= LAYER_SNAP_THRESHOLD) {
+        nextX = 0;
+      } else if (Math.abs(layerCenterX - canvasW / 2) <= LAYER_SNAP_THRESHOLD) {
+        nextX = Math.round(canvasW / 2 - layer.width / 2);
+      } else if (Math.abs(canvasW - layerRight) <= LAYER_SNAP_THRESHOLD) {
+        nextX = Math.round(canvasW - layer.width);
+      }
+
+      if (Math.abs(layerTop) <= LAYER_SNAP_THRESHOLD) {
+        nextY = 0;
+      } else if (Math.abs(layerCenterY - canvasH / 2) <= LAYER_SNAP_THRESHOLD) {
+        nextY = Math.round(canvasH / 2 - layer.height / 2);
+      } else if (Math.abs(canvasH - layerBottom) <= LAYER_SNAP_THRESHOLD) {
+        nextY = Math.round(canvasH - layer.height);
+      }
+
+      return { ...layer, x: Math.round(nextX), y: Math.round(nextY) };
+    },
+    [canvasW, canvasH]
+  );
+
   const applyCustomCanvasSize = useCallback(() => {
     const nextW = Math.round(Number(customCanvasW));
     const nextH = Math.round(Number(customCanvasH));
@@ -863,6 +991,102 @@ export function ImageEditor({
     toast.success('Base image color reset');
   }, [primaryImageLayer, patchLayer]);
 
+  const startInlineTextEdit = useCallback(
+    (layerId: string) => {
+      const layer = layers.find((entry) => entry.id === layerId);
+      if (!layer || layer.type !== 'text') return;
+      setSelectedId(layer.id);
+      setTool('select');
+      setSidePanel('text');
+      setInlineEditingId(layer.id);
+      setInlineTextDraft(layer.text || '');
+    },
+    [layers]
+  );
+
+  const addTextPreset = useCallback(
+    (preset: 'headline' | 'subheadline' | 'cta') => {
+      const defaultText =
+        preset === 'headline'
+          ? brandName ? `${brandName} headline` : 'Add headline'
+          : preset === 'subheadline'
+            ? 'Add supporting line'
+            : 'Add CTA';
+
+      const layer: Layer =
+        preset === 'headline'
+          ? {
+              id: uid('txt'),
+              type: 'text',
+              name: 'Headline',
+              x: Math.round(canvasW * 0.08),
+              y: Math.round(canvasH * 0.12),
+              width: Math.round(canvasW * 0.52),
+              height: Math.round(canvasH * 0.24),
+              rotation: 0,
+              opacity: 1,
+              visible: true,
+              locked: false,
+              text: defaultText,
+              fontSize: Math.round(canvasH * 0.12),
+              fontFamily: newFontFamily,
+              fontWeight: '900',
+              textAlign: 'left',
+              color: '#ffffff',
+              _textShadow: true,
+            }
+          : preset === 'subheadline'
+            ? {
+                id: uid('txt'),
+                type: 'text',
+                name: 'Subheadline',
+                x: Math.round(canvasW * 0.08),
+                y: Math.round(canvasH * 0.72),
+                width: Math.round(canvasW * 0.48),
+                height: Math.round(canvasH * 0.12),
+                rotation: 0,
+                opacity: 1,
+                visible: true,
+                locked: false,
+                text: defaultText,
+                fontSize: Math.round(canvasH * 0.05),
+                fontFamily: newFontFamily,
+                fontWeight: '600',
+                textAlign: 'left',
+                color: '#ffffff',
+                _textBgHighlight: true,
+              }
+            : {
+                id: uid('txt'),
+                type: 'text',
+                name: 'CTA',
+                x: Math.round(canvasW * 0.08),
+                y: Math.round(canvasH * 0.84),
+                width: Math.round(canvasW * 0.22),
+                height: Math.round(canvasH * 0.08),
+                rotation: 0,
+                opacity: 1,
+                visible: true,
+                locked: false,
+                text: defaultText,
+                fontSize: Math.round(canvasH * 0.042),
+                fontFamily: newFontFamily,
+                fontWeight: '700',
+                textAlign: 'center',
+                color: brandColors[0] || '#0A66C2',
+                _textBgHighlight: true,
+              };
+
+      updateLayers((prev) => [...prev, layer]);
+      setSelectedId(layer.id);
+      setTool('select');
+      setSidePanel('text');
+      setInlineEditingId(layer.id);
+      setInlineTextDraft(layer.text || '');
+    },
+    [brandColors, brandName, canvasH, canvasW, newFontFamily, updateLayers]
+  );
+
   const addTextLayer = useCallback(() => {
     if (!newText.trim()) return;
     const layer: Layer = {
@@ -900,8 +1124,47 @@ export function ImageEditor({
     (id: string) => {
       updateLayers((prev) => prev.filter((l) => l.id !== id));
       if (selectedId === id) setSelectedId(null);
+      if (inlineEditingId === id) {
+        setInlineEditingId(null);
+        setInlineTextDraft('');
+      }
     },
-    [selectedId, updateLayers]
+    [inlineEditingId, selectedId, updateLayers]
+  );
+
+  const commitInlineTextEdit = useCallback(() => {
+    if (!inlineEditingId) return;
+    const nextText = inlineTextDraft.trim();
+    if (!nextText) {
+      deleteLayer(inlineEditingId);
+      toast.message('Empty text layer removed');
+      return;
+    }
+
+    patchLayer(inlineEditingId, {
+      text: inlineTextDraft,
+      name: inlineTextDraft.slice(0, 20) || 'Text',
+    });
+    setInlineEditingId(null);
+  }, [deleteLayer, inlineEditingId, inlineTextDraft, patchLayer]);
+
+  const cancelInlineTextEdit = useCallback(() => {
+    setInlineEditingId(null);
+    setInlineTextDraft('');
+  }, []);
+
+  const handleInlineTextKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        commitInlineTextEdit();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelInlineTextEdit();
+      }
+    },
+    [cancelInlineTextEdit, commitInlineTextEdit]
   );
 
   const duplicateLayer = useCallback(
@@ -1018,6 +1281,23 @@ export function ImageEditor({
     [zoom]
   );
 
+  const onCanvasDoubleClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      const { x: lx, y: ly } = canvasToLocal(e.clientX, e.clientY);
+
+      for (let i = layers.length - 1; i >= 0; i -= 1) {
+        const layer = layers[i];
+        if (!layer.visible || layer.locked || layer.type !== 'text') continue;
+        if (lx >= layer.x && lx <= layer.x + layer.width && ly >= layer.y && ly <= layer.y + layer.height) {
+          startInlineTextEdit(layer.id);
+          e.preventDefault();
+          return;
+        }
+      }
+    },
+    [canvasToLocal, layers, startInlineTextEdit]
+  );
+
   const hitHandle = useCallback(
     (lx: number, ly: number, layer: Layer): Handle => {
       const hs = 10 / zoom;
@@ -1087,7 +1367,11 @@ export function ImageEditor({
         setLayers((prev) =>
           prev.map((l) =>
             l.id === selectedId
-              ? { ...l, x: Math.round(dragStart.current.lx + dx), y: Math.round(dragStart.current.ly + dy) }
+              ? snapLayerPositionToCanvas({
+                  ...l,
+                  x: Math.round(dragStart.current.lx + dx),
+                  y: Math.round(dragStart.current.ly + dy),
+                })
               : l
           )
         );
@@ -1114,7 +1398,7 @@ export function ImageEditor({
         );
       }
     },
-    [dragging, resizing, selectedId, canvasToLocal]
+    [dragging, resizing, selectedId, canvasToLocal, snapLayerPositionToCanvas]
   );
 
   const onPointerUp = useCallback(() => {
@@ -1219,22 +1503,9 @@ export function ImageEditor({
             : layer.textAlign === 'right' ? layer.x + layer.width
               : layer.x + layer.width / 2;
         const ty = layer.y + layer.height / 2;
-
-        const words = layer.text.split(' ');
         const maxW = layer.width;
         const lineHeight = (layer.fontSize || 48) * 1.25;
-        const lines: string[] = [];
-        let currentLine = '';
-        for (const word of words) {
-          const test = currentLine ? `${currentLine} ${word}` : word;
-          if (ctx.measureText(test).width > maxW && currentLine) {
-            lines.push(currentLine);
-            currentLine = word;
-          } else {
-            currentLine = test;
-          }
-        }
-        if (currentLine) lines.push(currentLine);
+        const lines = wrapCanvasText(ctx, layer.text, maxW);
 
         const totalH = lines.length * lineHeight;
         const startY = ty - totalH / 2 + lineHeight / 2;
@@ -1320,12 +1591,10 @@ export function ImageEditor({
         if (sel && !sel.locked) {
           e.preventDefault();
           const step = e.shiftKey ? 10 : 1;
-          const patch: Partial<Layer> = {};
-          if (e.key === 'ArrowUp') patch.y = sel.y - step;
-          if (e.key === 'ArrowDown') patch.y = sel.y + step;
-          if (e.key === 'ArrowLeft') patch.x = sel.x - step;
-          if (e.key === 'ArrowRight') patch.x = sel.x + step;
-          patchLayer(sel.id, patch);
+          if (e.key === 'ArrowUp') nudgeLayer(sel.id, 0, -step);
+          if (e.key === 'ArrowDown') nudgeLayer(sel.id, 0, step);
+          if (e.key === 'ArrowLeft') nudgeLayer(sel.id, -step, 0);
+          if (e.key === 'ArrowRight') nudgeLayer(sel.id, step, 0);
         }
       }
 
@@ -1337,7 +1606,7 @@ export function ImageEditor({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, layers, deleteLayer, undo, redo, duplicateLayer, exportImage, patchLayer]);
+  }, [selectedId, layers, deleteLayer, undo, redo, duplicateLayer, exportImage, nudgeLayer]);
 
   useEffect(() => {
     fitCanvasToViewport();
@@ -1347,47 +1616,48 @@ export function ImageEditor({
   // Snap guides â€” show center/edge alignment
   // -----------------------------------------------------------------------
 
-  const SNAP_THRESHOLD = 6;
-
   const snapGuides = useMemo(() => {
-    if (!selectedId || (!dragging && !resizing)) return { lines: [] as Array<{ x1: number; y1: number; x2: number; y2: number }>, snapped: false };
+    if (!selectedId || (!dragging && !resizing)) return { lines: [] as SnapGuideLine[], snapped: false };
 
     const sel = layers.find((l) => l.id === selectedId);
     if (!sel) return { lines: [], snapped: false };
 
-    const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    const lines: SnapGuideLine[] = [];
     const cx = sel.x + sel.width / 2;
     const cy = sel.y + sel.height / 2;
     const canvasCx = canvasW / 2;
     const canvasCy = canvasH / 2;
 
-    // Snap to canvas center X
-    if (Math.abs(cx - canvasCx) < SNAP_THRESHOLD) {
+    if (Math.abs(sel.x) <= LAYER_SNAP_THRESHOLD) {
+      lines.push({ x1: 0, y1: 0, x2: 0, y2: canvasH });
+    }
+    if (Math.abs(sel.x + sel.width - canvasW) <= LAYER_SNAP_THRESHOLD) {
+      lines.push({ x1: canvasW, y1: 0, x2: canvasW, y2: canvasH });
+    }
+    if (Math.abs(sel.y) <= LAYER_SNAP_THRESHOLD) {
+      lines.push({ x1: 0, y1: 0, x2: canvasW, y2: 0 });
+    }
+    if (Math.abs(sel.y + sel.height - canvasH) <= LAYER_SNAP_THRESHOLD) {
+      lines.push({ x1: 0, y1: canvasH, x2: canvasW, y2: canvasH });
+    }
+    if (Math.abs(cx - canvasCx) <= LAYER_SNAP_THRESHOLD) {
       lines.push({ x1: canvasCx, y1: 0, x2: canvasCx, y2: canvasH });
     }
-    // Snap to canvas center Y
-    if (Math.abs(cy - canvasCy) < SNAP_THRESHOLD) {
-      lines.push({ x1: 0, y1: canvasCy, x2: canvasW, y2: canvasCy });
-    }
-    // Snap left edge to center
-    if (Math.abs(sel.x - canvasCx) < SNAP_THRESHOLD) {
-      lines.push({ x1: canvasCx, y1: 0, x2: canvasCx, y2: canvasH });
-    }
-    // Snap right edge to center
-    if (Math.abs(sel.x + sel.width - canvasCx) < SNAP_THRESHOLD) {
-      lines.push({ x1: canvasCx, y1: 0, x2: canvasCx, y2: canvasH });
-    }
-    // Snap top edge to center
-    if (Math.abs(sel.y - canvasCy) < SNAP_THRESHOLD) {
-      lines.push({ x1: 0, y1: canvasCy, x2: canvasW, y2: canvasCy });
-    }
-    // Snap bottom edge to center
-    if (Math.abs(sel.y + sel.height - canvasCy) < SNAP_THRESHOLD) {
+    if (Math.abs(cy - canvasCy) <= LAYER_SNAP_THRESHOLD) {
       lines.push({ x1: 0, y1: canvasCy, x2: canvasW, y2: canvasCy });
     }
 
     return { lines, snapped: lines.length > 0 };
   }, [selectedId, layers, dragging, resizing, canvasW, canvasH]);
+
+  useEffect(() => {
+    if (!inlineEditingId) return;
+    const layerStillExists = layers.some((layer) => layer.id === inlineEditingId && layer.type === 'text');
+    if (!layerStillExists) {
+      setInlineEditingId(null);
+      setInlineTextDraft('');
+    }
+  }, [inlineEditingId, layers]);
 
   // -----------------------------------------------------------------------
   // File upload
@@ -1497,6 +1767,34 @@ export function ImageEditor({
         >
           100%
         </button>
+
+        {selected && (
+          <>
+            <div className="w-px h-6 bg-gray-200" />
+            <div className="hidden xl:flex items-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50 px-1 py-1">
+              {selected.type === 'text' && (
+                <button
+                  onClick={() => startInlineTextEdit(selected.id)}
+                  className="px-2 py-1 text-xs rounded-lg text-cyan-700 hover:bg-white"
+                >
+                  Edit text
+                </button>
+              )}
+              <button
+                onClick={() => centerLayerInCanvas(selected.id)}
+                className="px-2 py-1 text-xs rounded-lg text-cyan-700 hover:bg-white"
+              >
+                Center
+              </button>
+              <button
+                onClick={() => moveLayerToExtreme(selected.id, 'front')}
+                className="px-2 py-1 text-xs rounded-lg text-cyan-700 hover:bg-white"
+              >
+                Bring front
+              </button>
+            </div>
+          </>
+        )}
 
         <div className="flex-1" />
 
@@ -1967,6 +2265,74 @@ export function ImageEditor({
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
                 <Type className="w-4 h-4 text-cyan-600" />
                 Add Text
+              </div>
+
+              {selected?.type === 'text' && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-cyan-700">Selected text layer</p>
+                      <p className="text-[11px] text-cyan-700/80">Double-click text on the canvas to edit it in place.</p>
+                    </div>
+                    <button
+                      onClick={() => startInlineTextEdit(selected.id)}
+                      className="shrink-0 rounded-lg border border-cyan-200 bg-white px-2 py-1 text-[11px] font-medium text-cyan-700 hover:bg-cyan-50"
+                    >
+                      Edit on canvas
+                    </button>
+                  </div>
+
+                  <Textarea
+                    value={inlineEditingId === selected.id ? inlineTextDraft : selected.text || ''}
+                    onChange={(e) => {
+                      if (inlineEditingId === selected.id) {
+                        setInlineTextDraft(e.target.value);
+                        return;
+                      }
+
+                      patchLayer(selected.id, {
+                        text: e.target.value,
+                        name: e.target.value.slice(0, 20) || 'Text',
+                      });
+                    }}
+                    rows={3}
+                    className="bg-white border-cyan-200 text-gray-900 text-sm resize-none"
+                  />
+
+                  {inlineEditingId === selected.id && (
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={commitInlineTextEdit} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white">
+                        Apply text
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelInlineTextEdit} className="border-gray-300 text-gray-600 hover:bg-gray-100">
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-700">Quick text overlays</p>
+                  <p className="text-[11px] text-gray-500">Use these to replace baked-in image text, then drag them into place.</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'headline', label: 'Headline' },
+                    { id: 'subheadline', label: 'Subheadline' },
+                    { id: 'cta', label: 'CTA' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => addTextPreset(preset.id as 'headline' | 'subheadline' | 'cta')}
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs font-medium text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <Textarea
@@ -2465,6 +2831,84 @@ export function ImageEditor({
                     <Input value={selected.name} onChange={(e) => patchLayer(selected.id, { name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900 text-sm" />
                   </div>
 
+                  <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <label className="text-xs text-gray-500 block">Quick Arrange</label>
+                        <p className="text-[11px] text-gray-400">Align, center, nudge, and stack the selected layer.</p>
+                      </div>
+                      <button
+                        onClick={() => centerLayerInCanvas(selected.id)}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      >
+                        Center layer
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { label: 'Left', action: 'left' },
+                        { label: 'Center', action: 'center' },
+                        { label: 'Right', action: 'right' },
+                        { label: 'Top', action: 'top' },
+                        { label: 'Middle', action: 'middle' },
+                        { label: 'Bottom', action: 'bottom' },
+                      ].map((action) => (
+                        <button
+                          key={action.action}
+                          onClick={() => alignLayerToCanvas(selected.id, action.action as 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom')}
+                          className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: 'Left', dx: -10, dy: 0 },
+                        { label: 'Up', dx: 0, dy: -10 },
+                        { label: 'Down', dx: 0, dy: 10 },
+                        { label: 'Right', dx: 10, dy: 0 },
+                      ].map((step) => (
+                        <button
+                          key={`${step.label}-${step.dx}-${step.dy}`}
+                          onClick={() => nudgeLayer(selected.id, step.dx, step.dy)}
+                          className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                        >
+                          {step.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button
+                        onClick={() => moveLayerToExtreme(selected.id, 'back')}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      >
+                        Send back
+                      </button>
+                      <button
+                        onClick={() => moveLayerOrder(selected.id, 'down')}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      >
+                        Backward
+                      </button>
+                      <button
+                        onClick={() => moveLayerOrder(selected.id, 'up')}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      >
+                        Forward
+                      </button>
+                      <button
+                        onClick={() => moveLayerToExtreme(selected.id, 'front')}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs text-gray-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      >
+                        Bring front
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">X</label>
@@ -2658,6 +3102,7 @@ export function ImageEditor({
             onMouseMove={onPointerMove}
             onMouseUp={onPointerUp}
             onMouseLeave={onPointerUp}
+            onDoubleClick={onCanvasDoubleClick}
           >
             {/* Background */}
             <div
@@ -2721,31 +3166,46 @@ export function ImageEditor({
               if (layer.type === 'text') {
                 const textShadowStyle = layerAny._textShadow ? '2px 2px 8px rgba(0,0,0,0.5)' : undefined;
                 const textStrokeStyle = layerAny._textOutline ? `-1px -1px 0 ${layer.color === '#000000' ? '#fff' : '#000'}, 1px -1px 0 ${layer.color === '#000000' ? '#fff' : '#000'}, -1px 1px 0 ${layer.color === '#000000' ? '#fff' : '#000'}, 1px 1px 0 ${layer.color === '#000000' ? '#fff' : '#000'}` : undefined;
+                const combinedTextShadow = [textStrokeStyle, textShadowStyle].filter(Boolean).join(', ') || undefined;
+                const textJustify = layer.textAlign === 'left' ? 'flex-start' : layer.textAlign === 'right' ? 'flex-end' : 'center';
+                const sharedTextStyle: React.CSSProperties = {
+                  fontFamily: layer.fontFamily,
+                  fontSize: (layer.fontSize || 48) * zoom,
+                  fontWeight: layer.fontWeight || 'bold',
+                  color: layer.color || '#fff',
+                  textAlign: layer.textAlign || 'center',
+                  lineHeight: 1.25,
+                  padding: `${4 * zoom}px`,
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'hidden',
+                  textShadow: combinedTextShadow,
+                  ...(layerAny._textBgHighlight ? { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: `${4 * zoom}px` } : {}),
+                };
                 return (
                   <div
                     key={layer.id}
                     style={{
                       ...style,
                       transform: rotateStyle,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: layer.textAlign === 'left' ? 'flex-start' : layer.textAlign === 'right' ? 'flex-end' : 'center',
-                      fontFamily: layer.fontFamily,
-                      fontSize: (layer.fontSize || 48) * zoom,
-                      fontWeight: layer.fontWeight || 'bold',
-                      color: layer.color || '#fff',
-                      textAlign: layer.textAlign || 'center',
-                      lineHeight: 1.25,
-                      padding: `0 ${4 * zoom}px`,
-                      wordBreak: 'break-word',
-                      userSelect: 'none',
-                      overflow: 'hidden',
-                      textShadow: textShadowStyle,
-                      ...(textStrokeStyle ? { textShadow: textStrokeStyle } : {}),
-                      ...(layerAny._textBgHighlight ? { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: `${4 * zoom}px` } : {}),
+                      userSelect: inlineEditingId === layer.id ? 'text' : 'none',
                     }}
                   >
-                    {layer.text}
+                    {inlineEditingId === layer.id ? (
+                      <textarea
+                        value={inlineTextDraft}
+                        onChange={(e) => setInlineTextDraft(e.target.value)}
+                        onBlur={commitInlineTextEdit}
+                        onKeyDown={handleInlineTextKeyDown}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        autoFocus
+                        spellCheck={false}
+                        className="h-full w-full resize-none border-2 border-cyan-300 bg-white/95 shadow-lg outline-none"
+                        style={sharedTextStyle}
+                      />
+                    ) : (
+                      <div style={{ ...sharedTextStyle, display: 'flex', alignItems: 'center', justifyContent: textJustify }}>{layer.text}</div>
+                    )}
                   </div>
                 );
               }
@@ -2822,6 +3282,9 @@ export function ImageEditor({
               <span className="w-px h-3 bg-gray-200" />
               <span className="text-gray-500">{selected.name}</span>
               <span className="text-slate-600">{selected.width} × {selected.height}</span>
+              {selected.type === 'text' && <span>Double-click to edit</span>}
+              <span>Arrow keys move 1px</span>
+              <span>Shift + arrows move 10px</span>
             </>
           )}
         </div>

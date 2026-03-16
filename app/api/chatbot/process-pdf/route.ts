@@ -186,6 +186,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No file path available for PDF processing' }, { status: 400 });
         }
 
+        // Detect storage-limit fallback: file was never actually uploaded to the bucket
+        if (resolvedFilePath.startsWith('indexed-only/')) {
+            return NextResponse.json(
+                {
+                    error:
+                        'This PDF was uploaded when storage was at its limit, so the file itself was not saved — only its text was indexed. Please re-upload the PDF to enable full knowledge processing.',
+                },
+                { status: 400 }
+            );
+        }
+
         resolvedSourceTitle = fallbackSourceTitle(resolvedFilePath, resolvedSourceTitle);
 
         // Download PDF from Supabase storage
