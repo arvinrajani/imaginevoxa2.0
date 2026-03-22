@@ -19,6 +19,9 @@ import {
   Download,
   Globe,
   Link2,
+  Plus,
+  Building2,
+  Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -26,6 +29,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { getThemeSlots } from '@/lib/studio/theme-slots';
+import { deriveStudioPalette } from '@/lib/studio/theme-palette';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +42,7 @@ interface ImageCreatorProps {
   productName?: string;
   brandColors?: string[];
   logoUrl?: string;
+  logoAssets?: Array<{ url: string; name?: string }>;
   analysisProfile?: {
     tone?: string | null;
     imageStyle?: string | null;
@@ -61,6 +67,10 @@ interface ImageCreatorProps {
   /** Pre-loaded PDF-extracted images from the parent's evidence state. When supplied the
    *  internal fetch is skipped — images stay in sync whenever evidence changes. */
   pdfImages?: Array<{ id: string; title: string; signed_url: string }>;
+  /** Called to refresh evidence data (e.g. after re-extract) */
+  onRefreshEvidence?: () => void;
+  /** Called to upload PDF files for evidence extraction */
+  onUploadPdfFiles?: (files: File[]) => Promise<void>;
 }
 
 type BlendModeId = 'normal' | 'multiply' | 'screen' | 'overlay' | 'soft-light';
@@ -120,6 +130,44 @@ function getPdfImageDisplayTitle(title: string) {
   };
 }
 
+function normalizeLogoAssets(
+  assets?: Array<{ url: string; name?: string }>
+): UploadedLogoAsset[] {
+  if (!Array.isArray(assets)) return [];
+
+  const seen = new Set<string>();
+  return assets
+    .map((asset, index) => {
+      const url = typeof asset?.url === 'string' ? asset.url.trim() : '';
+      if (!url) return null;
+      const key = url.toLowerCase();
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return {
+        id: `brand-logo-${index}`,
+        name: asset?.name?.trim() || `Brand logo ${index + 1}`,
+        url,
+      } satisfies UploadedLogoAsset;
+    })
+    .filter((asset): asset is UploadedLogoAsset => Boolean(asset));
+}
+
+function mergeLogoAssets(...collections: UploadedLogoAsset[][]): UploadedLogoAsset[] {
+  const seen = new Set<string>();
+  const merged: UploadedLogoAsset[] = [];
+
+  for (const collection of collections) {
+    for (const asset of collection) {
+      const key = asset.url.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(asset);
+    }
+  }
+
+  return merged;
+}
+
 type ToneOption = {
   id: string;
   label: string;
@@ -132,6 +180,58 @@ type StyleOption = {
   label: string;
   emoji: string;
   description: string;
+};
+
+type ThemeId =
+  | 'guided-auto'
+  | 'alliance-poster'
+  | 'product-hero'
+  | 'knowledge-visual'
+  | 'clean-brand'
+  | 'industrial-campaign'
+  | 'datasheet-frame'
+  | 'proof-stack'
+  | 'launch-banner'
+  | 'sector-collage'
+  | 'brand-story'
+  | 'offer-card'
+  | 'comparison-board'
+  | 'premium-editorial';
+
+type ThemeOption = {
+  id: ThemeId;
+  label: string;
+  category: 'General' | 'Campaign' | 'Technical' | 'Sales';
+  description: string;
+  summary: string;
+  promptHint: string;
+  recommendedTone: string;
+  recommendedStyle: string;
+  recommendedLogoPlacement: 'overlay' | 'infuse' | 'none';
+};
+
+type SavedImagePreset = {
+  id: string;
+  name: string;
+  themeId: ThemeId;
+  contextBrief: string;
+  customPrompt: string;
+  selectedTone: string;
+  selectedStyle: string;
+  logoPlacement: 'overlay' | 'infuse' | 'none';
+  imageAspect: 'landscape' | 'square' | 'portrait';
+  partnerName?: string;
+  partnerTagline?: string;
+  footerWebsite?: string;
+  footerEmail?: string;
+  benefitsText?: string;
+  useReferenceAsHero?: boolean;
+};
+
+type UploadedLogoAsset = {
+  id: string;
+  name: string;
+  url: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +257,184 @@ const STYLE_OPTIONS: StyleOption[] = [
   { id: 'cinematic', label: 'Cinematic', emoji: 'C', description: 'Dramatic and moody' },
 ];
 
+const THEME_OPTIONS: ThemeOption[] = [
+  {
+    id: 'guided-auto',
+    label: 'AI Guided',
+    category: 'General',
+    description: 'Simple mode. Tell AI the context, references, and look you want.',
+    summary: 'Best default when you want ChatGPT-style prompting without extra setup.',
+    promptHint:
+      'What should the image communicate? Mention the product, audience, partner, campaign context, and any must-show elements.',
+    recommendedTone: 'professional',
+    recommendedStyle: 'split-layout',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'alliance-poster',
+    label: 'Alliance Poster',
+    category: 'Campaign',
+    description: 'Structured brand + product poster with a more campaign-style layout.',
+    summary: 'Best for Zaincom-style alliance/product creatives instead of generic ad images.',
+    promptHint:
+      'Mention the partner brand, product name, headline direction, and whether the product image should be the main hero on the left.',
+    recommendedTone: 'bold',
+    recommendedStyle: 'split-layout',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'product-hero',
+    label: 'Product Hero',
+    category: 'Sales',
+    description: 'Clean, premium product-led visual with strong focus on the item itself.',
+    summary: 'Best when the product image or object should carry most of the design.',
+    promptHint:
+      'Describe the product, ideal setting, material finish, viewing angle, and what should feel premium about it.',
+    recommendedTone: 'professional',
+    recommendedStyle: 'photo-blend',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'knowledge-visual',
+    label: 'Knowledge-Led',
+    category: 'Technical',
+    description: 'Uses PDF/site references more heavily so the result feels grounded in real materials.',
+    summary: 'Best when you want AI to follow a brochure, datasheet, or extracted PDF image closely.',
+    promptHint:
+      'Explain what the reference image proves, what facts or features matter, and what the audience should understand immediately.',
+    recommendedTone: 'tech',
+    recommendedStyle: 'split-layout',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'clean-brand',
+    label: 'Clean Brand',
+    category: 'General',
+    description: 'Minimal, controlled, brand-native visual with less visual clutter.',
+    summary: 'Best for polished branded posts where restraint matters more than visual density.',
+    promptHint:
+      'Describe the message in one or two sentences and note any required whitespace, clean text zones, or minimal design cues.',
+    recommendedTone: 'minimal',
+    recommendedStyle: 'text-overlay',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'industrial-campaign',
+    label: 'Industrial Campaign',
+    category: 'Campaign',
+    description: 'High-energy industrial ad look with machinery, infrastructure, and strong hierarchy.',
+    summary: 'Best for motors, switchgear, automation, electrification, and heavy-duty product campaigns.',
+    promptHint:
+      'Mention the industrial setting, equipment, scale, and whether the result should feel like a premium electrical campaign poster.',
+    recommendedTone: 'bold',
+    recommendedStyle: 'cinematic',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'datasheet-frame',
+    label: 'Datasheet Frame',
+    category: 'Technical',
+    description: 'Brochure-like product layout with clear content blocks and disciplined information areas.',
+    summary: 'Best when you want the result to feel like a technical brochure, not a generic ad image.',
+    promptHint:
+      'Describe the product, specs or proof points that matter, and whether the design should feel technical, modular, or brochure-driven.',
+    recommendedTone: 'tech',
+    recommendedStyle: 'infographic',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'proof-stack',
+    label: 'Proof Stack',
+    category: 'Technical',
+    description: 'Trust-led visual with proof cards, metrics, and strong evidence-style framing.',
+    summary: 'Best for case studies, certifications, performance proof, and B2B credibility posts.',
+    promptHint:
+      'Describe the proof you want to show: metrics, certifications, product reliability, client trust, or evidence-led features.',
+    recommendedTone: 'professional',
+    recommendedStyle: 'split-layout',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'launch-banner',
+    label: 'Launch Banner',
+    category: 'Campaign',
+    description: 'Headline-first announcement layout for launches, new arrivals, or bold campaign reveals.',
+    summary: 'Best for product launches, event announcements, or attention-grabbing rollout creatives.',
+    promptHint:
+      'Describe what is launching, who it is for, and whether the image should feel urgent, premium, or celebratory.',
+    recommendedTone: 'bold',
+    recommendedStyle: 'text-overlay',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'sector-collage',
+    label: 'Sector Collage',
+    category: 'Campaign',
+    description: 'Multi-scene layout that shows application sectors, environments, or use cases in one creative.',
+    summary: 'Best when you want to show industries served such as data centers, hospitals, factories, and buildings.',
+    promptHint:
+      'List the sectors or environments that should appear and what the audience should understand about their applications.',
+    recommendedTone: 'tech',
+    recommendedStyle: 'split-layout',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'brand-story',
+    label: 'Brand Story',
+    category: 'General',
+    description: 'Narrative-led theme for founder, company story, values, and positioning visuals.',
+    summary: 'Best for brand positioning, story-led posts, and more human company narratives.',
+    promptHint:
+      'Describe the story, values, or positioning you want to communicate and whether the image should feel personal, premium, or visionary.',
+    recommendedTone: 'warm',
+    recommendedStyle: 'photo-blend',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'offer-card',
+    label: 'Offer Card',
+    category: 'Sales',
+    description: 'Clear sales-focused card for offers, bundles, service promos, or CTA-led creatives.',
+    summary: 'Best for direct response posts where the offer, package, or service should be immediately clear.',
+    promptHint:
+      'Describe the offer, promotion, or service highlight and whether the image should feel urgent, premium, or conversion-focused.',
+    recommendedTone: 'bold',
+    recommendedStyle: 'text-overlay',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'comparison-board',
+    label: 'Comparison Board',
+    category: 'Technical',
+    description: 'Structured side-by-side visual for product comparisons, before/after, or feature contrasts.',
+    summary: 'Best when you want a disciplined comparison layout rather than one single hero scene.',
+    promptHint:
+      'Mention what is being compared and what the viewer should understand immediately from the visual contrast.',
+    recommendedTone: 'professional',
+    recommendedStyle: 'infographic',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'premium-editorial',
+    label: 'Premium Editorial',
+    category: 'Campaign',
+    description: 'Magazine-style polished creative with art-directed composition and luxury finishing.',
+    summary: 'Best for premium brand perception, executive-level visuals, and polished campaign moments.',
+    promptHint:
+      'Describe the premium mood, materials, lighting, and subject so the image feels editorial rather than generic.',
+    recommendedTone: 'luxury',
+    recommendedStyle: 'cinematic',
+    recommendedLogoPlacement: 'overlay',
+  },
+];
+
+const THEME_CATEGORY_ORDER: Array<ThemeOption['category']> = [
+  'General',
+  'Campaign',
+  'Technical',
+  'Sales',
+];
+
 const BLEND_MODE_OPTIONS: Array<{ id: BlendModeId; label: string; description: string }> = [
   { id: 'normal', label: 'Normal', description: 'No extra blending' },
   { id: 'multiply', label: 'Multiply', description: 'Natural on light backgrounds' },
@@ -170,6 +448,947 @@ const ASPECT_DIMENSIONS: Record<'landscape' | 'square' | 'portrait', { width: nu
   square: { width: 1080, height: 1080 },
   portrait: { width: 1080, height: 1350 },
 };
+
+function createPresetId() {
+  return `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getPresetStorageKey(brandId: string) {
+  return `image_creator_presets_${brandId}`;
+}
+
+function createLocalAssetId() {
+  return `asset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function splitMultilineList(value: string, max = 6) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*.\d)\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
+
+function derivePosterBenefitLines(...sources: Array<string | undefined>) {
+  const seen = new Set<string>();
+  const picked: string[] = [];
+
+  const remember = (value: string) => {
+    const cleaned = value.replace(/^[-*.\d)\s]+/, '').replace(/\s+/g, ' ').trim();
+    const key = cleaned.toLowerCase();
+    if (!cleaned || cleaned.length < 12 || cleaned.length > 90 || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    picked.push(cleaned);
+  };
+
+  for (const source of sources) {
+    if (!source) continue;
+
+    const directLines = splitMultilineList(source, 12);
+    directLines.forEach(remember);
+
+    if (picked.length >= 6) {
+      return picked.slice(0, 6);
+    }
+
+    source
+      .split(/[.!?]/)
+      .map((line) => line.trim())
+      .forEach(remember);
+
+    if (picked.length >= 6) {
+      return picked.slice(0, 6);
+    }
+  }
+
+  return picked.slice(0, 6);
+}
+
+function ThemePreviewMini({
+  themeId,
+  isActive,
+}: {
+  themeId: ThemeId;
+  isActive: boolean;
+}) {
+  const ringClass = isActive ? 'ring-1 ring-white/40' : '';
+
+  if (themeId === 'alliance-poster') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0a1e3d] via-[#0f4180] to-[#0a4a8a] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-14 rounded bg-white/95" />
+            <div className="flex-1">
+              <div className="h-2.5 w-36 rounded bg-white/90" />
+              <div className="mt-1 h-2.5 w-28 rounded bg-amber-300" />
+            </div>
+            <div className="flex gap-1">
+              <div className="h-5 w-8 rounded bg-white/90" />
+              <div className="h-5 w-8 rounded bg-white/75" />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-1 gap-2">
+            <div className="h-full w-16 rounded-xl bg-white/18" />
+            <div className="flex-1 space-y-1.5 pt-1">
+              <div className="h-2.5 w-full rounded bg-white/75" />
+              <div className="h-2.5 w-11/12 rounded bg-white/75" />
+              <div className="h-2.5 w-10/12 rounded bg-white/75" />
+            </div>
+          </div>
+          <div className="mt-2 h-3 rounded bg-sky-200/80" />
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'product-hero') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-slate-200 p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full items-center gap-3">
+          <div className="h-14 w-14 rounded-full bg-slate-700 shadow-lg" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-3/4 rounded bg-slate-800" />
+            <div className="h-2.5 w-1/2 rounded bg-slate-400" />
+            <div className="h-7 w-24 rounded-xl border border-slate-300 bg-white" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'knowledge-visual') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-800 to-slate-700 p-2 shadow-sm ${ringClass}`}>
+        <div className="grid h-full grid-cols-[1.1fr_0.9fr] gap-2">
+          <div className="rounded-lg border border-white/10 bg-white/10" />
+          <div className="space-y-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 p-2">
+            <div className="h-2 w-3/4 rounded bg-cyan-100" />
+            <div className="h-2 w-full rounded bg-cyan-100/80" />
+            <div className="h-2 w-4/5 rounded bg-cyan-100/80" />
+            <div className="mt-2 h-6 rounded bg-white/20" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'clean-brand') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white p-2">
+          <div className="h-2.5 w-16 rounded bg-slate-300" />
+          <div className="mt-3 h-3 w-40 rounded bg-slate-900" />
+          <div className="mt-1.5 h-2.5 w-24 rounded bg-slate-400" />
+          <div className="mt-auto flex justify-end">
+            <div className="h-5 w-12 rounded bg-slate-900" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'industrial-campaign') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-950 via-[#13325e] to-[#1d5aa8] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full gap-2">
+          <div className="w-[42%] rounded-xl bg-white/12" />
+          <div className="flex-1 space-y-1.5 rounded-xl bg-black/18 p-2">
+            <div className="h-2.5 w-4/5 rounded bg-white/90" />
+            <div className="h-2.5 w-3/5 rounded bg-amber-300" />
+            <div className="mt-2 h-3 w-full rounded bg-white/55" />
+            <div className="h-3 w-11/12 rounded bg-white/55" />
+            <div className="h-3 w-9/12 rounded bg-white/55" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'datasheet-frame') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-slate-200 p-2 shadow-sm ${ringClass}`}>
+        <div className="grid h-full grid-cols-[0.9fr_1.1fr] gap-2">
+          <div className="rounded-xl border border-slate-300 bg-slate-900/85" />
+          <div className="grid grid-rows-[0.7fr_1fr] gap-2">
+            <div className="rounded-lg border border-slate-300 bg-white p-2">
+              <div className="h-2.5 w-3/4 rounded bg-slate-900" />
+              <div className="mt-1.5 h-2.5 w-2/3 rounded bg-slate-300" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-slate-300 bg-white/85" />
+              <div className="rounded-lg border border-slate-300 bg-white/85" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'proof-stack') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#eef4ff] via-white to-[#f7fbff] p-2 shadow-sm ${ringClass}`}>
+        <div className="grid h-full grid-cols-[1fr_0.95fr] gap-2">
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2">
+            <div className="h-2.5 w-3/4 rounded bg-slate-900" />
+            <div className="grid grid-cols-3 gap-1.5">
+              <div className="h-6 rounded bg-emerald-100" />
+              <div className="h-6 rounded bg-sky-100" />
+              <div className="h-6 rounded bg-amber-100" />
+            </div>
+          </div>
+          <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-900/90 p-2">
+            <div className="h-2.5 w-2/3 rounded bg-white/90" />
+            <div className="h-2.5 w-full rounded bg-white/55" />
+            <div className="h-2.5 w-4/5 rounded bg-white/55" />
+            <div className="mt-2 h-4 w-20 rounded bg-emerald-300" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'launch-banner') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#140f2b] via-[#5b2b91] to-[#ff5f6d] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full flex-col rounded-xl border border-white/15 bg-black/10 p-2">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-16 rounded-full bg-white/90" />
+            <div className="h-4 w-10 rounded-full bg-amber-300" />
+          </div>
+          <div className="mt-2 h-3 w-4/5 rounded bg-white/95" />
+          <div className="mt-1.5 h-3 w-2/3 rounded bg-white/75" />
+          <div className="mt-auto flex items-end justify-between">
+            <div className="h-5 w-14 rounded-lg bg-white/20" />
+            <div className="h-6 w-12 rounded-lg bg-white/90" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'sector-collage') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0d203f] via-[#214d7e] to-[#7bb2d8] p-2 shadow-sm ${ringClass}`}>
+        <div className="grid h-full grid-cols-3 gap-2">
+          <div className="rounded-xl bg-white/14" />
+          <div className="rounded-xl bg-white/10" />
+          <div className="rounded-xl bg-white/14" />
+        </div>
+        <div className="mt-2 grid grid-cols-4 gap-1.5">
+          <div className="h-2.5 rounded bg-white/70" />
+          <div className="h-2.5 rounded bg-white/70" />
+          <div className="h-2.5 rounded bg-white/70" />
+          <div className="h-2.5 rounded bg-white/70" />
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'brand-story') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#f6efe7] via-white to-[#e7eef7] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full items-center gap-2">
+          <div className="h-14 w-14 rounded-full bg-slate-700/85" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-4/5 rounded bg-slate-900" />
+            <div className="h-2.5 w-3/5 rounded bg-slate-400" />
+            <div className="h-2.5 w-full rounded bg-slate-300" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'offer-card') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#171433] via-[#4a2d88] to-[#ff885a] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full gap-2">
+          <div className="flex-1 rounded-xl bg-white/10 p-2">
+            <div className="h-3 w-2/3 rounded bg-white/95" />
+            <div className="mt-1.5 h-3 w-1/2 rounded bg-amber-300" />
+            <div className="mt-3 h-6 w-16 rounded-lg bg-white/90" />
+          </div>
+          <div className="w-[34%] rounded-xl bg-white/20" />
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'comparison-board') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-slate-200 p-2 shadow-sm ${ringClass}`}>
+        <div className="grid h-full grid-cols-2 gap-2">
+          <div className="rounded-xl border border-slate-300 bg-white p-2">
+            <div className="h-2.5 w-2/3 rounded bg-slate-900" />
+            <div className="mt-2 h-7 rounded bg-slate-200" />
+          </div>
+          <div className="rounded-xl border border-slate-300 bg-white p-2">
+            <div className="h-2.5 w-2/3 rounded bg-slate-900" />
+            <div className="mt-2 h-7 rounded bg-sky-200" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'premium-editorial') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#111111] via-[#2c1f1f] to-[#9a6f4f] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full gap-2">
+          <div className="w-[38%] rounded-2xl bg-white/10" />
+          <div className="flex-1 space-y-2 rounded-2xl bg-black/20 p-2">
+            <div className="h-3 w-4/5 rounded bg-white/95" />
+            <div className="h-2.5 w-3/5 rounded bg-[#e7c28b]" />
+            <div className="mt-3 h-2.5 w-full rounded bg-white/45" />
+            <div className="h-2.5 w-5/6 rounded bg-white/45" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-fuchsia-100 via-white to-indigo-100 p-2 shadow-sm ${ringClass}`}>
+      <div className="grid h-full grid-cols-[1fr_1fr] gap-2">
+        <div className="rounded-lg bg-gradient-to-br from-fuchsia-400 to-pink-300" />
+        <div className="space-y-1.5 rounded-lg border border-white/70 bg-white/75 p-2">
+          <div className="h-2.5 w-4/5 rounded bg-slate-800" />
+          <div className="h-2.5 w-full rounded bg-slate-500" />
+          <div className="h-2.5 w-2/3 rounded bg-slate-400" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ThemePreviewLarge — full-size right-panel layout mockup per theme
+// ─────────────────────────────────────────────────────────────────────────────
+interface ThemePreviewLargeProps {
+  themeId: ThemeId;
+  previewAspectClass: string;
+  uploadedLogo: string | null;
+  brandColors?: string[];
+  allianceHeaderLogos: Array<{ id: string; url: string; name: string }>;
+  brandName?: string;
+  partnerName: string;
+  partnerTagline: string;
+  activeHeadlineText?: string;
+  activeTaglineText?: string;
+  allianceBenefitLines: string[];
+  footerWebsite?: string;
+  footerEmail?: string;
+  selectedReferenceImage: string | null;
+  useReferenceAsHero: boolean;
+  selectedPdfImage?: { signed_url: string } | null;
+  selectedSiteImage?: { url: string } | null;
+  hasPostContext: boolean;
+  slotAssignments?: Record<string, string | null>;
+}
+
+function ThemePreviewLarge({
+  themeId,
+  previewAspectClass,
+  uploadedLogo,
+  brandColors,
+  allianceHeaderLogos,
+  brandName,
+  partnerName,
+  partnerTagline,
+  activeHeadlineText,
+  activeTaglineText,
+  allianceBenefitLines,
+  footerWebsite,
+  footerEmail,
+  selectedReferenceImage,
+  useReferenceAsHero,
+  selectedPdfImage,
+  selectedSiteImage,
+  hasPostContext,
+  slotAssignments,
+}: ThemePreviewLargeProps) {
+  const previewPalette = deriveStudioPalette(brandColors);
+  // Slot assignments take priority for hero, then fall back to the legacy reference selection
+  const slotHero = slotAssignments?.['hero'] || null;
+  const legacyHeroSrc = selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage || null;
+  const heroSrc = slotHero || legacyHeroSrc;
+  const showHero = slotHero ? true : (useReferenceAsHero && !!legacyHeroSrc);
+
+  /** Get the assigned image URL for a named slot */
+  const getSlotSrc = (slotId: string) => slotAssignments?.[slotId] || null;
+
+  const generateCta = (
+    <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-2 bg-black/50 backdrop-blur-sm py-2.5 z-20">
+      <Sparkles className="w-3.5 h-3.5 text-white/80" />
+      <span className="text-xs font-semibold text-white/80 tracking-wide">Click Generate to bring this to life</span>
+    </div>
+  );
+
+  function renderHeroZone(className: string) {
+    return (
+      <div className={`flex items-center justify-center overflow-hidden ${className}`}>
+        {showHero ? (
+          <img src={heroSrc!} alt="Reference" className="h-full w-full object-contain p-3 drop-shadow-lg" />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-white/30">
+            <ImageIcon className="h-8 w-8" />
+            <span className="text-[9px] font-medium">Hero area</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderLogoBox(className: string, light = false) {
+    return (
+      <div className={`flex items-center justify-center overflow-hidden ${className}`}>
+        {uploadedLogo ? (
+          <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-1" />
+        ) : (
+          <span
+            className={`text-[8px] font-bold text-center leading-tight px-1 ${light ? 'text-white/80' : 'text-slate-600'}`}
+          >
+            {brandName || 'Brand'}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (!hasPostContext) {
+    return (
+      <div className={`${previewAspectClass} relative flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-700`}>
+        <div className="text-center">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10">
+            <ImageIcon className="h-8 w-8 text-white/50" />
+          </div>
+          <p className="text-sm font-semibold text-white/70">Confirm your post first</p>
+          <p className="mt-1 text-xs text-white/40 max-w-xs text-center px-4">Go back to Step 1, confirm a post variant, then return here.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Alliance Poster ──────────────────────────────────────────────────────────
+  if (themeId === 'alliance-poster') {
+    return (
+      <div
+        className={`${previewAspectClass} overflow-hidden`}
+        style={{ backgroundColor: previewPalette.bgStart }}
+      >
+        <div
+          className="relative h-full w-full text-white"
+          style={{
+            backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)`,
+          }}
+        >
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `radial-gradient(circle at 20% 45%, ${previewPalette.muted}38, transparent 20%), radial-gradient(circle at 70% 20%, rgba(255,255,255,0.12), transparent 18%)`,
+            }}
+          />
+          <div className="absolute inset-x-0 top-0 h-[18%] border-b border-white/20 bg-black/12" />
+          <div
+            className="absolute inset-x-0 bottom-0 h-[11%] border-t border-white/20"
+            style={{ backgroundColor: previewPalette.footer }}
+          />
+          <div className="absolute left-[2%] top-[2.5%] flex h-[11%] w-[19%] items-center justify-center rounded-md bg-white/95 p-2 shadow-lg">
+            {uploadedLogo ? (
+              <img src={uploadedLogo} alt="Primary logo preview" className="h-full w-full object-contain" />
+            ) : (
+              <span className="text-[11px] font-bold text-slate-700">{brandName || 'Your brand'}</span>
+            )}
+          </div>
+          <div
+            className="absolute right-[2%] top-[2.5%] flex h-[11%] w-[22%] items-center justify-center gap-2 rounded-md px-2 backdrop-blur-sm"
+            style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
+          >
+            {allianceHeaderLogos.length > 0 ? (
+              allianceHeaderLogos.map((logo) => (
+                <div key={logo.id} className="flex h-[70%] flex-1 items-center justify-center rounded bg-white/92 p-1">
+                  <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
+                </div>
+              ))
+            ) : (
+              <div className="text-center">
+                <p className="text-[11px] font-semibold">{partnerName || 'Partner logo'}</p>
+                <p className="text-[9px] text-white/70">{partnerTagline || 'Alliance header zone'}</p>
+              </div>
+            )}
+          </div>
+          <div className="absolute left-[23%] right-[25%] top-[3.5%] text-center">
+            <p className="text-[24px] font-semibold italic leading-tight text-white drop-shadow-sm">
+              {activeHeadlineText || 'Header line 1'}
+            </p>
+            <p
+              className="mt-1 text-[30px] font-black italic leading-none drop-shadow-sm"
+              style={{ color: previewPalette.accent }}
+            >
+              {activeTaglineText || partnerName || 'Header line 2'}
+            </p>
+          </div>
+          <div className="absolute bottom-[14%] left-[3%] top-[22%] w-[29%]">
+            <div className="absolute bottom-[4%] left-[2%] right-[8%] h-[12%] rounded-[18px] bg-white/[18%] blur-sm" />
+            <div className="absolute bottom-[1%] left-[4%] right-[10%] h-[11%] rounded-[18px] border border-white/20 bg-white/10" />
+            <div className="absolute inset-x-[8%] top-[6%] bottom-[7%] flex items-end justify-center rounded-[24px] border border-white/10 bg-white/5">
+              {renderHeroZone('absolute inset-0 rounded-[24px]')}
+            </div>
+          </div>
+          <div className="absolute right-[3%] top-[22%] w-[47%] space-y-3">
+            {(allianceBenefitLines.length > 0 ? allianceBenefitLines : ['Benefit pointer one', 'Benefit pointer two', 'Benefit pointer three', 'Benefit pointer four']).slice(0, 6).map((line, index) => (
+              <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full border-l-2 border-white/10 bg-slate-950/[28%] px-4 py-2">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg font-black text-white shadow"
+                  style={{ backgroundColor: previewPalette.support }}
+                >
+                  ✓
+                </div>
+                <p className="text-[13px] font-semibold italic leading-tight text-white">{line}</p>
+              </div>
+            ))}
+          </div>
+          <div className="absolute inset-x-[6%] bottom-[3%] flex items-center justify-center gap-4 text-[13px] font-semibold tracking-wide text-white">
+            <span>{footerWebsite || 'www.yoursite.com'}</span>
+            <span className="text-white/70">|</span>
+            <span>{footerEmail || 'info@yoursite.com'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Clean Brand ──────────────────────────────────────────────────────────────
+  if (themeId === 'clean-brand') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden bg-white`}>
+        <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100" />
+        <div className="absolute inset-x-0 top-0 flex h-[14%] items-center justify-between border-b border-slate-100 px-[5%]">
+          {renderLogoBox('h-[65%] w-[13%] rounded-lg border border-slate-200 bg-white shadow-sm')}
+          <div className="flex gap-3">
+            <div className="h-2 w-10 rounded-full bg-slate-200" />
+            <div className="h-2 w-10 rounded-full bg-slate-200" />
+            <div className="h-2 w-10 rounded-full bg-slate-200" />
+          </div>
+        </div>
+        <div className="absolute bottom-[12%] left-[6%] top-[18%] flex w-[54%] flex-col justify-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="h-1 w-8 rounded-full" style={{ backgroundColor: previewPalette.bgStart }} />
+            <div className="h-2 w-20 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+          </div>
+          <div className="space-y-2">
+            <div className="h-7 w-full rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+            <div className="h-7 w-5/6 rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+          </div>
+          <div className="space-y-1.5">
+            <div className="h-2 w-full rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+            <div className="h-2 w-5/6 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+            <div className="h-2 w-4/6 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+          </div>
+          <div className="h-8 w-28 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+        </div>
+        <div className="absolute bottom-[12%] right-[4%] top-[16%] w-[36%] rounded-2xl border border-slate-200 bg-slate-100">
+          {renderHeroZone('absolute inset-0 rounded-2xl')}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center border-t border-slate-100 px-[6%]">
+          <div className="h-2 w-24 rounded-full bg-slate-200" />
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Brand Story ──────────────────────────────────────────────────────────────
+  if (themeId === 'brand-story') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}33 100%)` }} />
+        <div className="absolute bottom-[8%] left-[4%] top-[8%] w-[40%] flex items-center justify-center">
+          <div className="h-[80%] w-[76%] rounded-[40%] shadow-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.bgStart}cc` }}>
+            {showHero && <img src={heroSrc!} alt="Story" className="h-full w-full object-cover" />}
+          </div>
+        </div>
+        <div className="absolute bottom-[10%] right-[4%] top-[10%] flex w-[52%] flex-col justify-center gap-3">
+          {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
+          <div className="space-y-2">
+            <div className="h-6 w-full rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+            <div className="h-6 w-4/5 rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+          </div>
+          <div className="space-y-1.5">
+            <div className="h-2 w-full rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
+            <div className="h-2 w-11/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
+            <div className="h-2 w-9/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
+            <div className="h-2 w-10/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-24 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+            <div className="h-2 w-16 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Industrial Campaign ──────────────────────────────────────────────────────
+  if (themeId === 'industrial-campaign') {
+    const benefits = allianceBenefitLines.length > 0 ? allianceBenefitLines : ['Feature one', 'Feature two', 'Feature three', 'Feature four'];
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}33 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 22% 52%, ${previewPalette.accent}40, transparent 55%)` }} />
+        <div className="absolute inset-x-0 top-0 flex h-[15%] items-center justify-between border-b border-white/10 px-[4%]" style={{ backgroundColor: `${previewPalette.headerPanel}cc` }}>
+          {renderLogoBox('h-[62%] w-[13%] rounded bg-white/90 p-1')}
+          {(allianceHeaderLogos[0] || partnerName) && (
+            <div className="flex h-[62%] w-[14%] items-center justify-center rounded px-2" style={{ backgroundColor: `${previewPalette.surface}44` }}>
+              {allianceHeaderLogos[0] ? (
+                <img src={allianceHeaderLogos[0].url} alt="Partner" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-[8px] font-semibold text-white/80">{partnerName}</span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="absolute bottom-[12%] left-[3%] top-[18%] w-[37%] rounded-xl border border-white/10" style={{ backgroundColor: `${previewPalette.surface}15` }}>
+          {renderHeroZone('absolute inset-0 rounded-xl')}
+        </div>
+        <div className="absolute bottom-[12%] right-[3%] top-[18%] flex w-[56%] flex-col justify-center gap-3 pl-3">
+          <div className="rounded px-1 py-0.5" style={{ backgroundColor: `${previewPalette.text}e6` }}>
+            <p className="text-[11px] font-bold leading-tight" style={{ color: previewPalette.bgStart }}>{activeHeadlineText || 'Campaign Headline'}</p>
+          </div>
+          <div className="rounded px-1 py-0.5" style={{ backgroundColor: previewPalette.accent }}>
+            <p className="text-[10px] font-bold leading-tight" style={{ color: previewPalette.bgStart }}>{activeTaglineText || 'Tagline here'}</p>
+          </div>
+          <div className="mt-1 space-y-2.5">
+            {benefits.slice(0, 4).map((b, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>✓</div>
+                <p className="text-[10px] font-semibold leading-tight text-white/90 flex-1">{b}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center justify-center gap-4 border-t border-white/10 text-[10px] font-semibold text-white/80" style={{ backgroundColor: previewPalette.footer }}>
+          <span>{footerWebsite || 'www.yoursite.com'}</span>
+          <span className="text-white/40">|</span>
+          <span>{footerEmail || 'info@yoursite.com'}</span>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Product Hero ─────────────────────────────────────────────────────────────
+  if (themeId === 'product-hero') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.surface }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(180deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}44 100%)` }} />
+        {renderLogoBox('absolute left-[4%] top-[4%] h-[10%] w-[12%] rounded-xl border border-slate-200 bg-white shadow-sm')}
+        <div className="absolute left-1/2 top-[14%] h-[50%] w-[38%] -translate-x-1/2 rounded-full shadow-2xl overflow-hidden" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgEnd}, ${previewPalette.bgStart})` }}>
+          {showHero && <img src={heroSrc!} alt="Product" className="h-full w-full object-contain p-4" />}
+        </div>
+        <div className="absolute bottom-[6%] inset-x-[10%] flex flex-col items-center gap-2.5 text-center">
+          <div className="h-6 w-3/4 rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+          <div className="h-4 w-1/2 rounded" style={{ backgroundColor: previewPalette.muted }} />
+          <div className="mt-1 h-9 w-28 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Knowledge Visual ─────────────────────────────────────────────────────────
+  if (themeId === 'knowledge-visual') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
+        <div className="absolute inset-[4%] grid grid-cols-[1.1fr_0.9fr] gap-[3%]">
+          <div className="rounded-xl border border-white/10 overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}15` }}>
+            {renderHeroZone('h-full w-full rounded-xl')}
+          </div>
+          <div className="flex flex-col justify-center gap-2.5 rounded-xl p-4" style={{ border: `1px solid ${previewPalette.accent}55`, backgroundColor: `${previewPalette.accent}18` }}>
+            <div className="h-2 w-16 rounded" style={{ backgroundColor: `${previewPalette.accent}b3` }} />
+            <div className="h-5 w-full rounded" style={{ backgroundColor: `${previewPalette.text}cc` }} />
+            <div className="h-5 w-5/6 rounded" style={{ backgroundColor: `${previewPalette.text}cc` }} />
+            <div className="mt-1 space-y-1.5">
+              <div className="h-2 w-full rounded" style={{ backgroundColor: `${previewPalette.text}66` }} />
+              <div className="h-2 w-11/12 rounded" style={{ backgroundColor: `${previewPalette.text}66` }} />
+              <div className="h-2 w-9/12 rounded" style={{ backgroundColor: `${previewPalette.text}66` }} />
+            </div>
+            <div className="h-7 w-24 rounded-lg" style={{ backgroundColor: `${previewPalette.surface}44` }} />
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Datasheet Frame ──────────────────────────────────────────────────────────
+  if (themeId === 'datasheet-frame') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.surface }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}33 100%)` }} />
+        <div className="absolute inset-[4%] grid grid-cols-[0.9fr_1.1fr] gap-[3%]">
+          <div className="rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: previewPalette.bgStart }}>
+            {renderHeroZone('h-full w-full rounded-xl')}
+          </div>
+          <div className="flex flex-col gap-[4%]">
+            <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+              <div className="mb-1.5 flex items-center gap-2">
+                {renderLogoBox('h-6 w-8 rounded border border-slate-200')}
+              </div>
+              <div className="h-4 w-full rounded bg-slate-900" />
+              <div className="mt-1.5 h-3 w-3/4 rounded bg-slate-400" />
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-[5%]">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="rounded-xl border border-slate-300 bg-white shadow-sm" />
+              ))}
+            </div>
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Proof Stack ──────────────────────────────────────────────────────────────
+  if (themeId === 'proof-stack') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}22 100%)` }} />
+        <div className="absolute inset-[4%] grid grid-cols-[1fr_0.95fr] gap-[3%]">
+          <div className="flex flex-col gap-[4%]">
+            {[0.15, 0.25, 0.35].map((op, i) => (
+              <div key={i} className="flex flex-1 items-center gap-3 rounded-xl border border-slate-200 p-3" style={{ backgroundColor: `${previewPalette.accent}${Math.round(op * 255).toString(16).padStart(2, '0')}` }}>
+                <div className="h-9 w-9 flex-shrink-0 rounded-lg" style={{ backgroundColor: previewPalette.accent }} />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-3/4 rounded bg-slate-900/80" />
+                  <div className="h-2 w-1/2 rounded bg-slate-400" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col justify-center gap-3 rounded-xl border border-slate-200 p-4" style={{ backgroundColor: previewPalette.bgStart }}>
+            <div className="h-4 w-3/4 rounded bg-white/90" />
+            <div className="space-y-1.5">
+              <div className="h-2.5 w-full rounded bg-white/50" />
+              <div className="h-2.5 w-11/12 rounded bg-white/50" />
+              <div className="h-2.5 w-9/12 rounded bg-white/50" />
+            </div>
+            <div className="h-7 w-24 rounded-lg" style={{ backgroundColor: previewPalette.accent }} />
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Launch Banner ────────────────────────────────────────────────────────────
+  if (themeId === 'launch-banner') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}66 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 30% 40%, ${previewPalette.muted}22, transparent 60%)` }} />
+        <div className="absolute inset-x-[4%] top-[5%] flex items-center justify-between">
+          <div className="flex h-8 w-20 items-center justify-center overflow-hidden rounded-full bg-white/90 px-2">
+            {uploadedLogo ? (
+              <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-0.5" />
+            ) : (
+              <span className="text-[8px] font-bold text-slate-700">{brandName || 'Brand'}</span>
+            )}
+          </div>
+          <div className="h-6 w-20 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+        </div>
+        <div className="absolute inset-x-[8%] top-[22%] space-y-3">
+          <div className="h-8 w-full rounded bg-white/95" />
+          <div className="h-8 w-5/6 rounded bg-white/95" />
+          <div className="mt-2 h-5 w-3/5 rounded bg-white/60" />
+        </div>
+        <div className="absolute bottom-[8%] inset-x-[8%] flex items-center justify-between">
+          <div className="h-8 w-24 rounded-full" style={{ backgroundColor: `${previewPalette.surface}44` }} />
+          <div className="h-9 w-24 rounded-xl bg-white/90" />
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Sector Collage ───────────────────────────────────────────────────────────
+  if (themeId === 'sector-collage') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}44 100%)` }} />
+        <div className="absolute inset-x-0 top-0 flex h-[16%] items-center justify-between border-b border-white/10 px-[4%]" style={{ backgroundColor: `${previewPalette.headerPanel}cc` }}>
+          {renderLogoBox('h-[65%] w-[11%] rounded bg-white/90 p-1', true)}
+          <div className="space-y-1.5 text-right">
+            <div className="ml-auto h-4 w-44 rounded bg-white/90" />
+            <div className="ml-auto h-3 w-32 rounded" style={{ backgroundColor: previewPalette.accent }} />
+          </div>
+        </div>
+        <div className="absolute inset-x-[3%] flex gap-[2%]" style={{ top: '19%', bottom: '26%' }}>
+          {(['panel-1', 'panel-2', 'panel-3'] as const).map((slotId, i) => {
+            const src = getSlotSrc(slotId);
+            return (
+              <div key={i} className="flex-1 rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}22` }}>
+                {src ? (
+                  <img src={src} alt={`Sector ${i + 1}`} className="h-full w-full object-cover rounded-xl" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-white/25">
+                    <ImageIcon className="h-6 w-6" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="absolute inset-x-[3%] flex justify-around items-center" style={{ bottom: '8%', height: '14%' }}>
+          {['⚡', '🏭', '🏥', '⛏', '🚗', '🏢'].map((icon, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <span className="text-base leading-none">{icon}</span>
+              <div className="h-1.5 w-9 rounded bg-white/50" />
+            </div>
+          ))}
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Offer Card ───────────────────────────────────────────────────────────────
+  if (themeId === 'offer-card') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}88 100%)` }} />
+        <div className="absolute inset-[4%] grid grid-cols-[1.4fr_1fr] gap-[3%]">
+          <div className="flex flex-col justify-center gap-3 rounded-xl p-4" style={{ backgroundColor: `${previewPalette.surface}18` }}>
+            <div className="h-5 w-20 rounded-full" style={{ backgroundColor: `${previewPalette.accent}e6` }} />
+            <div className="space-y-1.5">
+              <div className="h-6 w-full rounded bg-white/95" />
+              <div className="h-6 w-4/5 rounded bg-white/95" />
+            </div>
+            <div className="h-5 w-3/5 rounded" style={{ backgroundColor: previewPalette.accent }} />
+            <div className="h-8 w-28 rounded-xl bg-white/90" />
+          </div>
+          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}33` }}>
+            {renderHeroZone('h-full w-full rounded-xl')}
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Comparison Board ─────────────────────────────────────────────────────────
+  if (themeId === 'comparison-board') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden bg-white`}>
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
+        <div className="absolute inset-x-[4%] top-[4%] flex items-center gap-3">
+          {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
+          <div className="h-4 w-44 rounded bg-slate-900" />
+        </div>
+        <div className="absolute inset-x-[4%] top-[18%] grid grid-cols-2 gap-[3%]" style={{ bottom: '8%' }}>
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
+            <div className="h-3.5 w-2/3 rounded bg-slate-900" />
+            <div className="flex-1 rounded-xl bg-slate-100 overflow-hidden">
+              {getSlotSrc('panel-left') ? (
+                <img src={getSlotSrc('panel-left')!} alt="Option A" className="h-full w-full object-cover rounded-xl" />
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-2 w-full rounded bg-slate-300" />
+              <div className="h-2 w-4/5 rounded bg-slate-300" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 rounded-2xl p-3 shadow-sm" style={{ border: `1px solid ${previewPalette.accent}77`, backgroundColor: `${previewPalette.accent}15` }}>
+            <div className="h-3.5 w-2/3 rounded bg-slate-900" />
+            <div className="flex-1 rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.accent}44` }}>
+              {getSlotSrc('panel-right') ? (
+                <img src={getSlotSrc('panel-right')!} alt="Option B" className="h-full w-full object-cover rounded-xl" />
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-2 w-full rounded" style={{ backgroundColor: `${previewPalette.accent}66` }} />
+              <div className="h-2 w-4/5 rounded" style={{ backgroundColor: `${previewPalette.accent}66` }} />
+            </div>
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Premium Editorial ────────────────────────────────────────────────────────
+  if (themeId === 'premium-editorial') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}44 100%)` }} />
+        <div className="absolute inset-[3%] grid grid-cols-[0.45fr_1fr] gap-[3%]">
+          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}22` }}>
+            {showHero ? (
+              <img src={heroSrc!} alt="Editorial" className="h-full w-full rounded-2xl object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-white/20">
+                <ImageIcon className="h-8 w-8" />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col justify-center gap-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-16 rounded" style={{ backgroundColor: `${previewPalette.accent}b3` }} />
+              <div className="h-2 w-20 rounded bg-white/20" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-6 w-full rounded bg-white/95" />
+              <div className="h-6 w-11/12 rounded bg-white/95" />
+              <div className="h-6 w-4/5 rounded bg-white/95" />
+            </div>
+            <div className="h-0.5 w-12 rounded" style={{ backgroundColor: previewPalette.accent }} />
+            <div className="space-y-1.5">
+              <div className="h-2 w-full rounded bg-white/40" />
+              <div className="h-2 w-11/12 rounded bg-white/40" />
+              <div className="h-2 w-10/12 rounded bg-white/40" />
+              <div className="h-2 w-9/12 rounded bg-white/40" />
+            </div>
+            <div className="mt-auto flex items-center justify-between">
+              <div className="h-2 w-28 rounded bg-white/30" />
+              <div className="h-7 w-20 rounded-lg" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
+            </div>
+          </div>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Default / AI Guided ──────────────────────────────────────────────────────
+  return (
+    <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+      <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
+      <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 40% 40%, ${previewPalette.accent}28, transparent 60%)` }} />
+      <div className="absolute inset-[4%] grid grid-cols-[1fr_1fr] gap-[3%]">
+        <div className="rounded-2xl overflow-hidden" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.accent}99, ${previewPalette.bgEnd}66)` }}>
+          {renderHeroZone('h-full w-full rounded-2xl')}
+        </div>
+        <div className="flex flex-col justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-4">
+          <div className="h-5 w-full rounded bg-white/90" />
+          <div className="h-5 w-4/5 rounded bg-white/90" />
+          <div className="space-y-1.5">
+            <div className="h-2 w-full rounded bg-white/50" />
+            <div className="h-2 w-11/12 rounded bg-white/50" />
+            <div className="h-2 w-9/12 rounded bg-white/50" />
+          </div>
+          <div className="h-7 w-24 rounded-lg" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
+        </div>
+      </div>
+      {generateCta}
+    </div>
+  );
+}
 
 function normalizeAnalysisToken(value: string | null | undefined) {
   return (value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -217,6 +1436,7 @@ export function ImageCreator({
   productName,
   brandColors = [],
   logoUrl: defaultLogoUrl,
+  logoAssets = [],
   analysisProfile,
   confirmedPostText,
   confirmedPostHeadline,
@@ -225,11 +1445,18 @@ export function ImageCreator({
   onImageGenerated,
   onBrandColorsChange,
   pdfImages: propPdfImages,
+  onRefreshEvidence,
+  onUploadPdfFiles,
 }: ImageCreatorProps) {
   const derivedWording = useMemo(
     () => deriveWordingFromPost(confirmedPostText),
     [confirmedPostText]
   );
+  const normalizedBrandLogos = useMemo(
+    () => normalizeLogoAssets(logoAssets),
+    [logoAssets]
+  );
+  const primaryBrandLogoUrl = defaultLogoUrl || normalizedBrandLogos[0]?.url || null;
   const hasPostContext = Boolean(confirmedPostText?.trim());
   const confirmedPostKey = `${confirmedPostHeadline || ''}::${confirmedPostText || ''}::${confirmedPostImagePrompt || ''}`;
   const syncedHeadlineFromPost = (confirmedPostHeadline?.trim() || derivedWording.headline || '').slice(0, 80);
@@ -239,15 +1466,27 @@ export function ImageCreator({
   const [headline, setHeadline] = useState(confirmedPostHeadline || derivedWording.headline || '');
   const [usePostHeadline, setUsePostHeadline] = useState(true);
   const [tagline, setTagline] = useState('');
+  const [selectedThemeId, setSelectedThemeId] = useState<ThemeId>('guided-auto');
+  const [contextBrief, setContextBrief] = useState('');
   const [selectedTone, setSelectedTone] = useState('professional');
   const [selectedStyle, setSelectedStyle] = useState('split-layout');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [uploadedLogo, setUploadedLogo] = useState<string | null>(defaultLogoUrl || null);
+  const [uploadedLogo, setUploadedLogo] = useState<string | null>(primaryBrandLogoUrl);
   const [logoPlacement, setLogoPlacement] = useState<'overlay' | 'infuse' | 'none'>(
-    defaultLogoUrl ? 'overlay' : 'none'
+    primaryBrandLogoUrl ? 'overlay' : 'none'
   );
+  const [allianceLogos, setAllianceLogos] = useState<UploadedLogoAsset[]>([]);
+  const [partnerName, setPartnerName] = useState('');
+  const [partnerTagline, setPartnerTagline] = useState('');
+  const [footerWebsite, setFooterWebsite] = useState('');
+  const [footerEmail, setFooterEmail] = useState('');
+  const [benefitsText, setBenefitsText] = useState('');
+  const [useReferenceAsHero, setUseReferenceAsHero] = useState(true);
   const [selectedBlendMode, setSelectedBlendMode] = useState<BlendModeId>('normal');
   const [imageAspect, setImageAspect] = useState<'landscape' | 'square' | 'portrait'>('landscape');
+
+  // Theme slot image assignments (maps slot id → image URL)
+  const [slotAssignments, setSlotAssignments] = useState<Record<string, string | null>>({});
 
   // Reference image state (fetched from URL)
   const [siteUrl, setSiteUrl] = useState('');
@@ -264,6 +1503,9 @@ export function ImageCreator({
   // Color editing
   const [isEditingColors, setIsEditingColors] = useState(false);
   const [newColorInput, setNewColorInput] = useState('#');
+  // All controls are now shown inline (no Advanced Controls toggle)
+  const [presetName, setPresetName] = useState('');
+  const [savedPresets, setSavedPresets] = useState<SavedImagePreset[]>([]);
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -272,6 +1514,7 @@ export function ImageCreator({
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [generationCount, setGenerationCount] = useState(0);
   const [generationNonce, setGenerationNonce] = useState(0);
+  const [batchSize, setBatchSize] = useState(1);
   const [latestBlendPreview, setLatestBlendPreview] = useState<{
     mode: BlendModeId;
     rawUrl: string;
@@ -279,6 +1522,9 @@ export function ImageCreator({
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const allianceLogoInputRef = useRef<HTMLInputElement>(null);
+  const partnerLogoInputRef = useRef<HTMLInputElement>(null);
+  const referenceImageInputRef = useRef<HTMLInputElement>(null);
   const lastSyncedPostKeyRef = useRef('');
   const appliedAnalysisDefaultsRef = useRef({
     tone: false,
@@ -296,6 +1542,29 @@ export function ImageCreator({
   const analyzedTaglineDefault = useMemo(
     () => (analysisProfile?.tagline || '').trim().slice(0, 120),
     [analysisProfile?.tagline]
+  );
+  const activeTheme = useMemo(
+    () => THEME_OPTIONS.find((theme) => theme.id === selectedThemeId) || THEME_OPTIONS[0],
+    [selectedThemeId]
+  );
+  const fallbackAllianceLogos = useMemo(
+    () =>
+      normalizedBrandLogos.filter(
+        (asset) => asset.url.trim().toLowerCase() !== (primaryBrandLogoUrl || '').trim().toLowerCase()
+      ),
+    [normalizedBrandLogos, primaryBrandLogoUrl]
+  );
+  const effectiveAllianceLogos = useMemo(
+    () => mergeLogoAssets(allianceLogos, fallbackAllianceLogos).slice(0, 4),
+    [allianceLogos, fallbackAllianceLogos]
+  );
+  const themesByCategory = useMemo(
+    () =>
+      THEME_CATEGORY_ORDER.map((category) => ({
+        category,
+        themes: THEME_OPTIONS.filter((theme) => theme.category === category),
+      })).filter((section) => section.themes.length > 0),
+    []
   );
 
   useEffect(() => {
@@ -366,16 +1635,77 @@ export function ImageCreator({
   }, [analyzedTaglineDefault, tagline]);
 
   useEffect(() => {
-    if (defaultLogoUrl && !uploadedLogo) {
-      setUploadedLogo(defaultLogoUrl);
+    if (primaryBrandLogoUrl && !uploadedLogo) {
+      setUploadedLogo(primaryBrandLogoUrl);
     }
-  }, [defaultLogoUrl, uploadedLogo]);
+  }, [primaryBrandLogoUrl, uploadedLogo]);
 
   useEffect(() => {
-    if (!defaultLogoUrl && !uploadedLogo && logoPlacement !== 'none') {
+    if (footerWebsite.trim()) return;
+    const nextWebsite = analysisProfile?.website?.trim() || '';
+    if (nextWebsite) {
+      setFooterWebsite(nextWebsite);
+    }
+  }, [analysisProfile?.website, footerWebsite]);
+
+  useEffect(() => {
+    if (!primaryBrandLogoUrl && !uploadedLogo && logoPlacement !== 'none') {
       setLogoPlacement('none');
     }
-  }, [defaultLogoUrl, uploadedLogo, logoPlacement]);
+  }, [primaryBrandLogoUrl, uploadedLogo, logoPlacement]);
+
+  useEffect(() => {
+    if (selectedThemeId !== 'alliance-poster') return;
+    if (benefitsText.trim()) return;
+
+    const nextBenefits = derivePosterBenefitLines(
+      confirmedPostText,
+      confirmedPostImageBrief,
+      contextBrief,
+      customPrompt
+    );
+
+    if (nextBenefits.length > 0) {
+      setBenefitsText(nextBenefits.join('\n'));
+    }
+  }, [benefitsText, confirmedPostImageBrief, confirmedPostText, contextBrief, customPrompt, selectedThemeId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !brandId) {
+      setSavedPresets([]);
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(getPresetStorageKey(brandId));
+      if (!raw) {
+        setSavedPresets([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setSavedPresets([]);
+        return;
+      }
+      setSavedPresets(
+        parsed.filter((item): item is SavedImagePreset => {
+          if (!item || typeof item !== 'object') return false;
+          const row = item as Record<string, unknown>;
+          return (
+            typeof row.id === 'string' &&
+            typeof row.name === 'string' &&
+            typeof row.themeId === 'string' &&
+            typeof row.selectedTone === 'string' &&
+            typeof row.selectedStyle === 'string' &&
+            typeof row.logoPlacement === 'string' &&
+            typeof row.imageAspect === 'string'
+          );
+        })
+      );
+    } catch {
+      setSavedPresets([]);
+    }
+  }, [brandId]);
 
   // Fetch PDF-extracted images from the brand's Evidence Locker.
   // Skipped when the parent passes pre-loaded images via the `pdfImages` prop.
@@ -388,14 +1718,20 @@ export function ImageCreator({
       cache: 'no-store',
     })
       .then((res) => (res.ok ? res.json() : Promise.resolve({ evidence: [] })))
-      .then((payload: { evidence?: Array<{ id: string; type: string; title: string; tags?: string[]; signed_url?: string | null }> }) => {
+      .then((payload: { evidence?: Array<{ id: string; type: string; title: string; tags?: string[]; file_path?: string; signed_url?: string | null }> }) => {
+        const allImages = (payload.evidence ?? []).filter((item) => item.type === 'image');
+        if (allImages.length > 0) {
+          console.log(`[ImageCreator] Found ${allImages.length} image evidence rows. PDF-extracted check:`, allImages.map(i => ({ id: i.id, title: i.title, tags: i.tags, file_path: i.file_path, has_signed_url: Boolean(i.signed_url) })));
+        }
         const extracted = (payload.evidence ?? []).filter(
           (item) =>
             item.type === 'image' &&
-            Array.isArray(item.tags) &&
-            item.tags.includes('pdf-extracted') &&
             typeof item.signed_url === 'string' &&
-            item.signed_url.length > 0
+            item.signed_url.length > 0 &&
+            (
+              (Array.isArray(item.tags) && item.tags.includes('pdf-extracted')) ||
+              (typeof item.file_path === 'string' && item.file_path.includes('/pdf-extract/'))
+            )
         );
         setPdfEvidenceImages(
           extracted.map((item) => ({
@@ -414,6 +1750,109 @@ export function ImageCreator({
   const toggleReferenceSelection = useCallback((imageUrl: string) => {
     setSelectedReferenceImage((prev) => (prev === imageUrl ? null : imageUrl));
   }, []);
+
+  const activeThemeSlots = useMemo(() => getThemeSlots(selectedThemeId), [selectedThemeId]);
+
+  const handleThemeSelect = useCallback(
+    (themeId: ThemeId) => {
+      const theme = THEME_OPTIONS.find((item) => item.id === themeId) || THEME_OPTIONS[0];
+      setSelectedThemeId(theme.id);
+      setSelectedTone(theme.recommendedTone);
+      setSelectedStyle(theme.recommendedStyle);
+      setImageAspect('landscape');
+      setSlotAssignments({});
+      if (uploadedLogo || primaryBrandLogoUrl) {
+        setLogoPlacement(theme.recommendedLogoPlacement);
+      }
+    },
+    [primaryBrandLogoUrl, uploadedLogo]
+  );
+
+  const persistPresets = useCallback(
+    (nextPresets: SavedImagePreset[]) => {
+      setSavedPresets(nextPresets);
+      if (typeof window !== 'undefined' && brandId) {
+        window.localStorage.setItem(getPresetStorageKey(brandId), JSON.stringify(nextPresets));
+      }
+    },
+    [brandId]
+  );
+
+  const handleSavePreset = useCallback(() => {
+    const name = presetName.trim();
+    if (!brandId) return;
+    if (!name) {
+      toast.error('Name the preset before saving.');
+      return;
+    }
+
+    const preset: SavedImagePreset = {
+      id: createPresetId(),
+      name,
+      themeId: selectedThemeId,
+      contextBrief: contextBrief.trim(),
+      customPrompt: customPrompt.trim(),
+      selectedTone,
+      selectedStyle,
+      logoPlacement,
+      imageAspect,
+      partnerName: partnerName.trim(),
+      partnerTagline: partnerTagline.trim(),
+      footerWebsite: footerWebsite.trim(),
+      footerEmail: footerEmail.trim(),
+      benefitsText: benefitsText.trim(),
+      useReferenceAsHero,
+    };
+
+    const nextPresets = [preset, ...savedPresets.filter((item) => item.name.toLowerCase() !== name.toLowerCase())].slice(0, 8);
+    persistPresets(nextPresets);
+    setPresetName('');
+    toast.success(`Saved preset "${name}".`);
+  }, [
+    brandId,
+    contextBrief,
+    customPrompt,
+    benefitsText,
+    imageAspect,
+    logoPlacement,
+    partnerName,
+    partnerTagline,
+    footerEmail,
+    footerWebsite,
+    persistPresets,
+    presetName,
+    savedPresets,
+    selectedStyle,
+    selectedThemeId,
+    selectedTone,
+    useReferenceAsHero,
+  ]);
+
+  const handleApplyPreset = useCallback((preset: SavedImagePreset) => {
+    setSelectedThemeId(preset.themeId);
+    setContextBrief(preset.contextBrief || '');
+    setCustomPrompt(preset.customPrompt || '');
+    setSelectedTone(preset.selectedTone || 'professional');
+    setSelectedStyle(preset.selectedStyle || 'split-layout');
+    setLogoPlacement(preset.logoPlacement || 'overlay');
+    setImageAspect(preset.imageAspect || 'landscape');
+    setPartnerName(preset.partnerName || '');
+    setPartnerTagline(preset.partnerTagline || '');
+    setFooterWebsite(preset.footerWebsite || '');
+    setFooterEmail(preset.footerEmail || '');
+    setBenefitsText(preset.benefitsText || '');
+    setUseReferenceAsHero(preset.useReferenceAsHero ?? true);
+    toast.success(`Applied preset "${preset.name}".`);
+  }, []);
+
+  const handleRemovePreset = useCallback(
+    (presetId: string) => {
+      if (!brandId) return;
+      const nextPresets = savedPresets.filter((preset) => preset.id !== presetId);
+      persistPresets(nextPresets);
+    },
+    [brandId, persistPresets, savedPresets]
+  );
 
 
   const insertPdfImageIntoPrompt = useCallback(
@@ -469,6 +1908,99 @@ export function ImageCreator({
     reader.readAsDataURL(file);
   }, []);
 
+  const handlePartnerLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Partner logo must be under 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const partnerAsset = {
+        id: createLocalAssetId(),
+        name: file.name,
+        url: reader.result as string,
+      } satisfies UploadedLogoAsset;
+
+      setAllianceLogos((prev) => [partnerAsset, ...prev.slice(1)]);
+      toast.success('Partner logo uploaded!');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }, []);
+
+  const handleAllianceLogosUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const invalidFile = files.find((file) => !file.type.startsWith('image/'));
+    if (invalidFile) {
+      toast.error('Only image files can be added as alliance logos.');
+      return;
+    }
+
+    const oversizedFile = files.find((file) => file.size > 5 * 1024 * 1024);
+    if (oversizedFile) {
+      toast.error('Each alliance logo must be under 5MB.');
+      return;
+    }
+
+    const nextAssets = await Promise.all(
+      files.slice(0, 4).map(
+        (file) =>
+          new Promise<UploadedLogoAsset>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resolve({
+                id: createLocalAssetId(),
+                name: file.name,
+                url: reader.result as string,
+              });
+            reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+            reader.readAsDataURL(file);
+          })
+      )
+    ).catch(() => {
+      toast.error('One or more alliance logos could not be loaded.');
+      return null;
+    });
+
+    if (!nextAssets) return;
+
+    setAllianceLogos((prev) => [...prev, ...nextAssets].slice(0, 4));
+    e.target.value = '';
+    toast.success(`${nextAssets.length} alliance logo${nextAssets.length === 1 ? '' : 's'} added.`);
+  }, []);
+
+  const handleReferenceImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Reference image must be under 10MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedReferenceImage(reader.result as string);
+      toast.success('Reference image uploaded!');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }, []);
+
   // ── Fetch Images from URL ──
   const handleFetchSiteImages = useCallback(async () => {
     const url = siteUrl.trim();
@@ -510,7 +2042,7 @@ export function ImageCreator({
     }
   }, [siteUrl]);
 
-  // ── Generate Image ──
+  // ── Generate Image (supports batch) ──
   const handleGenerate = useCallback(async () => {
     if (!hasPostContext) {
       toast.error('Confirm your post first', {
@@ -527,11 +2059,30 @@ export function ImageCreator({
       ''
     ).trim();
     const effectiveTagline = (tagline || derivedWording.tagline || '').trim();
-    const resolvedLogoForGeneration = uploadedLogo || defaultLogoUrl || null;
+    const resolvedLogoForGeneration = uploadedLogo || primaryBrandLogoUrl || null;
     const effectiveLogoPlacement = resolvedLogoForGeneration ? logoPlacement : 'none';
     const effectiveLogoForGeneration =
       effectiveLogoPlacement !== 'none' ? resolvedLogoForGeneration : null;
-    const nextNonce = generationNonce + 1;
+    const benefitBullets =
+      selectedThemeId === 'alliance-poster'
+        ? splitMultilineList(benefitsText, 6)
+        : selectedThemeId === 'industrial-campaign'
+          ? splitMultilineList(benefitsText, 4)
+          : [];
+    // Build slot images map (only non-null assignments)
+    const resolvedSlotImages: Record<string, string> = {};
+    for (const [slotId, url] of Object.entries(slotAssignments)) {
+      if (url) resolvedSlotImages[slotId] = url;
+    }
+    const hasHeroSlot = activeThemeSlots.some((slot) => slot.id === 'hero');
+    if (
+      selectedThemeId !== 'alliance-poster' &&
+      hasHeroSlot &&
+      selectedReferenceImage &&
+      !resolvedSlotImages.hero
+    ) {
+      resolvedSlotImages.hero = selectedReferenceImage;
+    }
 
     if (!effectiveHeadline && !confirmedPostText) {
       toast.error('Please enter a headline or generate a post first');
@@ -544,126 +2095,154 @@ export function ImageCreator({
       });
     }
 
-    setGenerationNonce(nextNonce);
+    const count = batchSize;
+    const baseNonce = generationNonce + 1;
+    setGenerationNonce(baseNonce + count - 1);
     setIsGenerating(true);
     setSelectedImage(null);
 
-    try {
-      const res = await fetch('/api/pro/image/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandId,
-          brandName,
-          productName: productName || undefined,
-          brandColors,
-          headline: effectiveHeadline,
-          tagline: effectiveTagline,
-          tone: selectedTone,
-          style: selectedStyle,
-          logoUrl: effectiveLogoForGeneration || undefined,
-          logoPlacement: effectiveLogoPlacement,
-          postText: confirmedPostText || undefined,
-          postImagePrompt: confirmedPostImageBrief || undefined,
-          customPrompt: customPrompt.trim() || undefined,
-          generationNonce: nextNonce,
-          imageAspect,
-          referenceImageUrl: selectedReferenceImage || undefined,
-        }),
+    if (count > 1) {
+      toast.message(`Generating ${count} ${activeTheme.label} images...`, {
+        description: 'Each variation uses a different layout recipe from this theme.',
       });
+    }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Generation failed');
-      }
+    let successCount = 0;
+    let lastImageUrl: string | null = null;
 
-      const data = await res.json();
+    try {
+    for (let i = 0; i < count; i++) {
+      const nonce = baseNonce + i;
 
-      if (data.url) {
-        const rawImageUrl = (typeof data.baseUrl === 'string' && data.baseUrl.trim()) || data.url;
-        let finalImageUrl: string = data.url;
+      try {
+        const res = await fetch('/api/pro/image/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            brandId,
+            brandName,
+            productName: productName || undefined,
+            brandColors,
+            themeId: selectedThemeId,
+            contextBrief: contextBrief.trim() || undefined,
+            headline: effectiveHeadline,
+            tagline: effectiveTagline,
+            tone: selectedTone,
+            style: selectedStyle,
+            logoUrl: effectiveLogoForGeneration || undefined,
+            logoPlacement: effectiveLogoPlacement,
+            additionalLogoUrls:
+              selectedThemeId === 'alliance-poster'
+                ? effectiveAllianceLogos.map((item) => item.url)
+                : undefined,
+            partnerName: partnerName.trim() || undefined,
+            partnerTagline: partnerTagline.trim() || undefined,
+            footerWebsite: footerWebsite.trim() || undefined,
+            footerEmail: footerEmail.trim() || undefined,
+            featureBullets: benefitBullets.length > 0 ? benefitBullets : undefined,
+            referenceAsHero: Boolean(useReferenceAsHero),
+            slotImages: Object.keys(resolvedSlotImages).length > 0 ? resolvedSlotImages : undefined,
+            postText: confirmedPostText || undefined,
+            postImagePrompt: confirmedPostImageBrief || undefined,
+            customPrompt: customPrompt.trim() || undefined,
+            generationNonce: nonce,
+            imageAspect,
+            referenceImageUrl: selectedReferenceImage || undefined,
+          }),
+        });
 
-        const shouldApplyBlend =
-          selectedBlendMode !== 'normal' &&
-          logoPlacement !== 'none' &&
-          Boolean(effectiveLogoForGeneration);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Generation failed' }));
+          throw new Error(err.error || 'Generation failed');
+        }
 
-        if (shouldApplyBlend) {
-          setIsApplyingBlend(true);
-          try {
-            const placement = logoPlacement === 'infuse' ? 'center' : 'top-right';
-            const aspectSize = ASPECT_DIMENSIONS[imageAspect];
+        const data = await res.json();
 
-            const blendRes = await fetch('/api/pro/image/blend', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                brandId,
-                baseImageUrl: rawImageUrl,
-                logoUrl: effectiveLogoForGeneration,
-                blendMode: selectedBlendMode,
-                logoPlacement: placement,
-                logoOpacity: logoPlacement === 'infuse' ? 0.42 : 0.92,
-                logoScale: logoPlacement === 'infuse' ? 1.1 : 1,
-                canvasWidth: aspectSize.width,
-                canvasHeight: aspectSize.height,
-                overlayOpacity: 0,
-              }),
-            });
+        if (data.url) {
+          const rawImageUrl = (typeof data.baseUrl === 'string' && data.baseUrl.trim()) || data.url;
+          let finalImageUrl: string = data.url;
 
-            if (blendRes.ok) {
-              const blendData = await blendRes.json();
-              if (blendData?.file_url) {
-                finalImageUrl = blendData.file_url as string;
-                setLatestBlendPreview({
-                  mode: selectedBlendMode,
-                  rawUrl: rawImageUrl,
-                  blendedUrl: finalImageUrl,
-                });
+          const shouldApplyBlend =
+            selectedThemeId !== 'alliance-poster' &&
+            selectedBlendMode !== 'normal' &&
+            logoPlacement !== 'none' &&
+            Boolean(effectiveLogoForGeneration);
+
+          if (shouldApplyBlend) {
+            setIsApplyingBlend(true);
+            try {
+              const placement = logoPlacement === 'infuse' ? 'center' : 'top-right';
+              const aspectSize = ASPECT_DIMENSIONS[imageAspect];
+
+              const blendRes = await fetch('/api/pro/image/blend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  brandId,
+                  baseImageUrl: rawImageUrl,
+                  logoUrl: effectiveLogoForGeneration,
+                  blendMode: selectedBlendMode,
+                  logoPlacement: placement,
+                  logoOpacity: logoPlacement === 'infuse' ? 0.42 : 0.92,
+                  logoScale: logoPlacement === 'infuse' ? 1.1 : 1,
+                  canvasWidth: aspectSize.width,
+                  canvasHeight: aspectSize.height,
+                  overlayOpacity: 0,
+                }),
+              });
+
+              if (blendRes.ok) {
+                const blendData = await blendRes.json();
+                if (blendData?.file_url) {
+                  finalImageUrl = blendData.file_url as string;
+                  setLatestBlendPreview({
+                    mode: selectedBlendMode,
+                    rawUrl: rawImageUrl,
+                    blendedUrl: finalImageUrl,
+                  });
+                } else {
+                  setLatestBlendPreview(null);
+                }
               } else {
                 setLatestBlendPreview(null);
               }
-            } else {
+            } catch {
               setLatestBlendPreview(null);
-              const blendErr = await blendRes.json().catch(() => ({} as Record<string, string>));
-              toast.warning('Blend mode could not be applied', {
-                description: blendErr.error || 'Using the raw generated image instead.',
-              });
+            } finally {
+              setIsApplyingBlend(false);
             }
-          } catch {
+          } else {
             setLatestBlendPreview(null);
-            toast.warning('Blend mode request failed', {
-              description: 'Using the raw generated image instead.',
-            });
-          } finally {
-            setIsApplyingBlend(false);
           }
-        } else {
-          setLatestBlendPreview(null);
+
+          setGeneratedImages((prev) => [finalImageUrl, ...prev]);
+          setSelectedImage(0);
+          setGenerationCount((c) => c + 1);
+          successCount++;
+          lastImageUrl = finalImageUrl;
+
+          // Auto-sync the latest generated image to parent
+          onImageGenerated?.(finalImageUrl);
         }
-
-        setGeneratedImages((prev) => [finalImageUrl, ...prev]);
-        setSelectedImage(0);
-        setGenerationCount((c) => c + 1);
-
-        // Auto-sync the generated image to parent so it's available in draft/preview
-        onImageGenerated?.(finalImageUrl);
-
-        if (shouldApplyBlend && finalImageUrl !== rawImageUrl) {
-          const modeLabel =
-            BLEND_MODE_OPTIONS.find((mode) => mode.id === selectedBlendMode)?.label || 'Blend';
-          toast.success(`Image generated with ${modeLabel} mode.`);
-        } else if (logoPlacement !== 'none' && effectiveLogoForGeneration && !data.logoApplied) {
-          toast.warning('Image generated, but logo was not applied');
-        } else if (logoPlacement !== 'none' && effectiveLogoForGeneration && data.logoApplied) {
-          toast.success('Image generated with your logo.');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Something went wrong';
+        if (count === 1) {
+          toast.error('Generation failed', { description: message });
         } else {
-          toast.success('Image generated.');
+          toast.error(`Image ${i + 1}/${count} failed`, { description: message });
         }
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      toast.error('Generation failed', { description: message });
+    }
+
+    if (successCount > 0 && lastImageUrl) {
+      if (successCount > 1) {
+        toast.success(`${successCount} ${activeTheme.label} images generated — pick your favourite.`);
+      } else if (count === 1) {
+        toast.success(`${activeTheme.label} image generated.`);
+      } else {
+        toast.success(`1 of ${count} images generated.`);
+      }
+    }
     } finally {
       setIsGenerating(false);
     }
@@ -677,20 +2256,33 @@ export function ImageCreator({
     tagline,
     selectedTone,
     selectedStyle,
+    selectedThemeId,
+    activeTheme,
+    contextBrief,
     uploadedLogo,
-    defaultLogoUrl,
+    activeThemeSlots,
+    effectiveAllianceLogos,
+    benefitsText,
+    primaryBrandLogoUrl,
     confirmedPostText,
     customPrompt,
     generationNonce,
+    batchSize,
     brandId,
     brandName,
     productName,
     brandColors,
     logoPlacement,
     imageAspect,
+    partnerName,
+    partnerTagline,
+    footerEmail,
+    footerWebsite,
     selectedBlendMode,
     selectedReferenceImage,
+    useReferenceAsHero,
     onImageGenerated,
+    slotAssignments,
   ]);
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Confirm Ã¢â€â‚¬Ã¢â€â‚¬
@@ -712,6 +2304,16 @@ export function ImageCreator({
     ''
   ).trim();
   const activeTaglineText = (tagline || derivedWording.tagline || analyzedTaglineDefault || '').trim();
+  const allianceBenefitLines =
+    selectedThemeId === 'alliance-poster'
+      ? splitMultilineList(benefitsText, 6)
+      : [];
+  const partnerLogo = effectiveAllianceLogos[0] || null;
+  const additionalAllianceLogos = effectiveAllianceLogos.slice(1);
+  const allianceHeaderLogos = effectiveAllianceLogos.slice(0, 3);
+  const partnerLogoIsManual = Boolean(
+    partnerLogo && allianceLogos.some((item) => item.url === partnerLogo.url)
+  );
   const previewAspectClass =
     imageAspect === 'square'
       ? 'aspect-square'
@@ -728,7 +2330,7 @@ export function ImageCreator({
     effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
   const selectedSiteImage =
     fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
-  const hasReadyLogo = Boolean(uploadedLogo || defaultLogoUrl);
+  const hasReadyLogo = Boolean(uploadedLogo || primaryBrandLogoUrl);
 
   // Detect if the custom prompt mentions a PDF image by title so we can suggest auto-selecting it.
   // Match on any word ≥4 chars from an image title appearing in the prompt (case-insensitive).
@@ -760,9 +2362,10 @@ export function ImageCreator({
 
 
   return (
-    <div className="grid lg:grid-cols-[400px_1fr] gap-8">
+    <div className="grid lg:grid-cols-[380px_1fr] gap-6">
       {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â LEFT: Form Controls Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
-      <div className="space-y-4 lg:max-h-[calc(100vh-200px)] lg:overflow-y-auto lg:pr-2 scrollbar-thin">
+      <div className="flex flex-col lg:max-h-[calc(100vh-200px)]">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 lg:pr-2 scrollbar-thin pb-2">
         {!hasPostContext && (
           <Card className="p-3.5 bg-amber-50 border border-amber-300 shadow-sm">
             <div className="flex items-start gap-2.5">
@@ -847,76 +2450,18 @@ export function ImageCreator({
                   </Badge>
                 )}
               </div>
-              <div className="mt-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Active palette
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingColors(!isEditingColors)}
-                    className="text-[10px] font-semibold text-purple-600 hover:text-purple-800"
-                  >
-                    {isEditingColors ? 'Done' : 'Edit colors'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {brandColors.slice(0, 8).map((color, idx) => (
-                    <div key={`${color}-${idx}`} className="relative group">
-                      <div
-                        className="h-6 w-6 rounded-md border border-white shadow-sm ring-1 ring-slate-200 cursor-pointer"
-                        style={{ backgroundColor: color }}
-                        title={color}
-                      />
-                      {isEditingColors && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = brandColors.filter((_, i) => i !== idx);
-                            onBrandColorsChange?.(updated);
-                          }}
-                          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center shadow-sm hover:bg-red-600"
-                          title="Remove color"
-                        >
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      )}
-                    </div>
+              {brandColors.length > 0 && (
+                <div className="flex gap-1 mt-2">
+                  {brandColors.slice(0, 6).map((color, idx) => (
+                    <div
+                      key={idx}
+                      className="w-5 h-5 rounded border border-white shadow-sm ring-1 ring-slate-200"
+                      style={{ backgroundColor: color }}
+                      title={color}
+                    />
                   ))}
-                  {isEditingColors && brandColors.length < 8 && (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="color"
-                        value={newColorInput.startsWith('#') && newColorInput.length === 7 ? newColorInput : '#6366f1'}
-                        onChange={(e) => setNewColorInput(e.target.value)}
-                        className="w-6 h-6 rounded-md border border-slate-300 cursor-pointer p-0"
-                        title="Pick a color"
-                      />
-                      <input
-                        type="text"
-                        value={newColorInput}
-                        onChange={(e) => setNewColorInput(e.target.value)}
-                        placeholder="#hex"
-                        className="w-16 h-6 text-[10px] px-1.5 border border-slate-300 rounded-md bg-white text-slate-700"
-                        maxLength={7}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const hex = newColorInput.trim();
-                          if (/^#[0-9a-fA-F]{6}$/.test(hex) && !brandColors.includes(hex)) {
-                            onBrandColorsChange?.([...brandColors, hex]);
-                            setNewColorInput('#');
-                          }
-                        }}
-                        className="h-6 px-2 text-[10px] font-semibold bg-purple-600 text-white rounded-md hover:bg-purple-700"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
             </div>
             {confirmedPostImageBrief && (
               <div className="mt-3">
@@ -928,78 +2473,731 @@ export function ImageCreator({
           </Card>
         )}
 
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-purple-300 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Upload className="w-4 h-4 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-slate-900">Your Logo</h3>
-                <p className="text-[11px] text-gray-400">Auto-applied on generated image when available</p>
-              </div>
+        <Card className="p-4 space-y-3 bg-gradient-to-br from-white via-white to-fuchsia-50/40 border border-fuchsia-200/50 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center shadow-sm">
+              <Sparkles className="w-4 h-4 text-white" />
             </div>
-            {uploadedLogo && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setUploadedLogo(defaultLogoUrl || null)}
-                className="text-gray-500 hover:text-red-500 h-7 w-7 p-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+            <div>
+              <h3 className="font-semibold text-sm text-slate-900">Creative Brief</h3>
+              <p className="text-[11px] text-slate-500">
+                Choose a theme, give context, then generate.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Choose a theme
+            </p>
+            <div className="space-y-4">
+              {themesByCategory.map((section) => (
+                <div key={section.category} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      {section.category}
+                    </p>
+                    <span className="text-[10px] text-slate-400">
+                      {section.themes.length} theme{section.themes.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {section.themes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => handleThemeSelect(theme.id)}
+                        className={`rounded-xl border px-2.5 py-2.5 text-left transition-all ${
+                          selectedThemeId === theme.id
+                            ? 'border-fuchsia-300 bg-fuchsia-50 ring-1 ring-fuchsia-200 shadow-md shadow-fuchsia-100/50'
+                            : 'border-slate-200 bg-white hover:border-fuchsia-200 hover:bg-fuchsia-50/40 hover:shadow-sm'
+                        }`}
+                      >
+                        <ThemePreviewMini
+                          themeId={theme.id}
+                          isActive={selectedThemeId === theme.id}
+                        />
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900 leading-tight">{theme.label}</p>
+                          <p className="mt-0.5 text-[10px] text-slate-500 leading-snug line-clamp-2">{theme.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Selected theme indicator — minimal since right panel shows preview */}
+            <div className="rounded-lg border border-fuchsia-200/60 bg-fuchsia-50/40 px-3 py-2 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-fuchsia-500 flex-shrink-0" />
+              <p className="text-[11px] text-fuchsia-700 font-medium truncate">{activeTheme.label}: {activeTheme.summary}</p>
+            </div>
+
+            {/* ── Theme Colors ──────────────────────────────────────────── */}
+            <div className="rounded-xl border border-amber-200/70 bg-amber-50/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Palette className="w-3.5 h-3.5 text-amber-600" />
+                  <p className="text-[11px] font-semibold text-amber-800">Theme Colors</p>
+                </div>
+                <span className="text-[10px] text-amber-600">
+                  {brandColors.length} color{brandColors.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {brandColors.slice(0, 8).map((color, idx) => (
+                  <div key={`${color}-${idx}`} className="relative group">
+                    <div
+                      className="h-8 w-8 rounded-lg border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer transition-transform hover:scale-110"
+                      style={{ backgroundColor: color }}
+                      title={color}
+                    />
+                    {isEditingColors && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = brandColors.filter((_, i) => i !== idx);
+                          onBrandColorsChange?.(updated);
+                        }}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center shadow-sm hover:bg-red-600"
+                        title="Remove color"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {brandColors.length < 8 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingColors(true)}
+                    className="h-8 w-8 rounded-lg border-2 border-dashed border-amber-300 bg-white flex items-center justify-center text-amber-500 hover:border-amber-400 hover:text-amber-600 transition-colors"
+                    title="Add color"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {isEditingColors && brandColors.length < 8 && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="color"
+                    value={newColorInput.startsWith('#') && newColorInput.length === 7 ? newColorInput : '#6366f1'}
+                    onChange={(e) => setNewColorInput(e.target.value)}
+                    className="w-8 h-8 rounded-lg border border-amber-300 cursor-pointer p-0"
+                    title="Pick a color"
+                  />
+                  <input
+                    type="text"
+                    value={newColorInput}
+                    onChange={(e) => setNewColorInput(e.target.value)}
+                    placeholder="#hex"
+                    className="w-20 h-8 text-xs px-2 border border-amber-200 rounded-lg bg-white text-slate-700"
+                    maxLength={7}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const hex = newColorInput.trim();
+                      if (/^#[0-9a-fA-F]{6}$/.test(hex) && !brandColors.includes(hex)) {
+                        onBrandColorsChange?.([...brandColors, hex]);
+                        setNewColorInput('#');
+                      }
+                    }}
+                    className="h-8 px-3 text-xs font-semibold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingColors(false)}
+                    className="h-8 px-2 text-xs font-semibold text-amber-600 hover:text-amber-800"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+              {!isEditingColors && brandColors.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingColors(true)}
+                  className="text-[10px] font-semibold text-amber-600 hover:text-amber-800"
+                >
+                  Edit colors
+                </button>
+              )}
+              <p className="text-[9px] text-amber-500/80">
+                These colors drive the theme palette — backgrounds, accents, text, and overlays all derive from your brand colors.
+              </p>
+            </div>
+
+            {/* ── Theme Image Slot Pickers ──────────────────────────────── */}
+            {activeThemeSlots.length > 0 && (
+              <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/30 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                  <p className="text-[11px] font-semibold text-indigo-700">
+                    Image slots for {activeTheme.label}
+                  </p>
+                </div>
+                <div className={`grid gap-2 ${activeThemeSlots.length >= 3 ? 'grid-cols-3' : activeThemeSlots.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {activeThemeSlots.map((slot) => {
+                    const assigned = slotAssignments[slot.id];
+                    return (
+                      <div key={slot.id} className="rounded-lg border border-slate-200 bg-white p-2 space-y-1.5">
+                        <p className="text-[10px] font-semibold text-slate-600 truncate">{slot.label}</p>
+                        {assigned ? (
+                          <div className="relative">
+                            <img
+                              src={assigned}
+                              alt={slot.label}
+                              className="w-full aspect-square object-cover rounded-md border border-slate-200"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSlotAssignments((prev) => ({ ...prev, [slot.id]: null }))
+                              }
+                              className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"
+                            >
+                              <X className="w-3 h-3 text-white" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="w-full aspect-square rounded-md border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center gap-1">
+                            <ImageIcon className="w-5 h-5 text-slate-300" />
+                            <span className="text-[9px] text-slate-400">No image</span>
+                          </div>
+                        )}
+                        {/* Quick-pick from available images */}
+                        <div className="flex flex-wrap gap-1 max-h-[80px] overflow-y-auto">
+                          {effectivePdfImages.slice(0, 6).map((img) => (
+                            <button
+                              key={img.id}
+                              type="button"
+                              onClick={() =>
+                                setSlotAssignments((prev) => ({
+                                  ...prev,
+                                  [slot.id]: img.signed_url,
+                                }))
+                              }
+                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                                assigned === img.signed_url
+                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  : 'border-slate-200 hover:border-indigo-300'
+                              }`}
+                            >
+                              <img
+                                src={img.signed_url}
+                                alt={img.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </button>
+                          ))}
+                          {fetchedSiteImages.slice(0, 6).map((img, idx) => (
+                            <button
+                              key={`site-${idx}`}
+                              type="button"
+                              onClick={() =>
+                                setSlotAssignments((prev) => ({
+                                  ...prev,
+                                  [slot.id]: img.url,
+                                }))
+                              }
+                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                                assigned === img.url
+                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  : 'border-slate-200 hover:border-indigo-300'
+                              }`}
+                            >
+                              <img
+                                src={img.url}
+                                alt="Site"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </button>
+                          ))}
+                          {selectedReferenceImage && !effectivePdfImages.some((p) => p.signed_url === selectedReferenceImage) && !fetchedSiteImages.some((s) => s.url === selectedReferenceImage) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSlotAssignments((prev) => ({
+                                  ...prev,
+                                  [slot.id]: selectedReferenceImage,
+                                }))
+                              }
+                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                                assigned === selectedReferenceImage
+                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  : 'border-slate-200 hover:border-indigo-300'
+                              }`}
+                            >
+                              <img
+                                src={selectedReferenceImage}
+                                alt="Ref"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[9px] text-indigo-500/70">
+                  Pick images for each slot from your PDFs, website, or uploaded references. These will be composited into the final image.
+                </p>
+              </div>
             )}
           </div>
 
-          {uploadedLogo ? (
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-xl border-2 border-purple-200 overflow-hidden bg-white flex items-center justify-center">
-                <img src={uploadedLogo} alt="Logo" className="w-full h-full object-contain p-1" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-emerald-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Logo ready
-                </p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs text-purple-600 hover:underline mt-0.5"
-                >
-                  Change logo
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full py-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-400 hover:bg-purple-50 transition-all text-center group"
-            >
-              <Upload className="w-6 h-6 mx-auto text-gray-500 group-hover:text-purple-500 mb-1" />
-              <p className="text-sm font-medium text-slate-700 group-hover:text-purple-600">
-                Click to upload logo
-              </p>
-              <p className="text-xs text-gray-400">PNG, SVG, or JPG (max 5MB)</p>
-            </button>
-          )}
+          <div>
+            <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+              What should this image communicate?
+            </label>
+            <Textarea
+              value={contextBrief}
+              onChange={(e) => setContextBrief(e.target.value)}
+              placeholder={activeTheme.promptHint}
+              rows={3}
+              className="text-sm resize-none bg-slate-50 border-slate-300 text-slate-900 placeholder:text-gray-400"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">
+              Think of this like ChatGPT: give the campaign context, what must be shown, and what should stand out.
+            </p>
+          </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleLogoUpload}
-            className="hidden"
-          />
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              AI will use
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge className="border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 text-[10px]">
+                Theme: {activeTheme.label}
+              </Badge>
+              {selectedReferenceImage && (
+                <Badge className="border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
+                  1 reference image selected
+                </Badge>
+              )}
+              {brandColors.length > 0 && (
+                <Badge className="border border-amber-200 bg-amber-50 text-amber-700 text-[10px]">
+                  {brandColors.length} brand color{brandColors.length === 1 ? '' : 's'}
+                </Badge>
+              )}
+              {hasReadyLogo && (
+                <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
+                  Brand logo available
+                </Badge>
+              )}
+              {partnerLogo && (
+                <Badge className="border border-sky-200 bg-sky-50 text-sky-700 text-[10px]">
+                  Partner logo linked
+                </Badge>
+              )}
+              {additionalAllianceLogos.length > 0 && (
+                <Badge className="border border-cyan-200 bg-cyan-50 text-cyan-700 text-[10px]">
+                  {additionalAllianceLogos.length} extra logo{additionalAllianceLogos.length === 1 ? '' : 's'}
+                </Badge>
+              )}
+              {effectivePdfImages.length > 0 && (
+                <Badge className="border border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
+                  PDF image library ready
+                </Badge>
+              )}
+            </div>
+          </div>
         </Card>
 
-        {/* Reference Image from URL */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors">
+        <Card className="p-4 space-y-4 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-              <Globe className="w-4 h-4 text-indigo-600" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <Upload className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-slate-900">Reference from URL</h3>
-              <p className="text-[11px] text-gray-400">Fetch images from a website to use as AI reference</p>
+              <h3 className="font-semibold text-sm text-slate-900">Linked Logos</h3>
+              <p className="text-[11px] text-slate-500">
+                Brand &amp; partner logos for the selected theme.
+              </p>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Your brand logo</p>
+                  <p className="text-[10px] text-gray-400">
+                    Used as the main brand mark. This stays linked to the active brand.
+                  </p>
+                </div>
+                {uploadedLogo && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setUploadedLogo(primaryBrandLogoUrl || null)}
+                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+
+              {uploadedLogo ? (
+                <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-purple-200 bg-white">
+                    <img src={uploadedLogo} alt="Your brand logo" className="h-full w-full object-contain p-1" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-emerald-700">Logo ready</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500 truncate">
+                      {brandName || 'Active brand'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-1 text-[11px] font-medium text-purple-600 hover:underline"
+                    >
+                      Change logo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-3 w-full rounded-xl border-2 border-dashed border-slate-300 bg-white py-4 text-center transition-all hover:border-purple-400 hover:bg-purple-50"
+                >
+                  <Upload className="mx-auto mb-1 h-5 w-5 text-slate-500" />
+                  <p className="text-sm font-medium text-slate-700">Upload your logo</p>
+                  <p className="text-[10px] text-gray-400">PNG, SVG, or JPG</p>
+                </button>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Partner / company logo</p>
+                  <p className="text-[10px] text-gray-400">
+                    Used for alliance posters and partner-led creatives. Add one main partner logo first.
+                  </p>
+                </div>
+                {partnerLogoIsManual && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setAllianceLogos((prev) => prev.slice(1))}
+                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+
+              {partnerLogo ? (
+                <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-sky-200 bg-white">
+                    <img src={partnerLogo.url} alt={partnerLogo.name} className="h-full w-full object-contain p-1" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-sky-700">Partner logo ready</p>
+                    <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                      {partnerName || partnerLogo.name}
+                    </p>
+                    {!partnerLogoIsManual && (
+                      <p className="mt-1 text-[10px] text-sky-600">
+                        Auto-linked from your brand kit.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => partnerLogoInputRef.current?.click()}
+                      className="mt-1 text-[11px] font-medium text-sky-600 hover:underline"
+                    >
+                      Change partner logo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => partnerLogoInputRef.current?.click()}
+                  className="mt-3 w-full rounded-xl border-2 border-dashed border-slate-300 bg-white py-4 text-center transition-all hover:border-sky-400 hover:bg-sky-50"
+                >
+                  <Building2 className="mx-auto mb-1 h-5 w-5 text-slate-500" />
+                  <p className="text-sm font-medium text-slate-700">Upload partner logo</p>
+                  <p className="text-[10px] text-gray-400">ABB, CHINT, Schneider, Siemens, etc.</p>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                Partner / company name
+              </label>
+              <Input
+                value={partnerName}
+                onChange={(e) => setPartnerName(e.target.value)}
+                placeholder="e.g. ABB"
+                className="h-10 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                Partner slogan <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              <Input
+                value={partnerTagline}
+                onChange={(e) => setPartnerTagline(e.target.value)}
+                placeholder="e.g. Power and productivity for a better world"
+                className="h-10 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-800">Additional alliance logos</p>
+                <p className="text-[10px] text-gray-400">
+                  Optional extra marks for multi-brand headers. The first partner logo above remains the main linked partner.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => allianceLogoInputRef.current?.click()}
+                className="h-8 border-slate-300 text-slate-700"
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add more
+              </Button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload}
+              className="hidden"
+            />
+
+            <input
+              ref={partnerLogoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePartnerLogoUpload}
+              className="hidden"
+            />
+
+            <input
+              ref={allianceLogoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleAllianceLogosUpload}
+              className="hidden"
+            />
+
+            <input
+              ref={referenceImageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleReferenceImageUpload}
+              className="hidden"
+            />
+
+            {additionalAllianceLogos.length > 0 ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {additionalAllianceLogos.map((logo) => (
+                  <div
+                    key={logo.id}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                      <img src={logo.url} alt={logo.name} className="h-full w-full object-contain p-1" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-slate-800">{logo.name}</p>
+                      {!allianceLogos.some((item) => item.url === logo.url) && (
+                        <p className="mt-0.5 text-[10px] text-cyan-600">From brand kit</p>
+                      )}
+                    </div>
+                    {allianceLogos.some((item) => item.url === logo.url) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setAllianceLogos((prev) => [prev[0], ...prev.slice(1).filter((item) => item.id !== logo.id)].filter(Boolean) as UploadedLogoAsset[])
+                        }
+                        className="h-8 w-8 p-0 text-slate-500 hover:text-red-500"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">
+                Optional. Use this when a header needs more than one partner mark.
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-4 space-y-4 bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-sm">
+              <Building2 className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm text-slate-900">Theme Details</h3>
+              <p className="text-[11px] text-gray-400">
+                Fill what you want — AI handles the rest automatically.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                Footer website <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <Input
+                value={footerWebsite}
+                onChange={(e) => setFooterWebsite(e.target.value)}
+                placeholder="www.yoursite.com"
+                className="h-10 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                Footer email <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={footerEmail}
+                  onChange={(e) => setFooterEmail(e.target.value)}
+                  placeholder="info@yoursite.com"
+                  className="h-10 bg-white border-slate-300 pl-9 text-slate-900 placeholder:text-gray-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+              Feature bullets <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <Textarea
+              value={benefitsText}
+              onChange={(e) => setBenefitsText(e.target.value)}
+              rows={3}
+              placeholder={
+                'Key benefit one\nKey benefit two\nKey benefit three'
+              }
+              className="resize-none bg-slate-50 border-slate-300 text-sm text-slate-900 placeholder:text-gray-400"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">
+              One per line. Used as checkmark bullets in themes that support them (Alliance Poster, Industrial Campaign).
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <p className="text-xs font-semibold text-slate-800">Hero image source</p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Use your reference image as the main visual, or let AI generate it.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUseReferenceAsHero(true)}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-all ${
+                  useReferenceAsHero
+                    ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <p className={`font-semibold ${useReferenceAsHero ? 'text-sky-800' : 'text-slate-800'}`}>
+                  Use my reference
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  Your uploaded image fills the hero area.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseReferenceAsHero(false)}
+                className={`rounded-lg border px-3 py-2 text-left text-xs transition-all ${
+                  !useReferenceAsHero
+                    ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <p className={`font-semibold ${!useReferenceAsHero ? 'text-sky-800' : 'text-slate-800'}`}>
+                  Let AI generate
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  AI creates the visual from your brief.
+                </p>
+              </button>
+            </div>
+          </div>
+        </Card>
+
+
+        {/* Reference Image — Upload or URL */}
+        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
+                <ImageIcon className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm text-slate-900">Reference Image</h3>
+                <p className="text-[11px] text-gray-400">Upload your own image or fetch from a URL</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload your own reference image */}
+          <button
+            type="button"
+            onClick={() => referenceImageInputRef.current?.click()}
+            className="w-full rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/50 py-4 text-center transition-all hover:border-indigo-400 hover:bg-indigo-50"
+          >
+            <Upload className="mx-auto mb-1 h-5 w-5 text-indigo-500" />
+            <p className="text-sm font-medium text-indigo-700">Upload reference image</p>
+            <p className="text-[10px] text-indigo-400">PNG, JPG, or WebP — up to 10MB</p>
+          </button>
+
+          {/* Or fetch from URL */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">or from URL</span>
+            <div className="flex-1 h-px bg-slate-200" />
           </div>
 
           <div className="flex gap-2">
@@ -1107,15 +3305,28 @@ export function ImageCreator({
                   <p className="text-[11px] text-gray-400">Images auto-extracted from your uploaded PDFs — select one as a visual reference for AI generation</p>
                 </div>
               </div>
-              {selectedPdfImage && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedReferenceImage(null)}
-                  className="text-[10px] text-red-500 hover:text-red-700 font-medium"
-                >
-                  Clear selection
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {onRefreshEvidence && (
+                  <button
+                    type="button"
+                    onClick={onRefreshEvidence}
+                    className="text-[10px] text-slate-400 hover:text-emerald-600 font-medium flex items-center gap-1 transition-colors"
+                    title="Refresh PDF images"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Refresh
+                  </button>
+                )}
+                {selectedPdfImage && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReferenceImage(null)}
+                    className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {isLoadingPdf ? (
@@ -1153,6 +3364,17 @@ export function ImageCreator({
                               src={img.signed_url}
                               alt={img.title}
                               className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector('.img-error-msg')) {
+                                  const errorDiv = document.createElement('div');
+                                  errorDiv.className = 'img-error-msg absolute inset-0 flex flex-col items-center justify-center p-2 text-center';
+                                  errorDiv.innerHTML = '<svg class="w-5 h-5 text-slate-300 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-[8px] text-slate-400">Failed to load</span>';
+                                  parent.appendChild(errorDiv);
+                                }
+                              }}
                             />
                             {selected && (
                               <div className="absolute inset-0 flex items-center justify-center bg-emerald-500/30 backdrop-blur-[1px]">
@@ -1196,16 +3418,35 @@ export function ImageCreator({
                 <p className="text-[10px] text-gray-400">Click an image to select it as the reference. Hover to add it to your creative prompt.</p>
               </>
             ) : (
-              <div className="flex flex-col items-center gap-2 py-4 text-center">
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2.5 py-5 text-center">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-50 to-slate-50 flex items-center justify-center border border-slate-200/60">
                   <ImageIcon className="w-5 h-5 text-slate-300" />
                 </div>
-                <p className="text-xs text-gray-400">
-                  No PDF images yet
+                <p className="text-xs font-medium text-gray-500">
+                  No PDF images found
                 </p>
-                <p className="text-[10px] text-gray-300">
-                  Upload a brand PDF in the Evidence Locker — images will be auto-extracted and shown here
+                <p className="text-[10px] text-gray-400 max-w-[250px]">
+                  Upload a brand PDF — images will be auto-extracted and appear here for use as visual references.
                 </p>
+                {onUploadPdfFiles && (
+                  <label className="mt-1 cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload PDF
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (files && files.length > 0) {
+                          onUploadPdfFiles(Array.from(files));
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                )}
               </div>
             )}
           </Card>
@@ -1214,8 +3455,8 @@ export function ImageCreator({
         {/* Your Vision */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Wand2 className="w-4 h-4 text-purple-600" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+              <Wand2 className="w-4 h-4 text-white" />
             </div>
             <div>
               <h3 className="font-semibold text-sm text-slate-900">Your Vision <span className="text-[10px] font-normal text-gray-400">(optional)</span></h3>
@@ -1283,8 +3524,8 @@ export function ImageCreator({
         {/* Text on Image */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center">
-              <Type className="w-4 h-4 text-cyan-600" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shadow-sm">
+              <Type className="w-4 h-4 text-white" />
             </div>
             <div>
               <h3 className="font-semibold text-sm text-slate-900">Text on Image</h3>
@@ -1351,147 +3592,12 @@ export function ImageCreator({
           </div>
         </Card>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Tone Ã¢â€â‚¬Ã¢â€â‚¬ */}
-
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Palette className="w-4 h-4 text-amber-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Tone</h3>
-              <p className="text-[11px] text-gray-400">Sets the mood &amp; feeling of the image</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            {TONE_OPTIONS.map((tone) => (
-              <button
-                key={tone.id}
-                onClick={() => setSelectedTone(tone.id)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-all text-sm ${
-                  selectedTone === tone.id
-                    ? 'border-purple-200 bg-purple-50 ring-1 ring-purple-300'
-                    : 'border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/30'
-                }`}
-              >
-                <span className="text-base leading-none">{tone.emoji}</span>
-                <div className="min-w-0">
-                  <p className={`font-semibold text-xs leading-tight ${selectedTone === tone.id ? 'text-purple-700' : 'text-slate-800'}`}>{tone.label}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{tone.description}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 4. Visual Style Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        {/* Visual Style */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center">
-              <ImageIcon className="w-4 h-4 text-pink-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Visual Style</h3>
-              <p className="text-[11px] text-gray-400">How the image is composed</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            {STYLE_OPTIONS.map((style) => (
-              <button
-                key={style.id}
-                onClick={() => setSelectedStyle(style.id)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-all text-sm ${
-                  selectedStyle === style.id
-                    ? 'border-pink-500 bg-pink-50 ring-1 ring-pink-300'
-                    : 'border-slate-200 bg-white hover:border-pink-300 hover:bg-pink-50/30'
-                }`}
-              >
-                <span className="text-base leading-none">{style.emoji}</span>
-                <div className="min-w-0">
-                  <p className={`font-semibold text-xs leading-tight ${selectedStyle === style.id ? 'text-pink-700' : 'text-slate-800'}`}>{style.label}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{style.description}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 5. Logo Placement Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        {uploadedLogo && (
-          <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-slate-900">Logo Placement</h3>
-                <p className="text-[11px] text-gray-400">How your logo appears in the image</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[
-                { id: 'overlay' as const, label: 'Corner Overlay', desc: 'Placed on top after' },
-                { id: 'infuse' as const, label: 'Infused in Art', desc: 'Baked into the design' },
-                { id: 'none' as const, label: 'No Logo', desc: 'Image only' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setLogoPlacement(opt.id)}
-                  className={`px-2 py-2.5 rounded-lg border text-center transition-all text-xs ${
-                    logoPlacement === opt.id
-                      ? 'border-emerald-200 bg-emerald-50 ring-1 ring-emerald-300'
-                      : 'border-slate-200 bg-white hover:border-emerald-300'
-                  }`}
-                >
-                  <p className={`font-semibold text-[11px] ${logoPlacement === opt.id ? 'text-emerald-700' : 'text-slate-800'}`}>{opt.label}</p>
-                  <p className="text-[9px] text-gray-400 mt-0.5">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {uploadedLogo && logoPlacement !== 'none' && (
-          <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-sky-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-slate-900">Blend Mode</h3>
-                <p className="text-[11px] text-gray-400">How the logo is composited onto the image</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {BLEND_MODE_OPTIONS.map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() => setSelectedBlendMode(mode.id)}
-                  className={`px-2.5 py-2.5 rounded-lg border text-left transition-all text-xs ${
-                    selectedBlendMode === mode.id
-                      ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-300'
-                      : 'border-slate-200 bg-white hover:border-sky-300'
-                  }`}
-                >
-                  <p className={`font-semibold ${selectedBlendMode === mode.id ? 'text-sky-700' : 'text-slate-800'}`}>
-                    {mode.label}
-                  </p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{mode.description}</p>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
-
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 6. Image Size Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Image Size */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-              <ImageIcon className="w-4 h-4 text-slate-600" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm">
+              <ImageIcon className="w-4 h-4 text-white" />
             </div>
             <div>
               <h3 className="font-semibold text-sm text-slate-900">Image Size</h3>
@@ -1521,6 +3627,10 @@ export function ImageCreator({
         </Card>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Brand Colors Preview Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        </div>
+        {/* ── Sticky Generate Footer ── */}
+        <div className="flex-shrink-0 border-t border-slate-100 pt-3 space-y-2">
+
         {brandColors.length > 0 && (
           <div className="flex items-center gap-2 px-1 py-1">
             <span className="text-[11px] text-slate-600 font-semibold">Brand colors:</span>
@@ -1541,26 +3651,56 @@ export function ImageCreator({
         )}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Generate Button Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── Image Count Selector ── */}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Images to generate</p>
+          </div>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setBatchSize(n)}
+                className={`w-8 h-7 rounded-md border text-xs font-bold transition-all ${
+                  batchSize === n
+                    ? 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-fuchsia-200 hover:text-fuchsia-600'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Active Theme + Generate Summary ── */}
+        <div className="rounded-lg border border-fuchsia-200/50 bg-fuchsia-50/30 px-3 py-1.5 flex items-center gap-2">
+          <Sparkles className="w-3 h-3 text-fuchsia-500 flex-shrink-0" />
+          <p className="text-[11px] text-fuchsia-700 font-medium truncate">
+            {activeTheme.label} &middot; {batchSize} image{batchSize > 1 ? 's' : ''} &middot; {imageAspect}
+          </p>
+        </div>
+
         <Button
           size="lg"
           onClick={handleGenerate}
           disabled={isGenerating || isApplyingBlend || !hasPostContext || (!activeHeadlineText && !confirmedPostText)}
-          className="w-full h-14 text-base font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 hover:from-purple-700 hover:via-pink-600 hover:to-orange-600 shadow-lg hover:shadow-xl hover:shadow-purple-50/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
+          className="w-full h-14 text-base font-bold bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 hover:from-purple-700 hover:via-fuchsia-600 hover:to-pink-600 shadow-lg shadow-purple-200/40 hover:shadow-xl hover:shadow-purple-300/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-xl ring-1 ring-purple-500/20"
         >
           {isGenerating || isApplyingBlend ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              {isApplyingBlend ? 'Applying blend mode...' : 'Generating your image...'}
+              {isApplyingBlend ? 'Applying blend mode...' : `Generating ${batchSize > 1 ? `${batchSize} images` : 'your image'}...`}
             </>
           ) : generatedImages.length > 0 ? (
             <>
               <RefreshCw className="w-5 h-5 mr-2" />
-              Regenerate Image
+              Regenerate {batchSize > 1 ? `${batchSize} Images` : 'Image'} — {activeTheme.label}
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5 mr-2" />
-              Generate Image
+              Generate {batchSize > 1 ? `${batchSize} Images` : 'Image'} — {activeTheme.label}
             </>
           )}
         </Button>
@@ -1570,101 +3710,128 @@ export function ImageCreator({
             {generationCount} image{generationCount > 1 ? 's' : ''} generated this session
           </p>
         )}
+        </div>
       </div>
 
       {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â RIGHT: Preview / Gallery Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4">
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Main Preview Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        <Card className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <Card className="overflow-hidden border border-slate-200/60 bg-white shadow-xl shadow-slate-200/50 rounded-2xl">
+          {/* Preview header bar */}
+          <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-slate-50 via-white to-purple-50/40 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Preview</span>
+              <Badge className="bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-200/60 text-[9px] font-semibold">
+                {activeTheme.label}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {currentTone && (
+                <Badge className="bg-white text-slate-500 border border-slate-200 text-[9px]">
+                  {currentTone.emoji} {currentTone.label}
+                </Badge>
+              )}
+              <Badge className="bg-white text-slate-500 border border-slate-200 text-[9px] capitalize">
+                {imageAspect}
+              </Badge>
+            </div>
+          </div>
           {isGenerating || isApplyingBlend ? (
-            <div className={`${previewAspectClass} flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 via-pink-500 to-orange-50`}>
+            <div className="min-h-[340px] flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 py-12">
               <div className="relative">
-                <div className="w-16 h-16 rounded-full border-[3px] border-purple-200 border-t-purple-500 animate-spin" />
-                <Sparkles className="w-5 h-5 text-purple-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                <div className="w-20 h-20 rounded-full border-[3px] border-purple-500/30 border-t-purple-400 animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center backdrop-blur-sm">
+                    <Sparkles className="w-5 h-5 text-purple-300 animate-pulse" />
+                  </div>
+                </div>
               </div>
-              <p className="mt-5 text-base font-semibold text-purple-700">
-                {isApplyingBlend ? 'Applying blend mode...' : 'Creating your image...'}
+              <p className="mt-6 text-base font-semibold text-white">
+                {isApplyingBlend ? 'Applying blend mode...' : batchSize > 1 ? `Creating ${batchSize} ${activeTheme.label} images...` : `Creating your ${activeTheme.label} image...`}
               </p>
-              <p className="text-sm text-purple-400 mt-1">Usually takes 10-20 seconds</p>
+              <p className="text-sm text-purple-300/70 mt-1">{batchSize > 1 ? `Usually takes ${batchSize * 15}–${batchSize * 25} seconds` : 'Usually takes 10–20 seconds'}</p>
 
-              <div className="mt-5 flex items-center gap-3 text-xs text-purple-400">
-                <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> AI Image</span>
-                <span className="w-1 h-1 rounded-full bg-purple-300" />
-                <span>{currentTone?.emoji} {currentTone?.label}</span>
-                <span className="w-1 h-1 rounded-full bg-purple-300" />
-                <span>{currentStyle?.emoji} {currentStyle?.label}</span>
+              <div className="mt-5 flex items-center gap-3 text-xs text-purple-400/80">
+                <span className="flex items-center gap-1.5 rounded-full bg-purple-500/20 px-2.5 py-1">
+                  <Zap className="w-3 h-3" /> AI Image
+                </span>
+                <span className="flex items-center gap-1.5 rounded-full bg-purple-500/15 px-2.5 py-1">
+                  {currentTone?.emoji} {currentTone?.label}
+                </span>
+                <span className="flex items-center gap-1.5 rounded-full bg-purple-500/15 px-2.5 py-1">
+                  {currentStyle?.emoji} {currentStyle?.label}
+                </span>
               </div>
             </div>
           ) : selectedImage !== null && generatedImages[selectedImage] ? (
             <div className="relative group">
-              <div className={`${previewAspectClass} bg-[#f0f0f0]`} style={{ backgroundImage: 'linear-gradient(45deg, #e0e0e0 25%, transparent 25%), linear-gradient(-45deg, #e0e0e0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e0e0e0 75%), linear-gradient(-45deg, transparent 75%, #e0e0e0 75%)', backgroundSize: '16px 16px', backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px' }}>
+              {/* Full-size image display — no aspect ratio constraint so the image shows completely */}
+              <div className="relative w-full bg-[#f8f8f8] flex items-center justify-center" style={{ backgroundImage: 'linear-gradient(45deg, #e8e8e8 25%, transparent 25%), linear-gradient(-45deg, #e8e8e8 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e8e8e8 75%), linear-gradient(-45deg, transparent 75%, #e8e8e8 75%)', backgroundSize: '12px 12px', backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px' }}>
                 <img
                   src={generatedImages[selectedImage]}
                   alt="Generated LinkedIn image"
-                  className="w-full h-full object-contain"
+                  className="w-full h-auto block"
                 />
               </div>
-              <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Badge className="bg-emerald-500/90 text-white text-[10px] backdrop-blur-sm">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Selected
-                </Badge>
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="flex items-end justify-between">
-                  <div className="text-white text-sm">
-                    <p className="font-semibold text-sm">{activeHeadlineText || 'Your LinkedIn Image'}</p>
-                    {tagline && <p className="text-white/60 text-xs mt-0.5">{tagline}</p>}
-                  </div>
-                  <div className="flex gap-1.5">
-                    <a
-                      href={generatedImages[selectedImage]}
-                      download={`linkedin-image-${Date.now()}.png`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/20 backdrop-blur text-white hover:bg-white/30 transition-colors"
-                      title="Download image"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </a>
-                    <Button
-                      size="sm"
-                      className="bg-white/20 backdrop-blur text-white hover:bg-white/30 border-0 h-8 px-3 text-xs"
-                      onClick={handleGenerate}
-                      disabled={isGenerating || isApplyingBlend}
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      Redo
-                    </Button>
+              {/* Hover overlay with actions */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute top-3 left-3 pointer-events-auto">
+                  <Badge className="bg-emerald-500/90 text-white text-[10px] backdrop-blur-sm shadow-lg">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Image #{(selectedImage ?? 0) + 1}
+                  </Badge>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pointer-events-auto">
+                  <div className="flex items-end justify-between">
+                    <div className="text-white text-sm min-w-0 flex-1 mr-3">
+                      <p className="font-semibold text-sm truncate">{activeHeadlineText || 'Your LinkedIn Image'}</p>
+                      {tagline && <p className="text-white/60 text-xs mt-0.5 truncate">{tagline}</p>}
+                    </div>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <a
+                        href={generatedImages[selectedImage]}
+                        download={`linkedin-image-${Date.now()}.png`}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors shadow-lg"
+                        title="Download image"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <Button
+                        size="sm"
+                        className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 h-9 px-3.5 text-xs shadow-lg"
+                        onClick={handleGenerate}
+                        disabled={isGenerating || isApplyingBlend}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                        Regenerate
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className={`${previewAspectClass} flex flex-col items-center justify-center bg-gradient-to-br from-slate-500 to-white text-gray-500`}>
-              <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-                <ImageIcon className="w-10 h-10 text-gray-600" />
-              </div>
-              <p className="text-base font-semibold text-gray-400">Your image will appear here</p>
-              <p className="text-sm text-gray-500 mt-1 max-w-sm text-center">
-                Your confirmed post already gives the headline. Pick a tone and style, then generate.
-              </p>
-
-              <div className="mt-6 flex items-center gap-3 text-xs text-gray-500">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-purple-500 font-bold text-[10px]">1</span>
-                  <span>Post</span>
-                </div>
-                <ArrowRight className="w-3 h-3 text-gray-600" />
-                <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-pink-100 flex items-center justify-center text-pink-500 font-bold text-[10px]">2</span>
-                  <span>Style</span>
-                </div>
-                <ArrowRight className="w-3 h-3 text-gray-600" />
-                <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold text-[10px]">3</span>
-                  <span>Generate</span>
-                </div>
-              </div>
-            </div>
+            <ThemePreviewLarge
+              themeId={selectedThemeId}
+              previewAspectClass={previewAspectClass}
+              uploadedLogo={uploadedLogo}
+              brandColors={brandColors}
+              allianceHeaderLogos={allianceHeaderLogos}
+              brandName={brandName}
+              partnerName={partnerName}
+              partnerTagline={partnerTagline}
+              activeHeadlineText={activeHeadlineText}
+              activeTaglineText={activeTaglineText}
+              allianceBenefitLines={allianceBenefitLines}
+              footerWebsite={footerWebsite}
+              footerEmail={footerEmail}
+              selectedReferenceImage={selectedReferenceImage}
+              useReferenceAsHero={useReferenceAsHero}
+              selectedPdfImage={selectedPdfImage}
+              selectedSiteImage={selectedSiteImage}
+              hasPostContext={hasPostContext}
+              slotAssignments={slotAssignments}
+            />
           )}
         </Card>
 
@@ -1701,20 +3868,20 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Previous Generations Thumbnails Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {generatedImages.length > 1 && (
-          <div>
-            <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
+          <Card className="p-3 border border-slate-200/60 bg-white rounded-xl shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5 flex items-center gap-1.5">
               <Eye className="w-3 h-3" />
-              Previous generations ({generatedImages.length})
+              All Generations ({generatedImages.length})
             </p>
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="grid grid-cols-3 gap-2">
               {generatedImages.map((img, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedImage(idx)}
-                  className={`relative flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-[4/3] ${
                     selectedImage === idx
-                      ? 'border-purple-50 shadow-lg shadow-purple-200 ring-2 ring-purple-300'
-                      : 'border-slate-200 hover:border-slate-300'
+                      ? 'border-purple-400 shadow-lg shadow-purple-200/50 ring-2 ring-purple-300/40 scale-[1.02]'
+                      : 'border-slate-200 hover:border-purple-300 hover:shadow-md'
                   }`}
                 >
                   <img
@@ -1723,14 +3890,17 @@ export function ImageCreator({
                     className="w-full h-full object-cover"
                   />
                   {selectedImage === idx && (
-                    <div className="absolute inset-0 bg-purple-50/10 flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-purple-600 drop-shadow" />
+                    <div className="absolute inset-0 bg-purple-600/15 flex items-center justify-center">
+                      <CheckCircle2 className="w-5 h-5 text-purple-500 drop-shadow-lg" />
                     </div>
                   )}
+                  <div className="absolute bottom-1 right-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[8px] font-bold text-white backdrop-blur-sm">
+                    #{idx + 1}
+                  </div>
                 </button>
               ))}
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Confirm & Continue Ã¢â€â‚¬Ã¢â€â‚¬ */}
@@ -1738,7 +3908,7 @@ export function ImageCreator({
           <Button
             size="lg"
             onClick={handleConfirm}
-            className="w-full h-14 text-base font-bold bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 shadow-lg hover:shadow-xl transition-all rounded-xl"
+            className="w-full h-14 text-base font-bold bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 shadow-lg shadow-emerald-200/40 hover:shadow-xl hover:shadow-emerald-300/40 transition-all rounded-xl ring-1 ring-emerald-500/20"
           >
             <CheckCircle2 className="w-5 h-5 mr-2" />
             Confirm & Continue
@@ -1748,26 +3918,26 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tips Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {generatedImages.length === 0 && !isGenerating && !isApplyingBlend && (
-          <Card className="p-4 bg-purple-50 border border-purple-200 shadow-sm">
-            <h4 className="font-semibold text-xs text-purple-800 mb-2.5 flex items-center gap-1.5 uppercase tracking-wide">
+          <Card className="p-4 bg-gradient-to-br from-purple-50 via-fuchsia-50/60 to-pink-50/40 border border-purple-200/50 shadow-sm rounded-xl">
+            <h4 className="font-bold text-[10px] text-purple-700 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
               <Sparkles className="w-3.5 h-3.5" />
               Tips for great images
             </h4>
-            <ul className="space-y-1.5 text-xs text-purple-700">
-              <li className="flex items-start gap-2">
-                <span className="text-purple-500 mt-0.5 text-[8px]">•</span>
-                <span>Keep headlines short and punchy - 3 to 8 words work best</span>
+            <ul className="space-y-2 text-xs text-purple-800">
+              <li className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">1</span>
+                <span>Keep headlines short and punchy — 3 to 8 words work best</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400 mt-0.5 text-[8px]">•</span>
+              <li className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">2</span>
                 <span>Upload your logo for consistent brand presence</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400 mt-0.5 text-[8px]">•</span>
+              <li className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">3</span>
                 <span>Try <strong>Bold</strong> for announcements, <strong>Minimal</strong> for thought leadership</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400 mt-0.5 text-[8px]">•</span>
+              <li className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">4</span>
                 <span>Generate multiple variations and pick the best one</span>
               </li>
             </ul>

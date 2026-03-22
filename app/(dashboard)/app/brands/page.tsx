@@ -767,6 +767,19 @@ function BrandManagementSection() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Unauthorized');
 
+            // 0. Auto-create company if none exists
+            let companyId: string | null = null;
+            const { data: existingCo } = await supabase.from('companies')
+                .select('id').eq('owner_user_id', user.id).limit(1).maybeSingle();
+            if (existingCo) {
+                companyId = existingCo.id;
+            } else {
+                const { data: newCo } = await supabase.from('companies')
+                    .insert({ owner_user_id: user.id, name: brandName.trim() })
+                    .select('id').single();
+                if (newCo) companyId = newCo.id;
+            }
+
             // 1. Create the brand
             const { data: brand, error: brandError } = await supabase
                 .from('brands')
@@ -775,6 +788,7 @@ function BrandManagementSection() {
                     name: brandName.trim(),
                     industry: brandIndustry.trim() || null,
                     description: targetAudience.trim() ? `Target audience: ${targetAudience.trim()}` : null,
+                    company_id: companyId,
                 })
                 .select('id')
                 .single();

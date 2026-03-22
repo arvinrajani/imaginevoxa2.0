@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import './studio.css';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -326,6 +326,7 @@ export default function StudioPage() {
     selectedEvidence,
     loading: evidenceLoading,
     mutating: evidenceMutating,
+    uploadState: evidenceUploadState,
     toggleEvidence,
     clearSelection: clearSelectedEvidence,
     deleteEvidenceByIds,
@@ -333,6 +334,7 @@ export default function StudioPage() {
     createUrlEvidence,
     createNoteEvidence,
     reextractPdfEvidence,
+    refresh: refreshEvidence,
   } = useEvidenceLocker(selectedBrand?.id || null);
 
   // Onboarding wizard state
@@ -408,15 +410,17 @@ export default function StudioPage() {
         .filter(
           (item) =>
             item.type === 'image' &&
-            Array.isArray(item.tags) &&
-            item.tags.includes('pdf-extracted') &&
             typeof item.signed_url === 'string' &&
-            item.signed_url.length > 0
+            item.signed_url.length > 0 &&
+            (
+              (Array.isArray(item.tags) && item.tags.includes('pdf-extracted')) ||
+              (typeof item.file_path === 'string' && item.file_path.includes('/pdf-extract/'))
+            )
         )
         .map((item) => ({
           id: item.id,
           title: item.title,
-          tags: item.tags,
+          tags: Array.isArray(item.tags) ? item.tags : [],
           signed_url: item.signed_url as string,
         }));
 
@@ -470,7 +474,7 @@ export default function StudioPage() {
     [selectedEvidence]
   );
 
-  // Pipeline state � initialised from ?step= URL param
+  // Pipeline state initialized from the ?step= URL param
   const [activeStep, setActiveStep] = useState(() => {
     const stepParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('step') : null;
     const parsed = stepParam ? parseInt(stepParam, 10) : 0;
@@ -812,13 +816,28 @@ export default function StudioPage() {
         return;
       }
 
+      // Auto-create company if none exists
+      let companyId = selectedCompany?.id || companies[0]?.id || null;
+      if (!companyId) {
+        const { data: newCo } = await supabase.from('companies')
+          .insert({ owner_user_id: user.id, name: trimmedName })
+          .select('id, name, owner_user_id')
+          .single();
+        if (newCo) {
+          const co = newCo as Company;
+          companyId = co.id;
+          setCompanies([co]);
+          setSelectedCompany(co);
+        }
+      }
+
       const payload = {
         owner_user_id: user.id,
         name: trimmedName,
         description: newBrandForm.description.trim() || null,
         industry: newBrandForm.industry.trim() || null,
         website: newBrandForm.website.trim() || null,
-        company_id: selectedCompany?.id || null,
+        company_id: companyId,
       };
 
       const { data: createdBrand, error } = await supabase
@@ -916,7 +935,7 @@ export default function StudioPage() {
       }
       // If no kit found, leave brandSetupComplete as-is (set by useEffect based on isDirect)
     } catch {
-      // silently ignore � leave brandSetupComplete unchanged
+      // silently ignore - leave brandSetupComplete unchanged
     }
   }, []);
 
@@ -928,7 +947,7 @@ export default function StudioPage() {
     const isDirect = params.get('direct') === 'true';
     const hasPostId = !!params.get('postId');
 
-    // When loading a saved draft, skip reset � the draft loader handles state
+    // When loading a saved draft, skip reset - the draft loader handles state
     if (hasPostId) {
       setBrandSetupComplete(true);
       void Promise.all([
@@ -1145,7 +1164,7 @@ export default function StudioPage() {
     setActiveStep(2); // Move to Image Editor
   }, [updateDraftImage]);
 
-  // Auto-sync generated image URL without navigating � ensures image is available in draft/preview
+  // Auto-sync generated image URL without navigating so draft/preview stay in sync
   const handleImageAutoSync = useCallback((imageUrl: string) => {
     setConfirmedImageUrl(imageUrl);
     updateDraftImage(imageUrl);
@@ -1154,7 +1173,7 @@ export default function StudioPage() {
   const handleImageConfirmedFromEditor = useCallback((imageDataUrl: string) => {
     setConfirmedImageUrl(imageDataUrl);
     updateDraftImage(imageDataUrl);
-    toast.success('Image updated! Moving to Preview�');
+    toast.success('Image updated! Moving to Preview...');
     setActiveStep(3); // Move to Preview & Publish
   }, [updateDraftImage]);
 
@@ -1284,15 +1303,15 @@ export default function StudioPage() {
       <div className="mt-3 rounded-lg border border-gray-200/60 bg-gray-100/60 px-4 py-2.5 text-sm text-gray-600 flex flex-wrap items-center gap-2">
         <span className="text-gray-500 font-medium">Scope:</span>
         <span className="font-semibold text-cyan-600">
-          {selectedCompany?.name || '�'}
+          {selectedCompany?.name || '--'}
         </span>
-        <span className="text-gray-400">?</span>
+        <span className="text-gray-400">/</span>
         <span className="font-semibold text-cyan-600">
-          {selectedBrand?.name || '�'}
+          {selectedBrand?.name || '--'}
         </span>
         {selectedProduct && (
           <>
-            <span className="text-gray-400">?</span>
+            <span className="text-gray-400">/</span>
             <span className="font-semibold text-cyan-600">{selectedProduct.name}</span>
           </>
         )}
@@ -1378,7 +1397,7 @@ export default function StudioPage() {
                 <p className="text-sm leading-relaxed text-gray-800">
                   {[...brandIntelligence.products, ...brandIntelligence.offerings]
                     .slice(0, 4)
-                    .join(' � ') || 'Run Brand Analysis to detect products and offers'}
+                    .join(' / ') || 'Run Brand Analysis to detect products and offers'}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1409,7 +1428,7 @@ export default function StudioPage() {
                     key={idx}
                     className="relative h-6 w-6 cursor-pointer rounded-md border border-gray-200 shadow-sm hover:scale-110 transition-transform"
                     style={{ backgroundColor: color }}
-                    title={brandColorNames?.[color] ? `${brandColorNames[color]} (${color}) � click to edit` : `${color} � click to edit`}
+                    title={brandColorNames?.[color] ? `${brandColorNames[color]} (${color}) - click to edit` : `${color} - click to edit`}
                   >
                     <input
                       type="color"
@@ -1579,14 +1598,31 @@ export default function StudioPage() {
           setCompanies(prev => prev.map((c, i) => i === 0 ? { ...c, name: companyNameInput.trim() } : c));
           setSelectedCompany(prev => prev ? { ...prev, name: companyNameInput.trim() } : prev);
         } else {
+          // Try insert; if UNIQUE constraint fails (user already has a company), fetch it instead
           const { data, error } = await supabase.from('companies')
             .insert({ owner_user_id: user.id, name: companyNameInput.trim() })
             .select('id, name, owner_user_id')
             .single();
-          if (error) throw error;
-          const newCompany = data as Company;
-          setCompanies([newCompany]);
-          setSelectedCompany(newCompany);
+          if (error) {
+            // Likely unique constraint — fetch existing company
+            const { data: existing } = await supabase.from('companies')
+              .select('id, name, owner_user_id')
+              .eq('owner_user_id', user.id)
+              .limit(1)
+              .maybeSingle();
+            if (existing) {
+              await supabase.from('companies').update({ name: companyNameInput.trim() }).eq('id', existing.id);
+              const updated = { ...existing, name: companyNameInput.trim() } as Company;
+              setCompanies([updated]);
+              setSelectedCompany(updated);
+            } else {
+              throw error;
+            }
+          } else {
+            const newCompany = data as Company;
+            setCompanies([newCompany]);
+            setSelectedCompany(newCompany);
+          }
         }
         toast.success(`Company "${companyNameInput.trim()}" saved!`);
         setOnboardStep(2);
@@ -1604,7 +1640,21 @@ export default function StudioPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not logged in');
 
-        const companyId = companies[0]?.id || selectedCompany?.id || null;
+        // Auto-create company if none exists
+        let companyId = companies[0]?.id || selectedCompany?.id || null;
+        if (!companyId) {
+          const { data: newCo } = await supabase.from('companies')
+            .insert({ owner_user_id: user.id, name: 'My Company' })
+            .select('id, name, owner_user_id')
+            .single();
+          if (newCo) {
+            const co = newCo as Company;
+            companyId = co.id;
+            setCompanies([co]);
+            setSelectedCompany(co);
+          }
+        }
+
         const { data, error } = await supabase.from('brands')
           .insert({
             owner_user_id: user.id,
@@ -1831,7 +1881,7 @@ export default function StudioPage() {
                 </div>
                 <h2 className="text-2xl font-bold">Ready to Launch!</h2>
                 <p className="text-gray-600 mt-2">
-                  Your workspace is set up. You can optionally add products for <span className="font-semibold text-cyan-600">{selectedBrand?.name || 'your brand'}</span>, or jump straight in.
+                  Your workspace is set up. You can optionally add products for <span className="font-semibold text-cyan-600">{selectedBrand?.name || '--'}</span>, or jump straight in.
                 </p>
               </div>
 
@@ -1847,7 +1897,7 @@ export default function StudioPage() {
                   <div className="flex items-start gap-2">
                     <Palette className="w-4 h-4 text-pink-400 mt-0.5" />
                     <span className="text-gray-600">Brands:</span>
-                    <span className="font-semibold text-gray-900">{userBrands.map(b => b.name).join(', ') || '�'}</span>
+                    <span className="font-semibold text-gray-900">{userBrands.map(b => b.name).join(', ') || '--'}</span>
                   </div>
                   {onboardProducts.length > 0 && (
                     <div className="flex items-start gap-2">
@@ -1865,7 +1915,7 @@ export default function StudioPage() {
                   <Input
                     value={productNameInput}
                     onChange={(e) => setProductNameInput(e.target.value)}
-                    placeholder={`Add a product for ${selectedBrand?.name || 'brand'} (optional)`}
+                    placeholder={`Add a product for ${selectedBrand?.name || '--'} (optional)`}
                     className="h-10 border-gray-200 bg-gray-100 text-gray-900 placeholder:text-gray-400 text-sm"
                     onKeyDown={(e) => e.key === 'Enter' && handleAddProduct()}
                   />
@@ -1884,7 +1934,7 @@ export default function StudioPage() {
                     {onboardProducts.map((p, i) => (
                       <span key={i} className="inline-flex items-center gap-1 rounded-full bg-cyan-50/20 border border-cyan-50/30 px-3 py-1 text-xs text-cyan-600">
                         {p}
-                        <button onClick={() => setOnboardProducts(prev => prev.filter((_, idx) => idx !== i))} className="ml-1 hover:text-red-300">�</button>
+                        <button onClick={() => setOnboardProducts(prev => prev.filter((_, idx) => idx !== i))} className="ml-1 hover:text-red-300">x</button>
                       </span>
                     ))}
                   </div>
@@ -2211,14 +2261,14 @@ export default function StudioPage() {
         {/* --- Step Content --- */}
         <div className="mb-6 rounded-xl border border-gray-200/60 bg-white/75 px-3 py-2 text-xs text-gray-700">
           <span className="font-semibold text-cyan-600">Active scope:</span>{' '}
-          <span className="text-cyan-100">{selectedCompany?.name || '�'}</span>{' '}
-          <span className="text-gray-400">?</span>{' '}
-          <span className="text-cyan-100">{selectedBrand?.name || '�'}</span>
+          <span className="text-cyan-900">{selectedCompany?.name || '--'}</span>{' '}
+          <span className="text-gray-400">/</span>{' '}
+          <span className="text-cyan-900">{selectedBrand?.name || '--'}</span>
           {selectedProduct && (
             <>
               {' '}
-              <span className="text-gray-400">?</span>{' '}
-              <span className="text-cyan-100">{selectedProduct.name}</span>
+              <span className="text-gray-400">/</span>{' '}
+              <span className="text-cyan-900">{selectedProduct.name}</span>
             </>
           )}
         </div>
@@ -2398,6 +2448,7 @@ export default function StudioPage() {
                 productName={selectedProduct?.name}
                 brandColors={brandColors}
                 logoUrl={logoUrl}
+                logoAssets={brandKit?.logoAssets}
                 analysisProfile={analysisProfile}
                 confirmedPostText={confirmedPost ? `${confirmedPost.headline}\n\n${confirmedPost.body}` : undefined}
                 confirmedPostHeadline={confirmedPost?.headline}
@@ -2406,6 +2457,8 @@ export default function StudioPage() {
                 onImageGenerated={handleImageAutoSync}
                 onBrandColorsChange={setBrandColors}
                 pdfImages={pdfEvidenceImages}
+                onRefreshEvidence={refreshEvidence}
+                onUploadPdfFiles={uploadFilesEvidence}
               />
             </Card>
           )}
@@ -2420,7 +2473,7 @@ export default function StudioPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">Edit & Refine</h2>
-                    <p className="text-sm text-gray-500">Fine-tune your image � adjust colors, add text, reposition elements</p>
+                    <p className="text-sm text-gray-500">Fine-tune your image: adjust colors, add text, reposition elements</p>
                   </div>
                   {!confirmedImageUrl && (
                     <Button size="sm" variant="outline" onClick={() => goToStep(1)} className="ml-auto border-gray-300 text-gray-600 hover:text-gray-900 text-xs">
@@ -2484,7 +2537,7 @@ export default function StudioPage() {
             variant="outline"
             onClick={() => goToStep(activeStep - 1)}
             disabled={activeStep === 0}
-            className="gap-1.5 text-sm h-10 px-4 border-slate-300 bg-white/7060"
+            className="gap-1.5 text-sm h-10 px-4 border-slate-300 bg-white/70"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             {activeStep > 0 ? PIPELINE_STEPS[activeStep - 1].shortLabel : 'Back'}
@@ -2510,7 +2563,7 @@ export default function StudioPage() {
             variant="outline"
             onClick={() => goToStep(activeStep + 1)}
             disabled={activeStep === PIPELINE_STEPS.length - 1}
-            className="gap-1.5 text-sm h-10 px-4 border-slate-300 bg-white/7060"
+            className="gap-1.5 text-sm h-10 px-4 border-slate-300 bg-white/70"
           >
             {activeStep < PIPELINE_STEPS.length - 1 ? PIPELINE_STEPS[activeStep + 1].shortLabel : 'Next'}
             <ArrowRight className="w-3.5 h-3.5" />
@@ -2530,19 +2583,7 @@ export default function StudioPage() {
             <Sparkles className="w-6 h-6 text-white" />
           </div>
         </div>
-        <p className="text-sm text-gray-400 font-medium">Loading Pro Studio�</p>
-      </div>
-    );
-  }
-
-  if (!selectedBrand) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center">
-          <h2 className="text-xl font-semibold mb-4">No Brand Found</h2>
-          <p className="text-gray-600 mb-4">Please create a brand first</p>
-          <Button onClick={() => void loadBrands()}>Create Brand</Button>
-        </Card>
+        <p className="text-sm text-gray-400 font-medium">Loading Pro Studio...</p>
       </div>
     );
   }
@@ -2551,28 +2592,33 @@ export default function StudioPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="rounded-[16px] bg-background border border-border p-4 shadow-voxa">
         {renderBrandWorkspaceBar()}
-        {!brandSetupComplete && setupStep !== 'welcome'
-          ? renderSetupFlow()
-          : !brandSetupComplete
-            ? renderWelcomeScreen()
-            : renderMainStudio()}
+        {!brandSetupComplete && (!selectedBrand || setupStep === 'welcome')
+          ? renderWelcomeScreen()
+          : !brandSetupComplete && selectedBrand
+            ? renderSetupFlow()
+            : selectedBrand
+              ? renderMainStudio()
+              : renderWelcomeScreen()}
 
-        <EvidenceModal
-          open={evidenceModalOpen}
-          onOpenChange={setEvidenceModalOpen}
-          brandId={selectedBrand.id}
-          evidence={evidence}
-          selectedEvidenceIds={selectedEvidenceIds}
-          loading={evidenceLoading}
-          mutating={evidenceMutating}
-          onToggleEvidence={toggleEvidence}
-          onClearSelection={clearSelectedEvidence}
-          onDeleteEvidenceIds={deleteEvidenceByIds}
-          onReextractPdfEvidence={reextractPdfEvidence}
-          onUploadFiles={uploadFilesEvidence}
-          onCreateUrl={createUrlEvidence}
-          onCreateNote={createNoteEvidence}
-        />
+        {selectedBrand ? (
+          <EvidenceModal
+            open={evidenceModalOpen}
+            onOpenChange={setEvidenceModalOpen}
+            brandId={selectedBrand.id}
+            evidence={evidence}
+            selectedEvidenceIds={selectedEvidenceIds}
+            loading={evidenceLoading}
+            mutating={evidenceMutating}
+            uploadState={evidenceUploadState}
+            onToggleEvidence={toggleEvidence}
+            onClearSelection={clearSelectedEvidence}
+            onDeleteEvidenceIds={deleteEvidenceByIds}
+            onReextractPdfEvidence={reextractPdfEvidence}
+            onUploadFiles={uploadFilesEvidence}
+            onCreateUrl={createUrlEvidence}
+            onCreateNote={createNoteEvidence}
+          />
+        ) : null}
       </div>
     </div>
   );
