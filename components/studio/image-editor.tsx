@@ -189,32 +189,32 @@ const CROP_PRESETS = [
 ];
 
 const AI_STYLE_PRESETS = [
-  { id: 'brand', label: 'ðŸŽ¯ My Brand', prompt: '' }, // filled dynamically from brand kit
-  { id: 'professional', label: 'ðŸ’¼ Professional', prompt: 'Professional, corporate, clean, modern, business' },
-  { id: 'creative', label: 'ðŸŽ¨ Creative', prompt: 'Creative, artistic, vibrant, expressive, bold colors' },
-  { id: 'minimal', label: 'â—¯ Minimal', prompt: 'Minimal, clean, lots of whitespace, simple geometric' },
-  { id: 'tech', label: 'âš¡ Tech', prompt: 'Technology, futuristic, digital, neon accents, dark mode' },
-  { id: 'warm', label: 'ðŸŒ… Warm', prompt: 'Warm, inviting, sunset tones, amber, cozy atmosphere' },
-  { id: 'nature', label: 'ðŸŒ¿ Nature', prompt: 'Nature, organic, green tones, fresh, environmental' },
+  { id: 'brand', label: 'My Brand', prompt: '' }, // filled dynamically from brand kit
+  { id: 'professional', label: 'Professional', prompt: 'Professional, corporate, clean, modern, business' },
+  { id: 'creative', label: 'Creative', prompt: 'Creative, artistic, vibrant, expressive, bold colors' },
+  { id: 'minimal', label: 'Minimal', prompt: 'Minimal, clean, lots of whitespace, simple geometric' },
+  { id: 'tech', label: 'Tech', prompt: 'Technology, futuristic, digital, neon accents, dark mode' },
+  { id: 'warm', label: 'Warm', prompt: 'Warm, inviting, sunset tones, amber, cozy atmosphere' },
+  { id: 'nature', label: 'Nature', prompt: 'Nature, organic, green tones, fresh, environmental' },
 ];
 
 // Quick prompt ideas the user can click instead of typing from scratch
 const AI_PROMPT_IDEAS = [
-  { emoji: 'ðŸ“Š', label: 'Data Visualization', prompt: 'Abstract data visualization with flowing charts, graphs, and glowing data points' },
-  { emoji: 'ðŸš€', label: 'Product Launch', prompt: 'Dynamic product launch visual with spotlight effect, celebration elements, and confetti' },
-  { emoji: 'ðŸ†', label: 'Achievement', prompt: 'Professional achievement celebration with trophy, medals, golden light, and success elements' },
-  { emoji: 'ðŸ’¡', label: 'Innovation', prompt: 'Innovation and ideas concept with glowing lightbulbs, neural networks, and creative sparks' },
-  { emoji: 'ðŸ¤', label: 'Partnership', prompt: 'Business partnership and collaboration visual with connected hands, bridge, and unity elements' },
-  { emoji: 'ðŸ“ˆ', label: 'Growth Story', prompt: 'Business growth chart going upward with greenery growing from it, prosperity and success' },
-  { emoji: 'ðŸŽ¯', label: 'Strategy', prompt: 'Strategic planning visual with target, chess pieces, roadmap elements, and clear direction' },
-  { emoji: 'ðŸ‘¥', label: 'Team Culture', prompt: 'Diverse team collaboration scene with modern office, teamwork energy, and positive atmosphere' },
-  { emoji: 'ðŸŒ', label: 'Global Reach', prompt: 'Global business expansion visual with world map, connected nodes, and international reach' },
-  { emoji: 'âš¡', label: 'Tech Innovation', prompt: 'Cutting-edge technology visual with circuits, AI neural network, futuristic holographic display' },
-  { emoji: 'ðŸ“±', label: 'Digital Transform', prompt: 'Digital transformation concept with devices morphing, cloud computing, and modern tech stack' },
-  { emoji: 'ðŸŽ“', label: 'Knowledge Share', prompt: 'Knowledge sharing and education concept with open books, flowing wisdom, and learning pathways' },
-  { emoji: 'ðŸ”’', label: 'Security & Trust', prompt: 'Cybersecurity and trust visual with shield, lock, encrypted data streams, and protection' },
-  { emoji: 'â™»ï¸', label: 'Sustainability', prompt: 'Sustainability and green business visual with renewable energy, nature, and eco-friendly elements' },
-  { emoji: 'âœ¨', label: 'Abstract Gradient', prompt: 'Beautiful abstract gradient mesh with flowing organic shapes and soft color transitions' },
+  { emoji: '📊', label: 'Data Visualization', prompt: 'Abstract data visualization with flowing charts, graphs, and glowing data points' },
+  { emoji: '🚀', label: 'Product Launch', prompt: 'Dynamic product launch visual with spotlight effect, celebration elements, and confetti' },
+  { emoji: '🏆', label: 'Achievement', prompt: 'Professional achievement celebration with trophy, medals, golden light, and success elements' },
+  { emoji: '💡', label: 'Innovation', prompt: 'Innovation and ideas concept with glowing lightbulbs, neural networks, and creative sparks' },
+  { emoji: '🤝', label: 'Partnership', prompt: 'Business partnership and collaboration visual with connected hands, bridge, and unity elements' },
+  { emoji: '📈', label: 'Growth Story', prompt: 'Business growth chart going upward with greenery growing from it, prosperity and success' },
+  { emoji: '🎯', label: 'Strategy', prompt: 'Strategic planning visual with target, chess pieces, roadmap elements, and clear direction' },
+  { emoji: '👥', label: 'Team Culture', prompt: 'Diverse team collaboration scene with modern office, teamwork energy, and positive atmosphere' },
+  { emoji: '🌍', label: 'Global Reach', prompt: 'Global business expansion visual with world map, connected nodes, and international reach' },
+  { emoji: '⚡', label: 'Tech Innovation', prompt: 'Cutting-edge technology visual with circuits, AI neural network, futuristic holographic display' },
+  { emoji: '📱', label: 'Digital Transform', prompt: 'Digital transformation concept with devices morphing, cloud computing, and modern tech stack' },
+  { emoji: '🎓', label: 'Knowledge Share', prompt: 'Knowledge sharing and education concept with open books, flowing wisdom, and learning pathways' },
+  { emoji: '🔒', label: 'Security & Trust', prompt: 'Cybersecurity and trust visual with shield, lock, encrypted data streams, and protection' },
+  { emoji: '♻️', label: 'Sustainability', prompt: 'Sustainability and green business visual with renewable energy, nature, and eco-friendly elements' },
+  { emoji: '✨', label: 'Abstract Gradient', prompt: 'Beautiful abstract gradient mesh with flowing organic shapes and soft color transitions' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -781,7 +781,7 @@ export function ImageEditor({
   }, [cropRect, updateLayers]);
 
   // -----------------------------------------------------------------------
-  // Smart resize â€” re-layout layers for a target aspect ratio
+  // Smart resize — re-layout layers for a target aspect ratio
   // -----------------------------------------------------------------------
   const analyzeStyleReference = useCallback(async (url: string) => {
     if (!url.trim()) return;
@@ -821,7 +821,7 @@ export function ImageEditor({
       setCanvasH(targetH);
       setCustomCanvasW(targetW);
       setCustomCanvasH(targetH);
-      toast.success(`Resized to ${targetW}Ã—${targetH}`);
+      toast.success(`Resized to ${targetW}×${targetH}`);
     },
     [canvasW, canvasH, updateLayers]
   );
@@ -1117,7 +1117,7 @@ export function ImageEditor({
     setSidePanel('properties');
   }, [newText, newFontSize, newFontFamily, newFontWeight, newTextAlign, newTextColor, newTextShadow, newTextOutline, newTextBgHighlight, canvasW, canvasH, updateLayers]);
 
-  // No auto-text layers — the AI image already has text baked in.
+  // No auto-text layers -- the AI image already has text baked in.
   // Users can manually add text via the Text panel if needed.
 
   const deleteLayer = useCallback(
@@ -1195,7 +1195,7 @@ export function ImageEditor({
   );
 
   // -----------------------------------------------------------------------
-  // AI Image Generation â€” brand-aware
+  // AI Image Generation — brand-aware
   // -----------------------------------------------------------------------
 
   const generateAIImage = useCallback(async () => {
@@ -1229,7 +1229,7 @@ export function ImageEditor({
         styleAddition,
         styleRefContext,
         'VISUAL DIRECTION: Create a compelling, thematic visual that tells a story. Think like a Fortune 500 brand designer.',
-        'Use professional photography style or high-end 3D illustration â€” NOT abstract shapes, NOT clip art.',
+        'Use professional photography style or high-end 3D illustration — NOT abstract shapes, NOT clip art.',
         'Do NOT render any written text, letters, numbers, logos, watermarks, or typographic glyphs inside the generated image.',
         'Include conceptual elements that represent the topic meaningfully.',
         'The image should be immediately eye-catching in a LinkedIn feed.',
@@ -1552,7 +1552,7 @@ export function ImageEditor({
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-      // Delete / Backspace â€” delete selected layer
+      // Delete / Backspace — delete selected layer
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         const sel = layers.find((l) => l.id === selectedId);
         if (sel && !sel.locked) {
@@ -1561,31 +1561,31 @@ export function ImageEditor({
         }
       }
 
-      // Ctrl+Z / Cmd+Z â€” Undo
+      // Ctrl+Z / Cmd+Z — Undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
       }
 
-      // Ctrl+Shift+Z or Ctrl+Y â€” Redo
+      // Ctrl+Shift+Z or Ctrl+Y — Redo
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault();
         redo();
       }
 
-      // Ctrl+D â€” Duplicate
+      // Ctrl+D — Duplicate
       if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedId) {
         e.preventDefault();
         duplicateLayer(selectedId);
       }
 
-      // Ctrl+E â€” Export
+      // Ctrl+E — Export
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault();
         exportImage();
       }
 
-      // Arrow keys â€” nudge selected layer
+      // Arrow keys — nudge selected layer
       if (selectedId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         const sel = layers.find((l) => l.id === selectedId);
         if (sel && !sel.locked) {
@@ -1598,7 +1598,7 @@ export function ImageEditor({
         }
       }
 
-      // Escape â€” deselect
+      // Escape — deselect
       if (e.key === 'Escape') {
         setSelectedId(null);
       }
@@ -1613,7 +1613,7 @@ export function ImageEditor({
   }, [fitCanvasToViewport]);
 
   // -----------------------------------------------------------------------
-  // Snap guides â€” show center/edge alignment
+  // Snap guides — show center/edge alignment
   // -----------------------------------------------------------------------
 
   const snapGuides = useMemo(() => {
@@ -1699,7 +1699,7 @@ export function ImageEditor({
 
   return (
     <div className="flex flex-col h-full min-h-[700px]">
-      {/* â”€â”€â”€ Top Toolbar â”€â”€â”€ */}
+      {/* ─── Top Toolbar ─── */}
       <div className="flex items-center gap-2 p-3 bg-white rounded-t-2xl border-b border-gray-200">
         <div className="flex items-center gap-1 bg-gray-50 rounded-xl p-1">
           <button
@@ -1884,22 +1884,22 @@ export function ImageEditor({
             className="bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-semibold"
           >
             <CheckCircle2 className="w-4 h-4 mr-1" />
-            Confirm & Continue â†’
+            Confirm & Continue →
           </Button>
         )}
 
         {/* Keyboard shortcut hints */}
         <div className="hidden xl:flex items-center gap-1.5 text-[10px] text-gray-400">
           <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">Del</kbd>
-          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">âŒ˜Z</kbd>
-          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">âŒ˜D</kbd>
-          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">â†‘â†“â†â†’</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">⌘Z</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">⌘D</kbd>
+          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-gray-500">↑↓←→</kbd>
         </div>
       </div>
 
-      {/* â”€â”€â”€ Main Area â”€â”€â”€ */}
+      {/* ─── Main Area ─── */}
       <div className="flex flex-1 overflow-hidden bg-gray-50">
-        {/* â”€â”€â”€ Left icon bar â”€â”€â”€ */}
+        {/* ─── Left icon bar ─── */}
         <div className="w-12 flex flex-col items-center py-3 gap-1 bg-white border-r border-gray-200">
           {([
             { key: 'layers' as const, icon: Layers, label: 'Layers' },
@@ -1930,9 +1930,9 @@ export function ImageEditor({
           </label>
         </div>
 
-        {/* â”€â”€â”€ Side Panel â”€â”€â”€ */}
+        {/* ─── Side Panel ─── */}
         <div className="w-80 border-r border-gray-200 overflow-y-auto bg-white/50 backdrop-blur-sm">
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• AI GENERATE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ AI GENERATE ═══════════════════════════════════════ */}
           {sidePanel === 'ai' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -1981,10 +1981,10 @@ export function ImageEditor({
                 className="bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400 resize-none text-sm"
               />
 
-              {/* Quick prompt ideas â€” click to fill */}
+              {/* Quick prompt ideas — click to fill */}
               {!aiPrompt.trim() && (
                 <div>
-                  <label className="text-xs text-gray-500 mb-2 block">ðŸ’¡ Quick Ideas â€” click to use</label>
+                  <label className="mb-2 block text-xs text-gray-500">Quick Ideas - click to use</label>
                   <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
                     {AI_PROMPT_IDEAS.map((idea) => (
                       <button
@@ -2106,7 +2106,7 @@ export function ImageEditor({
                 {/* Show existing logos as small clickable thumbnails */}
                 {allLogos.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-gray-400 mb-1.5">Your logos â€” click to add to canvas:</p>
+                    <p className="text-[11px] text-gray-400 mb-1.5">Your logos — click to add to canvas:</p>
                     <div className="flex flex-wrap gap-1.5">
                       {allLogos.map((logo, idx) => (
                         <button
@@ -2189,7 +2189,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• LOGOS PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ LOGOS PANEL ═══════════════════════════════════════ */}
           {sidePanel === 'logos' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2259,7 +2259,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TEXT PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ TEXT PANEL ═══════════════════════════════════════ */}
           {sidePanel === 'text' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2430,7 +2430,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• SHAPES PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ SHAPES PANEL ═══════════════════════════════════════ */}
           {sidePanel === 'shapes' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2484,7 +2484,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• FILTERS PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ FILTERS PANEL ═══════════════════════════════════════ */}
           {sidePanel === 'canvas' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2630,7 +2630,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• CROP PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ CROP PANEL ═══════════════════════════════════════ */}
           {sidePanel === 'crop' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2681,7 +2681,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• LAYERS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ LAYERS ═══════════════════════════════════════ */}
           {sidePanel === 'layers' && (
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2808,7 +2808,7 @@ export function ImageEditor({
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• PROPERTIES â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+          {/* ═══════════════════════════════════════ PROPERTIES ═══════════════════════════════════════ */}
           {sidePanel === 'properties' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center gap-2 text-gray-900 font-semibold text-sm">
@@ -2937,7 +2937,7 @@ export function ImageEditor({
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Rotation: {selected.rotation}Â°</label>
+                    <label className="text-xs text-gray-500 mb-1 block">Rotation: {selected.rotation}°</label>
                     <div className="flex items-center gap-2">
                       <input type="range" min={-180} max={180} value={selected.rotation} onChange={(e) => patchLayer(selected.id, { rotation: Number(e.target.value) })} className="flex-1 accent-cyan-500" />
                       <button onClick={() => patchLayer(selected.id, { rotation: 0 })} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:text-gray-900" title="Reset rotation">
@@ -3087,7 +3087,7 @@ export function ImageEditor({
           )}
         </div>
 
-        {/* â”€â”€â”€ Canvas Viewport â”€â”€â”€ */}
+        {/* ─── Canvas Viewport ─── */}
         <div ref={viewportRef} className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[#1e1e22]" style={{ backgroundImage: 'radial-gradient(circle, #333 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
           <div
             ref={containerRef}
@@ -3273,7 +3273,7 @@ export function ImageEditor({
         </div>
       </div>
 
-      {/* — Bottom Status Bar — */}
+      {/* -- Bottom Status Bar -- */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-white border-t border-gray-200 rounded-b-2xl">
         <div className="flex items-center gap-3 text-[11px] text-gray-400">
           <span>{layers.length} layer{layers.length !== 1 ? 's' : ''}</span>

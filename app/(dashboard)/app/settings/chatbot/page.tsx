@@ -16,7 +16,6 @@ import {
     Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -105,6 +104,33 @@ function isMissingRelationError(error: { code?: string | null; message?: string 
     return message.includes('relation') && message.includes('does not exist');
 }
 
+async function readApiError(response: Response, fallback: string) {
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text().catch(() => '');
+
+    if (contentType.includes('application/json')) {
+        try {
+            const data = JSON.parse(text) as { error?: string } | null;
+            if (data?.error) {
+                return data.error;
+            }
+        } catch {
+            // Fall back to the raw response body below.
+        }
+    }
+
+    const normalized = text.trim();
+    if (!normalized) {
+        return fallback;
+    }
+
+    if (/request entity too large/i.test(normalized)) {
+        return 'The upload was rejected before the server could process it. Please retry; the chatbot uploader now uses direct storage upload.';
+    }
+
+    return normalized.slice(0, 240);
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -119,7 +145,6 @@ export default function ChatbotSettingsPage() {
     const [loadingBrands, setLoadingBrands] = useState(true);
 
     // Settings form
-    const [chatbotEnabled, setChatbotEnabled] = useState(false);
     const [chatbotSlug, setChatbotSlug] = useState('');
     const [welcomeMessage, setWelcomeMessage] = useState('');
     const [savingSettings, setSavingSettings] = useState(false);
@@ -138,12 +163,36 @@ export default function ChatbotSettingsPage() {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [viewingSession, setViewingSession] = useState<ChatSession | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const selectedBrand = useMemo(
+        () => brands.find((brand) => brand.id === selectedBrandId) ?? null,
+        [brands, selectedBrandId]
+    );
+    const isLocalOrigin = useMemo(() => {
+        if (typeof window === 'undefined') return false;
+        try {
+            const current = new URL(window.location.origin);
+            return ['localhost', '127.0.0.1', '0.0.0.0'].includes(current.hostname);
+        } catch {
+            return false;
+        }
+    }, []);
+    const hasPublicChatbot = Boolean(selectedBrand?.chatbot_enabled && selectedBrand?.chatbot_slug);
 
-    const chatbotUrl = useMemo(() => {
-        if (!chatbotSlug) return '';
+    const chatbotPublicUrl = useMemo(() => {
+        if (!selectedBrand?.chatbot_slug) return '';
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        return `${origin}/chat/${chatbotSlug}`;
-    }, [chatbotSlug]);
+        return origin ? `${origin}/chat/${selectedBrand.chatbot_slug}` : '';
+    }, [selectedBrand?.chatbot_slug]);
+
+    const chatbotPreviewUrl = useMemo(() => {
+        if (!isLocalOrigin || !selectedBrandId || !chatbotSlug) return '';
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        if (!origin) return '';
+        const previewUrl = new URL(`/chat/${chatbotSlug}`, origin);
+        previewUrl.searchParams.set('preview', '1');
+        previewUrl.searchParams.set('brandId', selectedBrandId);
+        return previewUrl.toString();
+    }, [chatbotSlug, isLocalOrigin, selectedBrandId]);
 
     // ---- Load brands ----
     useEffect(() => {
@@ -184,7 +233,6 @@ export default function ChatbotSettingsPage() {
 
         const brand = brands.find((b) => b.id === selectedBrandId);
         if (brand) {
-            setChatbotEnabled(brand.chatbot_enabled ?? false);
             setChatbotSlug(brand.chatbot_slug ?? slugify(brand.name));
             setWelcomeMessage(
                 brand.chatbot_welcome_message ??
@@ -388,14 +436,19 @@ export default function ChatbotSettingsPage() {
             });
 
             if (!response.ok) {
-                const data = (await response.json()) as { error?: string };
-                throw new Error(data.error ?? 'Processing failed');
+                throw new Error(await readApiError(response, 'Processing failed'));
             }
 
-            const data = (await response.json()) as { chunks_created: number };
+            const data = (await response.json()) as {
+                chunks_created: number;
+                source_mode?: 'stored_pdf' | 'content_source';
+            };
             if (!silent) {
                 toast.success('PDF processed', {
-                    description: `${data.chunks_created} knowledge chunks created`,
+                    description:
+                        data.source_mode === 'content_source'
+                            ? `${data.chunks_created} knowledge chunks created from saved Studio text`
+                            : `${data.chunks_created} knowledge chunks created`,
                 });
             }
 
@@ -437,23 +490,54 @@ export default function ChatbotSettingsPage() {
         }
 
         try {
-            const formData = new FormData();
-            formData.append('brandId', selectedBrandId);
-            formData.append('bucket', 'chat');
-            formData.append('title', file.name.replace(/\.pdf$/i, ''));
-            formData.append('file', file);
-
-            const uploadResponse = await fetch('/api/studio/evidence/upload', {
+            const uploadUrlResponse = await fetch('/api/chatbot/upload-url', {
                 method: 'POST',
-                body: formData,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    brandId: selectedBrandId,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    contentType: file.type || 'application/pdf',
+                }),
             });
 
-            if (!uploadResponse.ok) {
-                const data = (await uploadResponse.json()) as { error?: string };
-                throw new Error(data.error ?? 'Failed to upload PDF');
+            if (!uploadUrlResponse.ok) {
+                throw new Error(await readApiError(uploadUrlResponse, 'Failed to prepare PDF upload'));
             }
 
-            const uploadData = (await uploadResponse.json()) as {
+            const uploadTarget = (await uploadUrlResponse.json()) as {
+                bucket: string;
+                storagePath: string;
+                token: string;
+            };
+
+            const storageUpload = await supabase.storage
+                .from(uploadTarget.bucket)
+                .uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, file, {
+                    contentType: file.type || 'application/pdf',
+                });
+
+            if (storageUpload.error) {
+                throw new Error(storageUpload.error.message || 'Failed to upload PDF to storage');
+            }
+
+            const registerResponse = await fetch('/api/chatbot/register-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    brandId: selectedBrandId,
+                    bucket: 'chat',
+                    title: file.name.replace(/\.pdf$/i, ''),
+                    fileName: file.name,
+                    storagePath: uploadTarget.storagePath,
+                }),
+            });
+
+            if (!registerResponse.ok) {
+                throw new Error(await readApiError(registerResponse, 'Failed to register uploaded PDF'));
+            }
+
+            const uploadData = (await registerResponse.json()) as {
                 evidence?: { id?: string | null; file_path?: string | null; title?: string | null };
             };
             const evidenceId = typeof uploadData.evidence?.id === 'string' ? uploadData.evidence.id : null;
@@ -578,8 +662,7 @@ export default function ChatbotSettingsPage() {
             });
 
             if (!response.ok) {
-                const data = (await response.json()) as { error?: string };
-                throw new Error(data.error ?? 'Delete failed');
+                throw new Error(await readApiError(response, 'Delete failed'));
             }
 
             toast.success('Knowledge chunks removed');
@@ -594,9 +677,26 @@ export default function ChatbotSettingsPage() {
 
     // ---- Copy link ----
     const copyLink = () => {
-        if (!chatbotUrl) return;
-        navigator.clipboard.writeText(chatbotUrl);
-        toast.success('Link copied!');
+        const activeUrl = hasPublicChatbot ? chatbotPublicUrl : chatbotPreviewUrl;
+        if (!activeUrl) {
+            toast.error('No chatbot link available', {
+                description: 'Save settings to activate a public chatbot link, or use localhost for preview testing.',
+            });
+            return;
+        }
+        navigator.clipboard.writeText(activeUrl);
+        toast.success(hasPublicChatbot ? 'Link copied!' : 'Preview link copied!');
+    };
+
+    const openChatbot = () => {
+        const activeUrl = hasPublicChatbot ? chatbotPublicUrl : chatbotPreviewUrl;
+        if (!activeUrl) {
+            toast.error('No chatbot link available', {
+                description: 'Save settings to activate a public chatbot link, or use localhost for preview testing.',
+            });
+            return;
+        }
+        window.open(activeUrl, '_blank', 'noopener,noreferrer');
     };
 
     // ---- Processed PDF count ----
@@ -662,15 +762,22 @@ export default function ChatbotSettingsPage() {
                     />
                     {chatbotSlug && (
                         <p className="text-xs text-muted-foreground">
-                            Preview:{' '}
+                            {hasPublicChatbot ? 'Live URL:' : 'Preview:'}{' '}
                             <a
-                                href={`${typeof window !== 'undefined' ? window.location.origin : ''}/chat/${chatbotSlug}`}
+                                href={hasPublicChatbot ? chatbotPublicUrl : chatbotPreviewUrl || '#'}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="font-mono text-primary underline hover:opacity-80"
                             >
-                                {typeof window !== 'undefined' ? window.location.origin : ''}/chat/{chatbotSlug}
+                                {hasPublicChatbot
+                                    ? chatbotPublicUrl
+                                    : chatbotPreviewUrl || 'Save settings to activate the public chatbot link'}
                             </a>
+                        </p>
+                    )}
+                    {!hasPublicChatbot && (
+                        <p className="text-xs text-amber-600">
+                            Save settings to activate the public chatbot link. On localhost you can still use the preview link for testing.
                         </p>
                     )}
                     {chatbotSlug && !validateSlug(chatbotSlug) && (
@@ -703,7 +810,7 @@ export default function ChatbotSettingsPage() {
                     <h2 className="text-lg font-semibold">Knowledge Base</h2>
                     <div className="flex items-center gap-2">
                         <p className="text-xs text-muted-foreground">
-                            {processedPdfCount} PDF{processedPdfCount !== 1 ? 's' : ''} processed · {totalChunks} knowledge chunk{totalChunks !== 1 ? 's' : ''} indexed
+                            {processedPdfCount} PDF{processedPdfCount !== 1 ? 's' : ''} processed - {totalChunks} knowledge chunk{totalChunks !== 1 ? 's' : ''} indexed
                         </p>
                         <input
                             ref={fileInputRef}
@@ -769,8 +876,7 @@ export default function ChatbotSettingsPage() {
                             const isDeleting = deletingAssetId === pdf.id;
                             const isLegacySource = pdf.id.startsWith('source:');
                             const legacyMeta = legacyPdfMetaById[pdf.id];
-                            const isStorageFallback = typeof pdf.file_path === 'string' && pdf.file_path.startsWith('indexed-only/');
-                            const canProcess = !isStorageFallback && (!isLegacySource || Boolean(legacyMeta?.filePath));
+                            const canProcess = isLegacySource ? Boolean(legacyMeta?.filePath) : true;
 
                             return (
                                 <div
@@ -816,7 +922,7 @@ export default function ChatbotSettingsPage() {
                                             {isProcessing ? (
                                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                             ) : null}
-                                            {isProcessing ? 'Processing...' : isStorageFallback ? 'Re-upload (Storage Full)' : canProcess ? 'Process' : 'Re-upload to Process'}
+                                            {isProcessing ? 'Processing...' : canProcess ? 'Process' : 'Re-upload to Process'}
                                         </Button>
                                         {isProcessed && (
                                             <Button
@@ -844,33 +950,36 @@ export default function ChatbotSettingsPage() {
             {/* Section C: Share */}
             {chatbotSlug && (
                 <section className="rounded-2xl border bg-card p-6 space-y-4">
-                    <h2 className="text-lg font-semibold">Share Your Chatbot</h2>
+                    <h2 className="text-lg font-semibold">
+                        {hasPublicChatbot ? 'Share Your Chatbot' : 'Local Preview'}
+                    </h2>
 
                     <div className="flex items-center gap-3">
                         <Input
-                            value={chatbotUrl}
+                            value={hasPublicChatbot ? chatbotPublicUrl : chatbotPreviewUrl}
                             readOnly
                             className="font-mono text-sm"
                         />
                         <Button variant="outline" size="sm" onClick={copyLink} className="gap-1.5 shrink-0">
                             <Copy className="h-3.5 w-3.5" />
-                            Copy Link
+                            {hasPublicChatbot ? 'Copy Link' : 'Copy Preview'}
                         </Button>
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(`/chat/${chatbotSlug}`, '_blank')}
+                            onClick={openChatbot}
                             className="gap-1.5 shrink-0"
                         >
                             <ExternalLink className="h-3.5 w-3.5" />
-                            Test Chatbot
+                            {hasPublicChatbot ? 'Test Chatbot' : 'Test Preview'}
                         </Button>
                     </div>
 
                     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                         <p className="text-sm text-muted-foreground">
-                            ðŸ’¡ Share this link in your LinkedIn and Instagram posts so followers can learn more
-                            about your products.
+                            {hasPublicChatbot
+                                ? 'Share this link in your LinkedIn and Instagram posts so followers can learn more about your products.'
+                                : 'This preview link is for localhost testing only. Save settings when you are ready to activate the public chatbot URL.'}
                         </p>
                     </div>
                 </section>
@@ -907,7 +1016,7 @@ export default function ChatbotSettingsPage() {
                                             {firstUserMsg?.content ?? 'No messages'}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                            {formatDate(session.created_at)} Â· {msgArray.length} message
+                                            {formatDate(session.created_at)} - {msgArray.length} message
                                             {msgArray.length !== 1 ? 's' : ''}
                                         </p>
                                     </div>

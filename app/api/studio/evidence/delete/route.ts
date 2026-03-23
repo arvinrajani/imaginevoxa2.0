@@ -4,6 +4,7 @@ import {
   requireStudioAuth,
   studioErrorResponse,
 } from '@/lib/studio/server-auth';
+import { deleteChatbotKnowledgeForEvidenceIds } from '@/lib/chatbot/pdf-knowledge';
 
 const EVIDENCE_STORAGE_BUCKET =
   process.env.STUDIO_EVIDENCE_BUCKET?.trim() || 'brand-evidence';
@@ -67,6 +68,11 @@ export async function POST(request: Request) {
     }
 
     // Also clean up indexed knowledge rows that were linked to deleted evidence IDs.
+    await deleteChatbotKnowledgeForEvidenceIds(admin, {
+      brandId,
+      evidenceIds: matchedIds,
+    });
+
     const sourceUrls = matchedIds.map((id) => `evidence://pdf/${id}`);
     await admin
       .from('content_sources')

@@ -34,11 +34,37 @@ const PLACEMENT_OFFSETS: Record<Placement, { xPct: number; yPct: number }> = {
   center: { xPct: 0.4, yPct: 0.4 },
 };
 
-async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 15_000;
+
+function isAllowedImageUrl(raw: string): boolean {
   try {
-    const res = await fetch(url);
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return false;
+    const h = parsed.hostname.toLowerCase();
+    if (
+      h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h === '::1' ||
+      h.startsWith('10.') || h.startsWith('192.168.') || h.startsWith('172.') ||
+      h === '169.254.169.254' || h.endsWith('.internal') || h.endsWith('.local') || h.endsWith('.localhost')
+    ) return false;
+    return true;
+  } catch { return false; }
+}
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  if (!isAllowedImageUrl(url)) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.startsWith('image/')) return null;
+    const cl = Number(res.headers.get('content-length') || '0');
+    if (cl > MAX_IMAGE_BYTES) return null;
     const ab = await res.arrayBuffer();
+    if (ab.byteLength > MAX_IMAGE_BYTES) return null;
     return Buffer.from(ab);
   } catch {
     return null;
@@ -83,6 +109,22 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Brand ownership verification
+    const admin = createAdminClient();
+    const { data: ownerCheck } = await admin
+      .from("brands")
+      .select("id")
+      .eq("id", input.brandId)
+      .eq("owner_user_id", user.id)
+      .maybeSingle();
+
+    if (!ownerCheck) {
+      return NextResponse.json(
+        { error: "You do not have access to this brand." },
+        { status: 403 }
+      );
     }
 
     const W = input.canvasWidth ?? 1200;

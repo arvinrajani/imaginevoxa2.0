@@ -19,6 +19,7 @@ type ChatInterfaceProps = {
     brand: BrandInfo;
     brandKit: BrandKitInfo;
     logoUrl: string | null;
+    previewMode?: boolean;
 };
 
 type DisplayMessage = {
@@ -34,7 +35,7 @@ const SUGGESTION_CHIPS = [
     'How can I contact you?',
 ];
 
-export function ChatInterface({ brand, brandKit, logoUrl }: ChatInterfaceProps) {
+export function ChatInterface({ brand, brandKit, logoUrl, previewMode = false }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<DisplayMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +80,7 @@ export function ChatInterface({ brand, brandKit, logoUrl }: ChatInterfaceProps) 
                         brand_id: brand.id,
                         session_token: sessionToken,
                         message: text.trim(),
+                        preview: previewMode,
                     }),
                 });
 
@@ -111,7 +113,7 @@ export function ChatInterface({ brand, brandKit, logoUrl }: ChatInterfaceProps) 
                 inputRef.current?.focus();
             }
         },
-        [brand.id, isLoading, sessionToken]
+        [brand.id, isLoading, previewMode, sessionToken]
     );
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -159,6 +161,11 @@ export function ChatInterface({ brand, brandKit, logoUrl }: ChatInterfaceProps) 
                     <p className="text-xs text-white/60">AI Product Assistant</p>
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
+                    {previewMode ? (
+                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/70">
+                            Local Preview
+                        </span>
+                    ) : null}
                     <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="text-xs text-white/50">Online</span>
                 </div>
@@ -257,8 +264,8 @@ export function ChatInterface({ brand, brandKit, logoUrl }: ChatInterfaceProps) 
                                             color: brandKit.accentColor,
                                         }}
                                     >
-                                        <span>🌐</span>
-                                        Visit {brand.name} Website →
+                                        <span>Web</span>
+                                        Visit {brand.name} website {'->'}
                                     </a>
                                 )}
                             </div>

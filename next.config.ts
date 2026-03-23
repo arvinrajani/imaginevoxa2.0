@@ -1,4 +1,4 @@
-﻿import type { NextConfig } from "next";
+import type { NextConfig } from "next";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -6,18 +6,25 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https://*.supabase.co https://media.licdn.com https://media-exp1.licdn.com https://*.openai.com https://oaidalleapiprodscus.blob.core.windows.net https://images.unsplash.com",
+      "font-src 'self' data:",
+      "connect-src 'self' https://*.supabase.co https://api.openai.com https://api.linkedin.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; "),
+  },
 ];
 
 const nextConfig: NextConfig = {
-  // pdf-parse uses PDF.js which breaks when bundled by webpack/Turbopack - keep external
-  serverExternalPackages: ['pdf-parse'],
-  experimental: {
-    // Avoid lockfile creation failures on restricted filesystems (e.g. OneDrive/EDR).
-    lockDistDir: false,
-  },
   images: {
     remotePatterns: [
-      // LinkedIn CDN
       {
         protocol: "https",
         hostname: "media.licdn.com",
@@ -26,25 +33,22 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "media-exp1.licdn.com",
       },
-      // Supabase storage
       {
         protocol: "https",
-        hostname: "*.supabase.co",
+        hostname: "**.supabase.co",
       },
-      // AI image generation services
       {
         protocol: "https",
-        hostname: "*.openai.com",
+        hostname: "**.openai.com",
       },
       {
         protocol: "https",
         hostname: "oaidalleapiprodscus.blob.core.windows.net",
       },
-      // Add your image host domain if external images are used
-      // {
-      //   protocol: "https",
-      //   hostname: "your-image-domain.com",
-      // },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
     ],
   },
   async headers() {
@@ -58,4 +62,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

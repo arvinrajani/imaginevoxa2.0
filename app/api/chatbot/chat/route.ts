@@ -44,12 +44,53 @@ type ChatCompletionResponse = {
 };
 
 const MAX_MESSAGE_CHARS = 2000;
-const FALLBACK_MATCH_THRESHOLD = 0.7;
+const PRIMARY_MATCH_THRESHOLD = 0.62;
+const RESCUE_MATCH_THRESHOLD = 0.45;
 const FALLBACK_MATCH_COUNT = 5;
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+
+const KEYWORD_STOP_WORDS = new Set([
+    'the',
+    'and',
+    'for',
+    'with',
+    'that',
+    'this',
+    'from',
+    'what',
+    'when',
+    'where',
+    'which',
+    'about',
+    'have',
+    'does',
+    'your',
+    'into',
+    'please',
+    'tell',
+    'more',
+]);
 
 function normalizeUserMessage(value: unknown): string {
     if (typeof value !== 'string') return '';
     return value.replace(/\u0000/g, '').trim().slice(0, MAX_MESSAGE_CHARS);
+}
+
+function isLocalPreviewRequest(request: Request): boolean {
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const headerHost = forwardedHost || request.headers.get('host');
+    const hostnameFromHeader = headerHost?.split(':')[0]?.trim().toLowerCase();
+
+    if (hostnameFromHeader && LOCAL_HOSTS.has(hostnameFromHeader)) {
+        return true;
+    }
+
+    try {
+        const requestUrl = new URL(request.url);
+        return LOCAL_HOSTS.has(requestUrl.hostname.toLowerCase());
+    } catch {
+        return false;
+    }
 }
 
 function parseEmbedding(raw: unknown): number[] | null {
@@ -96,29 +137,84 @@ function cosineSimilarity(a: number[], b: number[]): number {
     return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
 
+function extractSearchTerms(message: string): string[] {
+    const words = message
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/\s+/)
+        .map((w) => w.trim())
+        .filter((w) => w.length >= 3 && !KEYWORD_STOP_WORDS.has(w));
+
+    return Array.from(new Set(words)).slice(0, 8);
+}
+
+function keywordOverlapScore(chunkText: string, terms: string[]): number {
+    if (!terms.length) return 0;
+    const haystack = ` ${chunkText.toLowerCase()} `;
+    let matches = 0;
+
+    for (const term of terms) {
+        if (haystack.includes(` ${term} `) || haystack.includes(term)) {
+            matches += 1;
+        }
+    }
+
+    return matches / terms.length;
+}
+
+function normalizeKnowledgeRows(rows: Array<{ chunk_text?: string; similarity?: number }>): KnowledgeChunk[] {
+    return rows
+        .filter((row) => typeof row?.chunk_text === 'string' && row.chunk_text.trim().length > 0)
+        .map((row) => ({
+            chunk_text: String(row.chunk_text),
+            similarity: Number(row.similarity ?? 0),
+        }));
+}
+
 async function searchKnowledge(
     admin: ReturnType<typeof createAdminClient>,
     brandId: string,
-    queryEmbedding: number[]
+    queryEmbedding: number[] | null,
+    userMessage: string
 ): Promise<KnowledgeChunk[]> {
-    try {
-        const { data } = await admin.rpc('match_brand_knowledge', {
-            query_embedding: queryEmbedding,
-            match_brand_id: brandId,
-            match_threshold: FALLBACK_MATCH_THRESHOLD,
-            match_count: FALLBACK_MATCH_COUNT,
-        });
+    const hasQueryEmbedding = Array.isArray(queryEmbedding) && queryEmbedding.length > 0;
 
-        if (Array.isArray(data)) {
-            return (data as Array<{ chunk_text?: string; similarity?: number }>)
-                .filter((row) => typeof row?.chunk_text === 'string' && row.chunk_text.trim().length > 0)
-                .map((row) => ({
-                    chunk_text: String(row.chunk_text),
-                    similarity: Number(row.similarity ?? 0),
-                }));
+    if (hasQueryEmbedding) {
+        try {
+            const { data } = await admin.rpc('match_brand_knowledge', {
+                query_embedding: queryEmbedding,
+                match_brand_id: brandId,
+                match_threshold: PRIMARY_MATCH_THRESHOLD,
+                match_count: FALLBACK_MATCH_COUNT,
+            });
+
+            if (Array.isArray(data)) {
+                const primaryMatches = normalizeKnowledgeRows(
+                    data as Array<{ chunk_text?: string; similarity?: number }>
+                );
+                if (primaryMatches.length > 0) {
+                    return primaryMatches;
+                }
+            }
+
+            const { data: rescueData } = await admin.rpc('match_brand_knowledge', {
+                query_embedding: queryEmbedding,
+                match_brand_id: brandId,
+                match_threshold: RESCUE_MATCH_THRESHOLD,
+                match_count: FALLBACK_MATCH_COUNT,
+            });
+
+            if (Array.isArray(rescueData)) {
+                const rescueMatches = normalizeKnowledgeRows(
+                    rescueData as Array<{ chunk_text?: string; similarity?: number }>
+                );
+                if (rescueMatches.length > 0) {
+                    return rescueMatches;
+                }
+            }
+        } catch {
+            // Fallback below for environments where RPC/pgvector is not installed.
         }
-    } catch {
-        // Fallback below for environments where RPC/pgvector is not installed.
     }
 
     const { data: rows } = await admin
@@ -131,17 +227,63 @@ async function searchKnowledge(
         return [];
     }
 
-    return (rows as KnowledgeChunkRow[])
+    const searchTerms = extractSearchTerms(userMessage);
+    const rankedRows = (rows as KnowledgeChunkRow[])
         .map((row) => {
             const rowEmbedding = parseEmbedding(row.embedding);
             const chunkText = typeof row.chunk_text === 'string' ? row.chunk_text.trim() : '';
-            if (!rowEmbedding || !chunkText) return null;
-            const similarity = cosineSimilarity(queryEmbedding, rowEmbedding);
-            return { chunk_text: chunkText, similarity };
+            if (!chunkText) return null;
+
+            const similarity =
+                hasQueryEmbedding && rowEmbedding ? cosineSimilarity(queryEmbedding, rowEmbedding) : 0;
+            const keywordScore = keywordOverlapScore(chunkText, searchTerms);
+            return {
+                chunk_text: chunkText,
+                similarity,
+                keywordScore,
+            };
         })
-        .filter((row): row is KnowledgeChunk => row !== null && row.similarity >= FALLBACK_MATCH_THRESHOLD)
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, FALLBACK_MATCH_COUNT);
+        .filter(
+            (
+                row
+            ): row is { chunk_text: string; similarity: number; keywordScore: number } =>
+                row !== null
+        )
+        .sort((a, b) =>
+            hasQueryEmbedding
+                ? b.similarity - a.similarity || b.keywordScore - a.keywordScore
+                : b.keywordScore - a.keywordScore || b.similarity - a.similarity
+        );
+
+    if (hasQueryEmbedding) {
+        const vectorMatches = rankedRows
+            .filter((row) => row.similarity >= PRIMARY_MATCH_THRESHOLD)
+            .slice(0, FALLBACK_MATCH_COUNT)
+            .map(({ chunk_text, similarity }) => ({ chunk_text, similarity }));
+
+        if (vectorMatches.length > 0) {
+            return vectorMatches;
+        }
+
+        const rescueVectorMatches = rankedRows
+            .filter((row) => row.similarity >= RESCUE_MATCH_THRESHOLD)
+            .slice(0, FALLBACK_MATCH_COUNT)
+            .map(({ chunk_text, similarity }) => ({ chunk_text, similarity }));
+
+        if (rescueVectorMatches.length > 0) {
+            return rescueVectorMatches;
+        }
+    }
+
+    // Final rescue: lexical overlap for product names/terms when embeddings miss due typos.
+    return rankedRows
+        .filter((row) => row.keywordScore > 0)
+        .sort((a, b) => b.keywordScore - a.keywordScore || b.similarity - a.similarity)
+        .slice(0, FALLBACK_MATCH_COUNT)
+        .map(({ chunk_text, keywordScore }) => ({
+            chunk_text,
+            similarity: keywordScore,
+        }));
 }
 
 async function createEmbedding(text: string): Promise<number[]> {
@@ -207,6 +349,7 @@ export async function POST(request: Request) {
             brand_id?: string;
             session_token?: string;
         };
+        const preview = Boolean((body as { preview?: unknown }).preview);
         const message = normalizeUserMessage((body as { message?: unknown }).message);
 
         if (!brand_id || !session_token || !message) {
@@ -227,6 +370,15 @@ export async function POST(request: Request) {
 
         if (brandError || !brand) {
             return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
+        }
+
+        const allowLocalPreview = preview && isLocalPreviewRequest(request);
+
+        if (brand.chatbot_enabled === false && !allowLocalPreview) {
+            return NextResponse.json(
+                { error: 'Chatbot is not enabled for this brand' },
+                { status: 403 }
+            );
         }
 
         // Get or create session
@@ -268,11 +420,20 @@ export async function POST(request: Request) {
             session = newSession;
         }
 
-        // Generate embedding for user message
-        const queryEmbedding = await createEmbedding(message);
+        // Generate embedding for user message. If embeddings are unavailable,
+        // continue with lexical search so knowledge-backed answers still work.
+        let queryEmbedding: number[] | null = null;
+        try {
+            queryEmbedding = await createEmbedding(message);
+        } catch (embeddingError) {
+            console.warn(
+                '[api/chatbot/chat] embeddings unavailable, using keyword search fallback:',
+                embeddingError
+            );
+        }
 
         // Search brand knowledge via RPC
-        const knowledgeChunks = await searchKnowledge(admin, brand_id, queryEmbedding);
+        const knowledgeChunks = await searchKnowledge(admin, brand_id, queryEmbedding, message);
         const hasKnowledge = knowledgeChunks.length > 0;
 
         // Build system prompt

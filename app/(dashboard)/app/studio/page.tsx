@@ -236,6 +236,112 @@ function mergeDistinctStrings(...values: Array<string[] | null | undefined>): st
   return merged;
 }
 
+function normalizeHexColor(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{3,6}$/.test(hex)) return null;
+
+  if (hex.length === 3) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toLowerCase()}`;
+  }
+
+  return `#${hex.slice(0, 6).toLowerCase()}`;
+}
+
+function uniqueHexColors(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => normalizeHexColor(value))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+}
+
+function relativeLuminance(color: string) {
+  const normalized = normalizeHexColor(color);
+  if (!normalized) return 0;
+
+  const rgb = [1, 3, 5].map((start) => parseInt(normalized.slice(start, start + 2), 16) / 255);
+  const channels = rgb.map((value) =>
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  );
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function isVeryLightColor(color: string) {
+  return relativeLuminance(color) > 0.86;
+}
+
+function buildBrandColorScheme(input?: {
+  primary?: string[] | null;
+  secondary?: string[] | null;
+  accent?: string[] | null;
+}) {
+  return {
+    primary: uniqueHexColors(input?.primary || []),
+    secondary: uniqueHexColors(input?.secondary || []),
+    accent: uniqueHexColors(input?.accent || []),
+  };
+}
+
+function flattenBrandColorsForWizard(input?: {
+  primary?: string[] | null;
+  secondary?: string[] | null;
+  accent?: string[] | null;
+}) {
+  const scheme = buildBrandColorScheme(input);
+  return [...scheme.primary, ...scheme.secondary, ...scheme.accent].slice(0, 6);
+}
+
+function flattenBrandColorsForStudio(input?: {
+  primary?: string[] | null;
+  secondary?: string[] | null;
+  accent?: string[] | null;
+}) {
+  const scheme = buildBrandColorScheme(input);
+  const preferredSecondary = scheme.secondary.filter((color) => !isVeryLightColor(color));
+
+  return uniqueHexColors([
+    ...scheme.primary,
+    ...scheme.accent,
+    ...preferredSecondary,
+    ...scheme.secondary,
+  ]).slice(0, 4);
+}
+
+function buildStyleProfilePayload(kit: BrandKit) {
+  return {
+    colorScheme: {
+      primary: uniqueHexColors(kit.primaryColors || []),
+      secondary: uniqueHexColors(kit.secondaryColors || []),
+      accent: uniqueHexColors(kit.accentColors || []),
+    },
+    typography: {
+      fontMood: kit.fontPersonality || null,
+    },
+    imagery: {
+      style: Array.isArray(kit.allowedImageStyles) ? kit.allowedImageStyles : [],
+    },
+    tone: {
+      voice: Array.isArray(kit.toneGuidelines) ? kit.toneGuidelines : [],
+    },
+    layout: {},
+  };
+}
+
+function getBrandKitStyleSignature(kit: BrandKit | null) {
+  if (!kit) return '';
+  return JSON.stringify(buildStyleProfilePayload(kit));
+}
+
 function isAutoPlaceholderBrand(
   brand: Pick<Brand, 'name' | 'description'> | null | undefined
 ) {
@@ -406,7 +512,43 @@ export default function StudioPage() {
   // Derived: PDF-extracted images from the evidence locker (kept in sync after every upload)
   const pdfEvidenceImages = useMemo(
     () => {
-      const extractedImages = evidence
+      const scorePdfVisual = (item: {
+        title?: string | null;
+        tags?: string[] | null;
+        created_at?: string | null;
+      }) => {
+        const title = typeof item.title === 'string' ? item.title.toLowerCase() : '';
+        const tags = Array.isArray(item.tags) ? item.tags : [];
+
+        let score = 0;
+        if (tags.includes('pdf-page-1') || title.includes('page 1 visual')) score += 300;
+        if (tags.includes('pdf-rendered-page')) score += 180;
+        if (title.includes('extracted image')) score += 120;
+        return score;
+      };
+
+      const sortPdfVisuals = <
+        T extends { title?: string | null; tags?: string[] | null; created_at?: string | null }
+      >(
+        items: T[]
+      ) =>
+        [...items].sort((left, right) => {
+          const scoreDifference = scorePdfVisual(right) - scorePdfVisual(left);
+          if (scoreDifference !== 0) {
+            return scoreDifference;
+          }
+
+          const rightTime = Date.parse(right.created_at || '') || 0;
+          const leftTime = Date.parse(left.created_at || '') || 0;
+          if (rightTime !== leftTime) {
+            return rightTime - leftTime;
+          }
+
+          return String(left.title || '').localeCompare(String(right.title || ''));
+        });
+
+      const extractedImages = sortPdfVisuals(
+        evidence
         .filter(
           (item) =>
             item.type === 'image' &&
@@ -417,33 +559,42 @@ export default function StudioPage() {
               (typeof item.file_path === 'string' && item.file_path.includes('/pdf-extract/'))
             )
         )
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          tags: Array.isArray(item.tags) ? item.tags : [],
-          signed_url: item.signed_url as string,
-        }));
+      ).map((item) => ({
+        id: item.id,
+        title: item.title,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        signed_url: item.signed_url as string,
+        sourceEvidenceId:
+          (Array.isArray(item.tags)
+            ? item.tags.find((tag) => tag.startsWith('pdf-source-'))
+            : null
+          )?.replace('pdf-source-', '') || null,
+      }));
 
       if (selectedEvidenceIds.length === 0) {
-        return extractedImages.map(({ id, title, signed_url }) => ({
+        return extractedImages.map(({ id, title, signed_url, sourceEvidenceId }) => ({
           id,
           title,
           signed_url,
+          sourceEvidenceId,
         }));
       }
 
       const selectedSourceTags = new Set(
         selectedEvidenceIds.map((id) => `pdf-source-${id}`)
       );
-      const matchedImages = extractedImages.filter((item) =>
-        item.tags.some((tag) => selectedSourceTags.has(tag))
+      const matchedImages = sortPdfVisuals(
+        extractedImages.filter((item) =>
+          item.tags.some((tag) => selectedSourceTags.has(tag))
+        )
       );
       const finalImages = matchedImages.length > 0 ? matchedImages : extractedImages;
 
-      return finalImages.map(({ id, title, signed_url }) => ({
+      return finalImages.map(({ id, title, signed_url, sourceEvidenceId }) => ({
         id,
         title,
         signed_url,
+        sourceEvidenceId,
       }));
     },
     [evidence, selectedEvidenceIds]
@@ -457,6 +608,39 @@ export default function StudioPage() {
   const selectedEvidenceIdSet = useMemo(
     () => new Set(selectedEvidenceIds),
     [selectedEvidenceIds]
+  );
+
+  const selectedPdfVisualStatus = useMemo(
+    () =>
+      studioPdfEvidence
+        .filter((item) => selectedEvidenceIdSet.has(item.id))
+        .map((pdf) => {
+          const sourceTag = `pdf-source-${pdf.id}`;
+          const extractedCount = evidence.filter(
+            (item) =>
+              item.type === 'image' &&
+              Array.isArray(item.tags) &&
+              item.tags.includes(sourceTag) &&
+              (
+                item.tags.includes('pdf-extracted') ||
+                (typeof item.file_path === 'string' && item.file_path.includes('/pdf-extract/'))
+              )
+          ).length;
+          const indexedOnly =
+            Array.isArray(pdf.tags) && pdf.tags.includes('indexed-only');
+
+          return {
+            id: pdf.id,
+            title: pdf.title,
+            extractedCount,
+            canReextract: Boolean(
+              typeof pdf.file_path === 'string' &&
+                pdf.file_path.trim().length > 0 &&
+                !indexedOnly
+            ),
+          };
+        }),
+    [evidence, selectedEvidenceIdSet, studioPdfEvidence]
   );
 
   const selectedEvidenceContext = useMemo(
@@ -486,6 +670,9 @@ export default function StudioPage() {
   const [brandColorNames, setBrandColorNames] = useState<Record<string, string>>({});
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [brandKit, setBrandKit] = useState<BrandKit | null>(null);
+  const [brandStyleSaveState, setBrandStyleSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const brandKitSavedSignatureRef = useRef('');
+  const brandKitAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pipeline data flow
   const [confirmedPost, setConfirmedPost] = useState<ConfirmedPost | null>(null);
@@ -495,6 +682,149 @@ export default function StudioPage() {
   const supabase = useMemo(() => createClient(), []);
   const effectiveBrandName =
     selectedBrand?.name?.trim() || brandKit?.brandName?.trim() || 'My Brand';
+  const quickEditColorSlots = useMemo(() => {
+    const primary = uniqueHexColors(brandKit?.primaryColors || []);
+    const accent = uniqueHexColors(brandKit?.accentColors || []);
+    const secondary = uniqueHexColors(brandKit?.secondaryColors || []).filter(
+      (color) => !isVeryLightColor(color)
+    );
+
+    const slots = [
+      ...primary.map((color, index) => ({
+        key: `primary-${index}`,
+        label: index === 0 ? 'Primary' : `Primary ${index + 1}`,
+        group: 'primary' as const,
+        index,
+        color,
+      })),
+      ...accent.map((color, index) => ({
+        key: `accent-${index}`,
+        label: index === 0 ? 'Accent' : index === 1 ? 'Support' : `Accent ${index + 1}`,
+        group: 'accent' as const,
+        index,
+        color,
+      })),
+      ...secondary.map((color, index) => ({
+        key: `secondary-${index}`,
+        label: `Secondary ${index + 1}`,
+        group: 'secondary' as const,
+        index,
+        color,
+      })),
+    ];
+
+    return slots.slice(0, 4);
+  }, [brandKit?.accentColors, brandKit?.primaryColors, brandKit?.secondaryColors]);
+  const wizardSeedColors = useMemo(
+    () =>
+      flattenBrandColorsForWizard({
+        primary: brandKit?.primaryColors || [],
+        secondary: brandKit?.secondaryColors || [],
+        accent: brandKit?.accentColors || [],
+      }).length > 0
+        ? flattenBrandColorsForWizard({
+            primary: brandKit?.primaryColors || [],
+            secondary: brandKit?.secondaryColors || [],
+            accent: brandKit?.accentColors || [],
+          })
+        : brandColors,
+    [brandColors, brandKit?.accentColors, brandKit?.primaryColors, brandKit?.secondaryColors]
+  );
+
+  const persistBrandStyle = useCallback(async (brandId: string, nextKit: BrandKit) => {
+    const response = await fetch('/api/pro/brand-kit/style', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        brandId,
+        styleProfile: buildStyleProfilePayload(nextKit),
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error || 'Failed to save brand style');
+    }
+  }, []);
+
+  const handleQuickEditBrandColor = useCallback(
+    (group: 'primary' | 'secondary' | 'accent', index: number, nextColor: string) => {
+      const normalized = normalizeHexColor(nextColor);
+      if (!normalized) return;
+
+      setBrandKit((prev) => {
+        const nextKit: BrandKit = {
+          brandName: prev?.brandName || selectedBrand?.name || '',
+          primaryColors: uniqueHexColors(prev?.primaryColors || []),
+          secondaryColors: uniqueHexColors(prev?.secondaryColors || []),
+          accentColors: uniqueHexColors(prev?.accentColors || []),
+          logoAssets: prev?.logoAssets || [],
+          fontPersonality: prev?.fontPersonality || null,
+          toneGuidelines: prev?.toneGuidelines || [],
+          allowedImageStyles: prev?.allowedImageStyles || [],
+        };
+
+        const current =
+          group === 'primary'
+            ? [...nextKit.primaryColors]
+            : group === 'secondary'
+              ? [...nextKit.secondaryColors]
+              : [...nextKit.accentColors];
+        while (current.length <= index) {
+          current.push(normalized);
+        }
+        current[index] = normalized;
+        if (group === 'primary') {
+          nextKit.primaryColors = uniqueHexColors(current);
+        } else if (group === 'secondary') {
+          nextKit.secondaryColors = uniqueHexColors(current);
+        } else {
+          nextKit.accentColors = uniqueHexColors(current);
+        }
+        setBrandColors(
+          flattenBrandColorsForStudio({
+            primary: nextKit.primaryColors,
+            secondary: nextKit.secondaryColors,
+            accent: nextKit.accentColors,
+          })
+        );
+        return nextKit;
+      });
+
+      setBrandColorNames((prev) => {
+        if (!prev || typeof prev !== 'object') return prev;
+        const currentName =
+          prev[nextColor] ||
+          prev[nextColor.toLowerCase()] ||
+          prev[nextColor.toUpperCase()] ||
+          null;
+        if (!currentName) return prev;
+        return {
+          ...prev,
+          [normalized]: currentName,
+        };
+      });
+    },
+    [selectedBrand?.name]
+  );
+
+  const handleStudioBrandColorsChange = useCallback(
+    (colors: string[]) => {
+      const normalized = uniqueHexColors(colors).slice(0, 6);
+      setBrandColors(normalized);
+      setBrandKit((prev) => ({
+        brandName: prev?.brandName || selectedBrand?.name || '',
+        primaryColors: normalized.slice(0, 2),
+        secondaryColors: prev?.secondaryColors || [],
+        accentColors: normalized.slice(2, 4),
+        logoAssets: prev?.logoAssets || [],
+        fontPersonality: prev?.fontPersonality || null,
+        toneGuidelines: prev?.toneGuidelines || [],
+        allowedImageStyles: prev?.allowedImageStyles || [],
+      }));
+    },
+    [selectedBrand?.name]
+  );
 
   // --- Sync activeStep ? URL ---
   useEffect(() => {
@@ -506,6 +836,40 @@ export default function StudioPage() {
       router.replace(`/app/studio?${params.toString()}`, { scroll: false });
     }
   }, [activeStep, searchParams, router]);
+
+  useEffect(() => {
+    if (!selectedBrand?.id || !brandKit) return;
+
+    const signature = getBrandKitStyleSignature(brandKit);
+    if (!signature) return;
+    if (signature === brandKitSavedSignatureRef.current) {
+      if (brandStyleSaveState === 'saving') {
+        setBrandStyleSaveState('saved');
+      }
+      return;
+    }
+
+    if (brandKitAutosaveTimerRef.current) {
+      clearTimeout(brandKitAutosaveTimerRef.current);
+    }
+
+    setBrandStyleSaveState('saving');
+    brandKitAutosaveTimerRef.current = setTimeout(async () => {
+      try {
+        await persistBrandStyle(selectedBrand.id, brandKit);
+        brandKitSavedSignatureRef.current = signature;
+        setBrandStyleSaveState('saved');
+      } catch {
+        setBrandStyleSaveState('error');
+      }
+    }, 700);
+
+    return () => {
+      if (brandKitAutosaveTimerRef.current) {
+        clearTimeout(brandKitAutosaveTimerRef.current);
+      }
+    };
+  }, [brandKit, brandStyleSaveState, persistBrandStyle, selectedBrand?.id]);
 
   // --- Load saved draft post from ?postId= URL param ---
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -722,6 +1086,12 @@ export default function StudioPage() {
   }, [loadBrands]);
 
   useEffect(() => {
+    if (loading) return;
+    if (selectedBrand || brands.length > 0) return;
+    router.replace('/app/brands');
+  }, [loading, brands.length, selectedBrand, router]);
+
+  useEffect(() => {
     selectedBrandIdRef.current = selectedBrand?.id ?? null;
   }, [selectedBrand?.id]);
 
@@ -770,12 +1140,17 @@ export default function StudioPage() {
       if (selectedBrandIdRef.current === brandId) {
         setBrandIntelligence(nextIntelligence);
 
-        const analyzedPalette = mergeDistinctStrings(
-          nextIntelligence.primaryColors,
-          nextIntelligence.accentColors,
-          asStringList(evidence.primary_colors),
-          asStringList(evidence.accent_colors)
-        );
+        const analyzedPalette = flattenBrandColorsForStudio({
+          primary: mergeDistinctStrings(
+            nextIntelligence.primaryColors,
+            asStringList(evidence.primary_colors)
+          ),
+          secondary: [],
+          accent: mergeDistinctStrings(
+            nextIntelligence.accentColors,
+            asStringList(evidence.accent_colors)
+          ),
+        });
 
         if (analyzedPalette.length > 0) {
           setBrandColors((prev) => {
@@ -919,15 +1294,16 @@ export default function StudioPage() {
           allowedImageStyles: data.allowedImageStyles || [],
         };
         setBrandKit(kit);
+        brandKitSavedSignatureRef.current = getBrandKitStyleSignature(kit);
+        setBrandStyleSaveState('idle');
 
-        const allColors = [
-          ...(kit.primaryColors || []),
-          ...(kit.accentColors || []),
-          ...(kit.secondaryColors || []),
-        ].filter(Boolean);
-
-        if (allColors.length > 0) {
-          setBrandColors(allColors.slice(0, 6));
+        const studioColors = flattenBrandColorsForStudio({
+          primary: kit.primaryColors,
+          secondary: kit.secondaryColors,
+          accent: kit.accentColors,
+        });
+        if (studioColors.length > 0) {
+          setBrandColors(studioColors);
         }
 
         const resolvedLogo = resolveLogoUrl(kit.logoAssets as Array<{ url?: string; file_url?: string; publicUrl?: string } | string>);
@@ -959,6 +1335,11 @@ export default function StudioPage() {
 
     setBrandSetupComplete(isDirect);
     setBrandKit(null);
+    brandKitSavedSignatureRef.current = '';
+    if (brandKitAutosaveTimerRef.current) {
+      clearTimeout(brandKitAutosaveTimerRef.current);
+    }
+    setBrandStyleSaveState('idle');
     setLogoUrl('');
     setBrandColors(['#0A66C2', '#0F172A', '#22D3EE']);
     setBrandColorNames({});
@@ -983,7 +1364,13 @@ export default function StudioPage() {
     );
 
     if (analyzedPalette.length) {
-      setBrandColors(analyzedPalette.slice(0, 6));
+      setBrandColors(
+        flattenBrandColorsForStudio({
+          primary: analysis?.primary_colors || [],
+          secondary: brandKit?.secondaryColors || [],
+          accent: analysis?.accent_colors || [],
+        })
+      );
     }
 
     if (analysis?.color_names && typeof analysis.color_names === 'object' && !Array.isArray(analysis.color_names)) {
@@ -1042,22 +1429,34 @@ export default function StudioPage() {
       asTrimmedString(analysis?.tone) ||
       asTrimmedString(analysis?.image_style)
     ) {
-      setBrandKit((prev) => ({
-        brandName: extractedName || prev?.brandName || selectedBrand?.name || '',
-        primaryColors: analysis?.primary_colors?.length ? analysis.primary_colors : prev?.primaryColors || [],
-        secondaryColors: prev?.secondaryColors || [],
-        accentColors: analysis?.accent_colors?.length ? analysis.accent_colors : prev?.accentColors || [],
-        logoAssets: prev?.logoAssets || [],
-        fontPersonality: prev?.fontPersonality || null,
+      const nextKit: BrandKit = {
+        brandName: extractedName || brandKit?.brandName || selectedBrand?.name || '',
+        primaryColors: uniqueHexColors(
+          analysis?.primary_colors?.length ? analysis.primary_colors : brandKit?.primaryColors || []
+        ),
+        secondaryColors: uniqueHexColors(brandKit?.secondaryColors || []),
+        accentColors: uniqueHexColors(
+          analysis?.accent_colors?.length ? analysis.accent_colors : brandKit?.accentColors || []
+        ),
+        logoAssets: brandKit?.logoAssets || [],
+        fontPersonality: brandKit?.fontPersonality || null,
         toneGuidelines:
-          prev?.toneGuidelines?.length
-            ? prev.toneGuidelines
+          brandKit?.toneGuidelines?.length
+            ? brandKit.toneGuidelines
             : mergeDistinctStrings(analysis?.tone ? [analysis.tone] : []),
         allowedImageStyles:
-          prev?.allowedImageStyles?.length
-            ? prev.allowedImageStyles
+          brandKit?.allowedImageStyles?.length
+            ? brandKit.allowedImageStyles
             : mergeDistinctStrings(analysis?.image_style ? [analysis.image_style] : []),
-      }));
+      };
+      setBrandKit(nextKit);
+      setBrandColors(
+        flattenBrandColorsForStudio({
+          primary: nextKit.primaryColors,
+          secondary: nextKit.secondaryColors,
+          accent: nextKit.accentColors,
+        })
+      );
     }
 
     setBrandIntelligence({
@@ -1095,26 +1494,25 @@ export default function StudioPage() {
   };
 
   const handleStyleComplete = (styleProfile: StyleProfile) => {
-    const allColors = [
-      ...(styleProfile?.colorScheme?.primary || []),
-      ...(styleProfile?.colorScheme?.accent || []),
-      ...(styleProfile?.colorScheme?.secondary || []),
-    ].filter(Boolean);
+    const nextKit: BrandKit = {
+      brandName: brandKit?.brandName || selectedBrand?.name || '',
+      primaryColors: uniqueHexColors(styleProfile?.colorScheme?.primary || brandKit?.primaryColors || []),
+      secondaryColors: uniqueHexColors(styleProfile?.colorScheme?.secondary || brandKit?.secondaryColors || []),
+      accentColors: uniqueHexColors(styleProfile?.colorScheme?.accent || brandKit?.accentColors || []),
+      logoAssets: brandKit?.logoAssets || [],
+      fontPersonality: styleProfile?.typography?.fontMood || brandKit?.fontPersonality || null,
+      toneGuidelines: styleProfile?.tone?.voice || brandKit?.toneGuidelines || [],
+      allowedImageStyles: styleProfile?.imagery?.style || brandKit?.allowedImageStyles || [],
+    };
 
-    if (allColors.length > 0) {
-      setBrandColors(allColors.slice(0, 6));
-    }
-
-    setBrandKit((prev) => ({
-      brandName: prev?.brandName || selectedBrand?.name || '',
-      primaryColors: styleProfile?.colorScheme?.primary || prev?.primaryColors || [],
-      secondaryColors: styleProfile?.colorScheme?.secondary || prev?.secondaryColors || [],
-      accentColors: styleProfile?.colorScheme?.accent || prev?.accentColors || [],
-      logoAssets: prev?.logoAssets || [],
-      fontPersonality: styleProfile?.typography?.fontMood || prev?.fontPersonality || null,
-      toneGuidelines: styleProfile?.tone?.voice || prev?.toneGuidelines || [],
-      allowedImageStyles: styleProfile?.imagery?.style || prev?.allowedImageStyles || [],
-    }));
+    setBrandKit(nextKit);
+    setBrandColors(
+      flattenBrandColorsForStudio({
+        primary: nextKit.primaryColors,
+        secondary: nextKit.secondaryColors,
+        accent: nextKit.accentColors,
+      })
+    );
 
     setSetupStep('assets');
   };
@@ -1345,16 +1743,17 @@ export default function StudioPage() {
         <>
           {/* Quick action buttons */}
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <Link href="/app/brands">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 border-cyan-200 bg-cyan-50 text-cyan-600 hover:bg-cyan-100 text-xs"
-              >
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="h-8 border-cyan-200 bg-cyan-50 text-cyan-600 hover:bg-cyan-100 text-xs"
+            >
+              <Link href="/app/brands">
                 <Building2 className="mr-1 h-3.5 w-3.5" />
                 Manage Companies, Brands & Assets
-              </Button>
-            </Link>
+              </Link>
+            </Button>
             <Button
               size="sm"
               onClick={() => setCreateProductOpen(true)}
@@ -1419,31 +1818,41 @@ export default function StudioPage() {
           )}
 
           {/* Brand Colors preview */}
-          {brandColors.length > 0 && brandColors[0] !== '#0A66C2' && !workspaceCollapsed && (
+          {quickEditColorSlots.length > 0 && !workspaceCollapsed && (
             <div className="mt-3 flex items-center gap-3 rounded-lg border border-gray-200/60 bg-gray-100/60 px-3 py-2">
               <span className="text-xs font-medium text-gray-500">Brand Colors:</span>
               <div className="flex items-center gap-1.5">
-                {brandColors.slice(0, 6).map((color, idx) => (
+                {quickEditColorSlots.map((slot) => (
                   <label
-                    key={idx}
+                    key={slot.key}
                     className="relative h-6 w-6 cursor-pointer rounded-md border border-gray-200 shadow-sm hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                    title={brandColorNames?.[color] ? `${brandColorNames[color]} (${color}) - click to edit` : `${color} - click to edit`}
+                    style={{ backgroundColor: slot.color }}
+                    title={
+                      brandColorNames?.[slot.color]
+                        ? `${slot.label}: ${brandColorNames[slot.color]} (${slot.color}) - click to edit`
+                        : `${slot.label}: ${slot.color} - click to edit`
+                    }
                   >
                     <input
                       type="color"
                       className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                      value={color}
+                      value={slot.color}
                       onChange={(e) => {
-                        const newColors = [...brandColors];
-                        newColors[idx] = e.target.value;
-                        setBrandColors(newColors);
+                        handleQuickEditBrandColor(slot.group, slot.index, e.target.value);
                       }}
                     />
                   </label>
                 ))}
               </div>
-              <span className="text-[11px] text-gray-400 ml-1">Click to edit</span>
+              <span className="text-[11px] text-gray-400 ml-1">
+                {brandStyleSaveState === 'saving'
+                  ? 'Saving...'
+                  : brandStyleSaveState === 'saved'
+                    ? 'Saved automatically'
+                    : brandStyleSaveState === 'error'
+                      ? 'Save failed'
+                      : 'Click to edit'}
+              </span>
               <button
                 className="ml-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 onClick={() => {
@@ -2069,7 +2478,12 @@ export default function StudioPage() {
 
         {setupStep === 'style' && (
           <Card className="p-6">
-            <VisualStyleWizard brandId={selectedBrand.id} onComplete={handleStyleComplete} analyzedColors={brandColors} analyzedColorNames={brandColorNames} />
+            <VisualStyleWizard
+              brandId={selectedBrand.id}
+              onComplete={handleStyleComplete}
+              analyzedColors={wizardSeedColors}
+              analyzedColorNames={brandColorNames}
+            />
           </Card>
         )}
 
@@ -2447,6 +2861,7 @@ export default function StudioPage() {
                 brandName={effectiveBrandName}
                 productName={selectedProduct?.name}
                 brandColors={brandColors}
+                brandColorNames={brandColorNames}
                 logoUrl={logoUrl}
                 logoAssets={brandKit?.logoAssets}
                 analysisProfile={analysisProfile}
@@ -2455,10 +2870,13 @@ export default function StudioPage() {
                 confirmedPostImagePrompt={confirmedPost?.imagePrompt}
                 onImageConfirmed={handleImageConfirmedFromCreator}
                 onImageGenerated={handleImageAutoSync}
-                onBrandColorsChange={setBrandColors}
+                onBrandColorsChange={handleStudioBrandColorsChange}
                 pdfImages={pdfEvidenceImages}
+                selectedPdfs={selectedPdfVisualStatus}
                 onRefreshEvidence={refreshEvidence}
                 onUploadPdfFiles={uploadFilesEvidence}
+                onReextractPdfs={reextractPdfEvidence}
+                onDeleteEvidenceIds={deleteEvidenceByIds}
               />
             </Card>
           )}

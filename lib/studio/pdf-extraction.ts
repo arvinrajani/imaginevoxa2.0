@@ -1,11 +1,11 @@
 import crypto from 'crypto';
-import { PDFParse } from 'pdf-parse';
 import sharp from 'sharp';
 import {
   isMissingColumnError,
   isMissingTableOrRelationError,
   requireStudioAuth,
 } from '@/lib/studio/server-auth';
+import { createPdfParser } from '@/lib/pdf-parse-config';
 
 export const EVIDENCE_STORAGE_BUCKET =
   process.env.STUDIO_EVIDENCE_BUCKET?.trim() || 'brand-evidence';
@@ -151,7 +151,7 @@ export async function parsePdfEmbeddedImages(fileBuffer: Buffer) {
     };
   }
 
-  const parser = new PDFParse({ data: fileBuffer });
+  const parser = createPdfParser({ data: fileBuffer });
   try {
     const parsed = await parser.getImage({
       imageThreshold: MIN_EXTRACTED_IMAGE_SIZE_PX,
@@ -253,7 +253,7 @@ export async function parsePdfPageScreenshots(
     };
   }
 
-  const parser = new PDFParse({ data: fileBuffer });
+  const parser = createPdfParser({ data: fileBuffer });
   try {
     const parsed = await parser.getScreenshot({
       desiredWidth: MAX_RENDERED_PAGE_WIDTH_PX,
@@ -336,13 +336,18 @@ export async function extractPdfImagesIntoEvidence(
     tags: string[];
   }
 ) {
+  const logPrefix = `[pdf-extraction] "${params.parentTitle}"`;
+  console.log(`${logPrefix} Starting extraction (buffer: ${params.fileBuffer.byteLength} bytes)`);
+
   const embeddedParsed = await parsePdfEmbeddedImages(params.fileBuffer);
   const embeddedImages =
     embeddedParsed.status === 'ok' ? embeddedParsed.images : ([] as ParsedPdfImage[]);
+  console.log(`${logPrefix} Embedded images: status=${embeddedParsed.status}, found=${embeddedParsed.foundCount}, extracted=${embeddedImages.length}${embeddedParsed.detail ? `, detail=${embeddedParsed.detail}` : ''}`);
 
   const screenshotParsed = await parsePdfPageScreenshots(params.fileBuffer, {
     maxImages: Math.max(0, MAX_EXTRACTED_IMAGES_PER_PDF - embeddedImages.length),
   });
+  console.log(`${logPrefix} Page screenshots: status=${screenshotParsed.status}, found=${screenshotParsed.foundCount}, extracted=${screenshotParsed.status === 'ok' ? screenshotParsed.images.length : 0}${screenshotParsed.detail ? `, detail=${screenshotParsed.detail}` : ''}`);
 
   const parsedImages: ParsedPdfImage[] = [];
   const seenHashes = new Set<string>();
@@ -405,6 +410,7 @@ export async function extractPdfImagesIntoEvidence(
       });
 
     if (upload.error) {
+      console.warn(`${logPrefix} Storage upload failed for ${storagePath}: ${upload.error.message}`);
       failedCount += 1;
       continue;
     }
@@ -444,6 +450,7 @@ export async function extractPdfImagesIntoEvidence(
     });
 
     if (insert.usedFallback || !insert.inserted) {
+      console.warn(`${logPrefix} DB insert skipped for ${imageName}: usedFallback=${insert.usedFallback}, inserted=${!!insert.inserted}`);
       skippedCount += 1;
       continue;
     }

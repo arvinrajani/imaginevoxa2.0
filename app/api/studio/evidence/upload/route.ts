@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { PDFParse } from 'pdf-parse';
 import {
   isMissingColumnError,
   isMissingTableOrRelationError,
@@ -14,6 +13,12 @@ import {
   extractPdfImagesIntoEvidence,
   insertEvidenceRow,
 } from '@/lib/studio/pdf-extraction';
+import {
+  extractPdfTextFromBuffer,
+  syncContentSourceToChatbotKnowledge,
+  syncPdfTextToChatbotKnowledge,
+} from '@/lib/chatbot/pdf-knowledge';
+import { createPdfParser } from '@/lib/pdf-parse-config';
 
 export const runtime = 'nodejs';
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
@@ -33,6 +38,26 @@ type PdfKnowledgeSync = {
     skipped_count: number;
     detail?: string;
   };
+};
+
+type ChatbotKnowledgeSync = Awaited<
+  ReturnType<typeof syncPdfTextToChatbotKnowledge>
+> | null;
+
+type EvidenceRowWithSignedUrl = {
+  id: string;
+  brand_id: string;
+  owner_user_id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  bucket: string;
+  tags: string[];
+  file_path: string | null;
+  url: string | null;
+  note_text: string | null;
+  created_at: string;
+  signed_url: string | null;
 };
 
 function errorMessage(error: unknown): string {
@@ -74,6 +99,11 @@ async function ensureEvidenceBucket(
     return;
   }
   if (existing.error && !isBucketMissingError(existing.error)) {
+    // Some hosted projects return opaque size-limit errors for bucket admin calls
+    // even though the bucket already exists. Let the upload attempt verify that.
+    if (isStorageLimitError(existing.error)) {
+      return;
+    }
     throw new Error(existing.error.message || 'Failed to check storage bucket');
   }
 
@@ -89,7 +119,11 @@ async function ensureEvidenceBucket(
     ],
   });
 
-  if (created.error && !errorMessage(created.error).includes('already exists')) {
+  if (
+    created.error &&
+    !errorMessage(created.error).includes('already exists') &&
+    !isStorageLimitError(created.error)
+  ) {
     throw new Error(created.error.message || 'Failed to create storage bucket');
   }
 }
@@ -197,6 +231,97 @@ function buildKnowledgeDensePdfText(text: string, maxChars: number) {
   return selectedParagraphs.join('\n\n').slice(0, maxChars);
 }
 
+function scoreExtractedVisual(row: { title?: string | null; tags?: string[] | null }) {
+  const title = typeof row.title === 'string' ? row.title.toLowerCase() : '';
+  const tags = Array.isArray(row.tags) ? row.tags : [];
+
+  let score = 0;
+  if (tags.includes('pdf-page-1') || title.includes('page 1 visual')) score += 300;
+  if (tags.includes('pdf-rendered-page')) score += 180;
+  if (title.includes('extracted image')) score += 120;
+  return score;
+}
+
+async function loadExtractedEvidenceForPdf(
+  admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin'],
+  params: {
+    brandId: string;
+    userId: string;
+    parentEvidenceId: string;
+    parentTitle: string;
+  }
+) {
+  const query = await admin
+    .from('evidence_assets')
+    .select('*')
+    .eq('brand_id', params.brandId)
+    .eq('owner_user_id', params.userId)
+    .eq('type', 'image')
+    .order('created_at', { ascending: false });
+
+  if (query.error || !Array.isArray(query.data)) {
+    return [] as EvidenceRowWithSignedUrl[];
+  }
+
+  const sourceTag = `pdf-source-${params.parentEvidenceId}`;
+  const normalizedParentTitle = params.parentTitle.trim().toLowerCase();
+
+  const extractedRows = query.data
+    .filter((row) => {
+      const tags = Array.isArray(row.tags)
+        ? row.tags.filter(
+            (tag: unknown): tag is string =>
+              typeof tag === 'string' && tag.trim().length > 0
+          )
+        : [];
+      const filePath =
+        typeof row.file_path === 'string' && row.file_path.trim().length > 0
+          ? row.file_path.trim()
+          : '';
+      const title =
+        typeof row.title === 'string' && row.title.trim().length > 0
+          ? row.title.trim().toLowerCase()
+          : '';
+
+      return (
+        tags.includes(sourceTag) ||
+        (filePath.includes('/pdf-extract/') &&
+          normalizedParentTitle.length > 0 &&
+          title.startsWith(normalizedParentTitle))
+      );
+    })
+    .sort((left, right) => {
+      const scoreDifference = scoreExtractedVisual(right) - scoreExtractedVisual(left);
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+
+      const rightTime = Date.parse(typeof right.created_at === 'string' ? right.created_at : '') || 0;
+      const leftTime = Date.parse(typeof left.created_at === 'string' ? left.created_at : '') || 0;
+      return rightTime - leftTime;
+    });
+
+  return Promise.all(
+    extractedRows.map(async (row) => {
+      if (!row.file_path) {
+        return {
+          ...row,
+          signed_url: null,
+        } as EvidenceRowWithSignedUrl;
+      }
+
+      const signed = await admin.storage
+        .from(EVIDENCE_STORAGE_BUCKET)
+        .createSignedUrl(row.file_path, 60 * 60);
+
+      return {
+        ...row,
+        signed_url: signed.error ? null : signed.data?.signedUrl || null,
+      } as EvidenceRowWithSignedUrl;
+    })
+  );
+}
+
 async function ingestPdfKnowledgeSource(
   admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin'],
   params: {
@@ -221,7 +346,7 @@ async function ingestPdfKnowledgeSource(
   let totalPages: number | null = null;
 
   try {
-    const parser = new PDFParse({ data: params.fileBuffer });
+    const parser = createPdfParser({ data: params.fileBuffer });
     const parsed = await parser.getText();
     await parser.destroy();
     rawText = typeof parsed.text === 'string' ? parsed.text : '';
@@ -435,6 +560,8 @@ export async function POST(request: Request) {
     const inserted = insertResult.inserted;
 
     let knowledgeSync: PdfKnowledgeSync | null = null;
+    let chatbotSync: ChatbotKnowledgeSync = null;
+    let extractedEvidence: EvidenceRowWithSignedUrl[] = [];
 
     if (isPdf) {
       knowledgeSync = await ingestPdfKnowledgeSource(admin, {
@@ -447,20 +574,79 @@ export async function POST(request: Request) {
         fileBuffer,
       });
 
-      if (inserted && typeof inserted.id === 'string') {
-        const imageExtraction = await extractPdfImagesIntoEvidence(admin, {
-          brandId,
-          userId,
-          parentEvidenceId: inserted.id,
-          parentTitle: titleValue,
-          fileBuffer,
-          bucket,
-          tags,
-        });
-        knowledgeSync = {
-          ...knowledgeSync,
-          image_extraction: imageExtraction,
+      try {
+        if (knowledgeSync.status === 'ingested' && inserted && typeof inserted.id === 'string') {
+          chatbotSync = await syncContentSourceToChatbotKnowledge(admin, {
+            brandId,
+            evidenceAssetId: inserted.id,
+            sourceFile: titleValue,
+            storagePath: persistedStoragePath,
+            logPrefix: '[studio-evidence-upload/chatbot]',
+          });
+        } else {
+          const parsedPdf = await extractPdfTextFromBuffer(fileBuffer);
+          chatbotSync = await syncPdfTextToChatbotKnowledge(admin, {
+            brandId,
+            evidenceAssetId:
+              inserted && typeof inserted.id === 'string' ? inserted.id : undefined,
+            sourceFile: titleValue,
+            storagePath: persistedStoragePath,
+            text: parsedPdf.text,
+            sourceMode: 'stored_pdf',
+            logPrefix: '[studio-evidence-upload/chatbot]',
+          });
+        }
+      } catch (chatbotError) {
+        chatbotSync = {
+          status: 'no_text',
+          detail:
+            chatbotError instanceof Error
+              ? chatbotError.message
+              : 'Chatbot indexing could not parse the uploaded PDF.',
+          chunks_created: 0,
+          chunk_limit_applied: false,
+          source_file: titleValue,
+          source_mode: 'stored_pdf',
         };
+      }
+
+      if (inserted && typeof inserted.id === 'string') {
+        try {
+          const imageExtraction = await extractPdfImagesIntoEvidence(admin, {
+            brandId,
+            userId,
+            parentEvidenceId: inserted.id,
+            parentTitle: titleValue,
+            fileBuffer,
+            bucket,
+            tags,
+          });
+          knowledgeSync = {
+            ...knowledgeSync,
+            image_extraction: imageExtraction,
+          };
+          if (imageExtraction.saved_count > 0) {
+            extractedEvidence = await loadExtractedEvidenceForPdf(admin, {
+              brandId,
+              userId,
+              parentEvidenceId: inserted.id,
+              parentTitle: titleValue,
+            });
+          }
+        } catch (extractionError) {
+          console.error('[studio-evidence-upload] Image extraction crashed:', extractionError);
+          knowledgeSync = {
+            ...knowledgeSync,
+            image_extraction: {
+              status: 'extract_failed',
+              found_count: 0,
+              saved_count: 0,
+              failed_count: 0,
+              skipped_count: 0,
+              detail: extractionError instanceof Error ? extractionError.message : 'Image extraction failed unexpectedly.',
+            },
+          };
+        }
       } else {
         knowledgeSync = {
           ...knowledgeSync,
@@ -496,6 +682,8 @@ export async function POST(request: Request) {
         signed_url: storedInBucket && persistedStoragePath ? signed.data?.signedUrl || null : null,
       },
       knowledge_sync: knowledgeSync,
+      extracted_evidence: extractedEvidence,
+      chatbot_sync: chatbotSync,
       storage_warning: storageWarning,
       compatibility_mode: insertResult.usedFallback ? 'legacy_no_evidence_assets_table' : null,
     });

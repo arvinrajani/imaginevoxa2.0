@@ -122,13 +122,6 @@ function areColorsClose(a: string, b: string) {
   return distance < 52;
 }
 
-function withDistinctFallback(candidate: string, fallback: string, against: string) {
-  if (!areColorsClose(candidate, against)) {
-    return candidate;
-  }
-  return fallback;
-}
-
 export function deriveStudioPalette(colors?: string[]): StudioPalette {
   const normalized = Array.from(
     new Set(
@@ -166,14 +159,27 @@ export function deriveStudioPalette(colors?: string[]): StudioPalette {
   const bgStart =
     darkColors[0] ||
     (coolColors[0] ? mixHex(coolColors[0], '#08172e', 0.72) : mixHex(baseSeed, '#08172e', 0.68));
+  const companionDark = darkColors.find((color) => !areColorsClose(color, bgStart));
+  const companionCool = coolColors.find((color) => !areColorsClose(color, bgStart));
   const bgEnd =
-    darkColors[1] ||
-    (coolColors[1]
-      ? mixHex(coolColors[1], bgStart, 0.55)
-      : mixHex(bgStart, withDistinctFallback(chromaticColors[0] || '#0b4f92', '#0b4f92', bgStart), 0.22));
+    companionDark
+      ? mixHex(companionDark, bgStart, 0.42)
+      : companionCool
+        ? mixHex(companionCool, bgStart, 0.58)
+        : mixHex(
+            bgStart,
+            relativeLuminance(bgStart) < 0.18 ? '#1a3f76' : '#08172e',
+            0.24
+          );
+
+  const accentCandidates = chromaticColors.filter(
+    (color) => !areColorsClose(color, bgStart) && !areColorsClose(color, bgEnd)
+  );
 
   const rawAccent =
-    chromaticColors.find((color) => !areColorsClose(color, bgStart)) ||
+    warmColors.find((color) => accentCandidates.includes(color)) ||
+    accentCandidates.find((color) => !greenColors.includes(color)) ||
+    accentCandidates[0] ||
     warmColors[0] ||
     coolColors[0] ||
     '#ffd34d';
@@ -187,7 +193,8 @@ export function deriveStudioPalette(colors?: string[]): StudioPalette {
         : rawAccent;
 
   const support =
-    greenColors.find((color) => !areColorsClose(color, accent)) ||
+    greenColors.find((color) => !areColorsClose(color, accent) && !areColorsClose(color, bgStart)) ||
+    accentCandidates.find((color) => !areColorsClose(color, accent)) ||
     '#37d45b';
 
   return {

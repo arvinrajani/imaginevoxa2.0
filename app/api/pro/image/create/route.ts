@@ -76,14 +76,41 @@ function mergeDistinctStrings(...values: Array<string[] | null | undefined>): st
   return merged;
 }
 
+const WEAK_FEATURE_PATTERNS = [
+  /^feature\s+(one|two|three|four|five|six)$/i,
+  /^benefit(\s+pointer)?\s+(one|two|three|four|five|six)$/i,
+  /^post proof points appear here$/i,
+  /learn more/i,
+  /discover more/i,
+  /visit (our|the) website/i,
+  /contact us/i,
+  /click /i,
+  /^https?:\/\//i,
+];
+
+function isWeakFeatureLine(value: string) {
+  return WEAK_FEATURE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function deriveFeatureBullets(...sources: Array<string | null | undefined>) {
   const seen = new Set<string>();
   const lines: string[] = [];
 
   const remember = (value: string) => {
-    const cleaned = value.replace(/^[-*.\d)\s]+/, '').replace(/\s+/g, ' ').trim();
+    const cleaned = value
+      .replace(/^[-*.\d)\s]+/, '')
+      .replace(/^[•✓✔]+\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^["'“”]+|["'“”]+$/g, '');
     const key = cleaned.toLowerCase();
-    if (!cleaned || cleaned.length < 12 || cleaned.length > 90 || seen.has(key)) {
+    if (
+      !cleaned ||
+      cleaned.length < 14 ||
+      cleaned.length > 96 ||
+      isWeakFeatureLine(cleaned) ||
+      seen.has(key)
+    ) {
       return;
     }
     seen.add(key);
@@ -740,7 +767,6 @@ export async function POST(request: Request) {
       '';
     const isAlliancePoster = themeId === 'alliance-poster';
     const hasThemeComposition = Boolean(THEME_SCHEMAS[themeId]);
-    const hasThemeSlots = (THEME_SCHEMAS[themeId]?.imageSlots?.length ?? 0) > 0;
     const effectiveBrandColors = requestedBrandColors.length
       ? requestedBrandColors
       : analyzedBrandColors;
@@ -771,7 +797,7 @@ export async function POST(request: Request) {
     const posterFeatureBullets =
       featureBullets.length > 0
         ? featureBullets
-        : deriveFeatureBullets(customPrompt, contextBrief, postImagePrompt, postText);
+        : deriveFeatureBullets(postText, postImagePrompt, displayHeadline, displayTagline, contextBrief, customPrompt);
     const posterFooterWebsite =
       footerWebsite ||
       marketingDnaContext?.website ||
@@ -846,7 +872,6 @@ export async function POST(request: Request) {
     const safeProductName = sanitizePromptText(productName, MAX_SHORT_TEXT);
     const safeHeadline = sanitizePromptText(displayHeadline, MAX_SHORT_TEXT);
     const safeTagline = sanitizePromptText(displayTagline, MAX_SHORT_TEXT);
-    const safePartnerName = sanitizePromptText(partnerName, MAX_SHORT_TEXT);
     const brandNamingDirective = safeBrandName
       ? [
           `BRAND NAMING RULES:`,

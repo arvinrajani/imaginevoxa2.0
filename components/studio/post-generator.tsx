@@ -117,9 +117,6 @@ interface OutcomeBrief {
   kpiTarget: string;
 }
 
-const DOCUMENT_LED_PROMPT_REGEX =
-  /\b(pdf|document|documents|file|files|brochure|catalog|catalogue|datasheet|data sheet|spec sheet|manual|deck|summary|summar(?:y|ize|ise)|provided|attached|uploaded)\b/i;
-
 // ---------------------------------------------------------------------------
 // Content Frameworks — proven LinkedIn post structures
 // ---------------------------------------------------------------------------
@@ -435,15 +432,6 @@ const CHANNEL_OPTIONS: Array<{
       hint: 'Visual-first caption with tighter phrasing',
     },
   ];
-
-const CHANNEL_PROMPT_HINTS: Record<PostChannel, string> = {
-  linkedin:
-    'Optimize for LinkedIn feed readers: strong hook, insight depth, and professional CTA.',
-  facebook:
-    'Optimize for Facebook feed readers: conversational tone, clear value, and community CTA.',
-  instagram:
-    'Optimize for Instagram caption readers: concise storytelling, scannable lines, and hashtag-friendly ending.',
-};
 
 const CHANNEL_QUALITY_GUIDANCE: Record<
   PostChannel,
@@ -1029,19 +1017,6 @@ export function PostGenerator({
     [postPreviewChannel]
   );
 
-  const evidenceBrief = useMemo(() => {
-    if (!Array.isArray(evidenceContext) || evidenceContext.length === 0) return '';
-    return evidenceContext
-      .slice(0, 8)
-      .map((item, index) => {
-        const summary = typeof item.summary === 'string' && item.summary.trim()
-          ? item.summary.trim()
-          : item.title;
-        return `${index + 1}. (${item.type}) ${summary}`;
-      })
-      .join('\n');
-  }, [evidenceContext]);
-
   const visibleEvidenceSources = useMemo(
     () =>
       evidenceContext.slice(0, 4).map((item) => ({
@@ -1404,17 +1379,8 @@ export function PostGenerator({
 
       const settled = await Promise.allSettled(
         secondaryChannels.map(async (channel) => {
-          const channelPrompt = [
-            basePrompt,
-            `Primary channel: ${channel}.`,
-            `Generate copy optimized for ${channel}.`,
-            'Keep the strategic message aligned across channels while adjusting formatting and tone.',
-            CHANNEL_PROMPT_HINTS[channel],
-          ]
-            .filter(Boolean)
-            .join('\n\n');
           const data = await requestPostOptions({
-            prompt: channelPrompt,
+            prompt: basePrompt,
             channel,
             count,
             overrideAxes: experimentMode ? experimentAxes : undefined,
@@ -1591,28 +1557,8 @@ export function PostGenerator({
           ])
         )
         : [primaryChannel];
-      const documentLedPrompt =
-        evidenceContext.length > 0 && DOCUMENT_LED_PROMPT_REGEX.test(normalizedPrompt);
-      const evidenceTitles = evidenceContext
-        .slice(0, 6)
-        .map((item) => item.title)
-        .filter(Boolean);
-      const channelPrompt = [
-        normalizedPrompt,
-        documentLedPrompt
-          ? 'Selected PDFs are the main source for this post. Infer the topic, product, and proof points from those PDFs and write the post from that material.'
-          : null,
-        evidenceTitles.length ? `Selected PDF titles: ${evidenceTitles.join(' | ')}` : null,
-        evidenceBrief ? `Knowledge base context:\n${evidenceBrief}` : null,
-        `Primary channel: ${primaryChannel}.`,
-        `Generate copy for these channels: ${channels.join(', ')}.`,
-        CHANNEL_PROMPT_HINTS[primaryChannel],
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-
       const data = await requestPostOptions({
-        prompt: channelPrompt,
+        prompt: normalizedPrompt,
         channel: primaryChannel,
         count: 3,
       });
@@ -1628,16 +1574,7 @@ export function PostGenerator({
       if (rankedPosts.length === 0) throw new Error('No posts generated');
 
       const aiVariantsByChannel = await fetchAdditionalChannelVariants(
-        [
-          normalizedPrompt,
-          documentLedPrompt
-            ? 'Use the selected PDFs as the main source of truth for the post topic and proof.'
-            : null,
-          evidenceTitles.length ? `Selected PDF titles: ${evidenceTitles.join(' | ')}` : null,
-          evidenceBrief ? `Knowledge base context:\n${evidenceBrief}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
+        normalizedPrompt,
         rankedPosts.length
       );
 
@@ -1743,8 +1680,7 @@ export function PostGenerator({
         : [primaryChannel];
       const data = await requestPostOptions({
         prompt: sanitizeTemplatePlaceholders(
-          `${post.headline}. Regenerate with a different angle for ${primaryChannel}. ${CHANNEL_PROMPT_HINTS[primaryChannel]}${evidenceBrief ? `\n\nEvidence locker context:\n${evidenceBrief}` : ''
-          }`
+          `${post.headline}. Regenerate with a different angle while staying grounded in the same topic.`
         ),
         channel: primaryChannel,
         count: 1,
@@ -1759,8 +1695,7 @@ export function PostGenerator({
         const seeded = buildPostWithChannelVariants(ranked[0]);
         const aiVariantsByChannel = await fetchAdditionalChannelVariants(
           sanitizeTemplatePlaceholders(
-            `${ranked[0].headline}\n\n${ranked[0].body}\n\n${ranked[0].cta}${evidenceBrief ? `\n\nEvidence locker context:\n${evidenceBrief}` : ''
-            }`
+            `${ranked[0].headline}\n\n${ranked[0].body}\n\n${ranked[0].cta}`
           ),
           1
         );

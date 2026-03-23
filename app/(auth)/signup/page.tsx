@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
+import { getClientAuthRedirectOrigin } from '@/lib/auth/redirect-origin';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SignupPage() {
@@ -72,7 +73,10 @@ export default function SignupPage() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: new URL(
+            '/auth/callback',
+            getClientAuthRedirectOrigin()
+          ).toString(),
           data: {
             full_name: name,
           },
@@ -98,7 +102,7 @@ export default function SignupPage() {
     
     try {
       const supabase = createClient();
-      const callbackUrl = new URL('/auth/callback', window.location.origin);
+      const callbackUrl = new URL('/auth/callback', getClientAuthRedirectOrigin());
       callbackUrl.searchParams.set('next', '/app');
 
       const { error: authError } = await supabase.auth.signInWithOAuth({

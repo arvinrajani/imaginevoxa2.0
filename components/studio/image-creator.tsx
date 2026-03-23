@@ -7,6 +7,7 @@ import {
   ImageIcon,
   Type,
   Palette,
+  AlertTriangle,
   Loader2,
   CheckCircle2,
   ArrowRight,
@@ -17,9 +18,9 @@ import {
   X,
   Info,
   Download,
-  Globe,
   Link2,
   Plus,
+  Trash2,
   Building2,
   Mail,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ interface ImageCreatorProps {
   brandName?: string;
   productName?: string;
   brandColors?: string[];
+  brandColorNames?: Record<string, string>;
   logoUrl?: string;
   logoAssets?: Array<{ url: string; name?: string }>;
   analysisProfile?: {
@@ -66,11 +68,17 @@ interface ImageCreatorProps {
   onBrandColorsChange?: (colors: string[]) => void;
   /** Pre-loaded PDF-extracted images from the parent's evidence state. When supplied the
    *  internal fetch is skipped — images stay in sync whenever evidence changes. */
-  pdfImages?: Array<{ id: string; title: string; signed_url: string }>;
+  pdfImages?: PdfImageReference[];
+  /** Selected PDFs in the current Studio run so the image panel can show missing-visual status. */
+  selectedPdfs?: SelectedPdfSource[];
   /** Called to refresh evidence data (e.g. after re-extract) */
   onRefreshEvidence?: () => void;
   /** Called to upload PDF files for evidence extraction */
   onUploadPdfFiles?: (files: File[]) => Promise<void>;
+  /** Called to re-extract visuals from already-uploaded PDFs */
+  onReextractPdfs?: (ids: string[]) => Promise<void>;
+  /** Called to delete extracted images or evidence rows */
+  onDeleteEvidenceIds?: (ids: string[]) => Promise<void>;
 }
 
 type BlendModeId = 'normal' | 'multiply' | 'screen' | 'overlay' | 'soft-light';
@@ -79,6 +87,14 @@ type PdfImageReference = {
   id: string;
   title: string;
   signed_url: string;
+  sourceEvidenceId?: string | null;
+};
+
+type SelectedPdfSource = {
+  id: string;
+  title: string;
+  extractedCount: number;
+  canReextract: boolean;
 };
 
 function deriveWordingFromPost(postText?: string) {
@@ -113,6 +129,69 @@ function normalizeReferenceText(value: string) {
     .trim();
 }
 
+function normalizeHexColor(value: string | null | undefined) {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{3,6}$/.test(hex)) return null;
+
+  if (hex.length === 3) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')
+      .toLowerCase()}`;
+  }
+
+  return `#${hex.slice(0, 6).toLowerCase()}`;
+}
+
+function dedupeBrandColorList(colors: string[]) {
+  return Array.from(
+    new Set(
+      colors
+        .map((color) => normalizeHexColor(color))
+        .filter((color): color is string => Boolean(color))
+    )
+  ).slice(0, 8);
+}
+
+function colorListSignature(colors: string[]) {
+  return dedupeBrandColorList(colors).join('|');
+}
+
+function resolveColorLabel(
+  color: string,
+  colorNames?: Record<string, string>
+) {
+  if (!colorNames) return color.toUpperCase();
+
+  return (
+    colorNames[color] ||
+    colorNames[color.toLowerCase()] ||
+    colorNames[color.toUpperCase()] ||
+    color.toUpperCase()
+  );
+}
+
+const WEAK_FEATURE_PATTERNS = [
+  /^feature\s+(one|two|three|four|five|six)$/i,
+  /^benefit(\s+pointer)?\s+(one|two|three|four|five|six)$/i,
+  /^post proof points appear here$/i,
+  /learn more/i,
+  /discover more/i,
+  /visit (our|the) website/i,
+  /contact us/i,
+  /click /i,
+  /^https?:\/\//i,
+];
+
+function isWeakFeatureLine(value: string) {
+  return WEAK_FEATURE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function getPdfImageDisplayTitle(title: string) {
   const normalized = title.replace(/\s+/g, ' ').trim();
   const match = normalized.match(/^(.*?)[\u2022\u00b7-]\s*(Extracted image \d+)$/i);
@@ -128,6 +207,37 @@ function getPdfImageDisplayTitle(title: string) {
     primary: match[2],
     secondary: match[1].trim() || null,
   };
+}
+
+function getPdfImagePriorityScore(title: string) {
+  const normalized = title.toLowerCase();
+  if (normalized.includes('page 1 visual')) return 300;
+  if (normalized.includes('front page visual')) return 280;
+  if (normalized.includes('cover page visual')) return 260;
+  if (/page\s+\d+\s+visual/.test(normalized)) return 180;
+  if (normalized.includes('extracted image')) return 120;
+  return 0;
+}
+
+function sortPdfImageReferences<T extends { title: string }>(images: T[]) {
+  return [...images].sort((left, right) => {
+    const scoreDifference =
+      getPdfImagePriorityScore(right.title) - getPdfImagePriorityScore(left.title);
+
+    if (scoreDifference !== 0) {
+      return scoreDifference;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+}
+
+function getPdfSourceEvidenceId(tags?: string[] | null) {
+  if (!Array.isArray(tags)) return null;
+  const sourceTag = tags.find(
+    (tag) => typeof tag === 'string' && tag.startsWith('pdf-source-')
+  );
+  return sourceTag ? sourceTag.slice('pdf-source-'.length) : null;
 }
 
 function normalizeLogoAssets(
@@ -474,9 +584,20 @@ function derivePosterBenefitLines(...sources: Array<string | undefined>) {
   const picked: string[] = [];
 
   const remember = (value: string) => {
-    const cleaned = value.replace(/^[-*.\d)\s]+/, '').replace(/\s+/g, ' ').trim();
+    const cleaned = value
+      .replace(/^[-*.\d)\s]+/, '')
+      .replace(/^[•✓✔]+\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^["'“”]+|["'“”]+$/g, '');
     const key = cleaned.toLowerCase();
-    if (!cleaned || cleaned.length < 12 || cleaned.length > 90 || seen.has(key)) {
+    if (
+      !cleaned ||
+      cleaned.length < 14 ||
+      cleaned.length > 96 ||
+      isWeakFeatureLine(cleaned) ||
+      seen.has(key)
+    ) {
       return;
     }
     seen.add(key);
@@ -778,13 +899,10 @@ interface ThemePreviewLargeProps {
   partnerTagline: string;
   activeHeadlineText?: string;
   activeTaglineText?: string;
-  allianceBenefitLines: string[];
+  featureLines: string[];
   footerWebsite?: string;
   footerEmail?: string;
   selectedReferenceImage: string | null;
-  useReferenceAsHero: boolean;
-  selectedPdfImage?: { signed_url: string } | null;
-  selectedSiteImage?: { url: string } | null;
   hasPostContext: boolean;
   slotAssignments?: Record<string, string | null>;
 }
@@ -800,22 +918,17 @@ function ThemePreviewLarge({
   partnerTagline,
   activeHeadlineText,
   activeTaglineText,
-  allianceBenefitLines,
+  featureLines = [],
   footerWebsite,
   footerEmail,
   selectedReferenceImage,
-  useReferenceAsHero,
-  selectedPdfImage,
-  selectedSiteImage,
   hasPostContext,
   slotAssignments,
 }: ThemePreviewLargeProps) {
   const previewPalette = deriveStudioPalette(brandColors);
-  // Slot assignments take priority for hero, then fall back to the legacy reference selection
   const slotHero = slotAssignments?.['hero'] || null;
-  const legacyHeroSrc = selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage || null;
-  const heroSrc = slotHero || legacyHeroSrc;
-  const showHero = slotHero ? true : (useReferenceAsHero && !!legacyHeroSrc);
+  const heroSrc = selectedReferenceImage || slotHero || null;
+  const showHero = Boolean(heroSrc);
 
   /** Get the assigned image URL for a named slot */
   const getSlotSrc = (slotId: string) => slotAssignments?.[slotId] || null;
@@ -939,7 +1052,7 @@ function ThemePreviewLarge({
             </div>
           </div>
           <div className="absolute right-[3%] top-[22%] w-[47%] space-y-3">
-            {(allianceBenefitLines.length > 0 ? allianceBenefitLines : ['Benefit pointer one', 'Benefit pointer two', 'Benefit pointer three', 'Benefit pointer four']).slice(0, 6).map((line, index) => (
+            {(featureLines.length > 0 ? featureLines : ['Post proof points appear here']).slice(0, 6).map((line, index) => (
               <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full border-l-2 border-white/10 bg-slate-950/[28%] px-4 py-2">
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-md text-lg font-black text-white shadow"
@@ -1035,7 +1148,7 @@ function ThemePreviewLarge({
 
   // ── Industrial Campaign ──────────────────────────────────────────────────────
   if (themeId === 'industrial-campaign') {
-    const benefits = allianceBenefitLines.length > 0 ? allianceBenefitLines : ['Feature one', 'Feature two', 'Feature three', 'Feature four'];
+    const benefits = featureLines.length > 0 ? featureLines : ['Post proof points appear here'];
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}33 100%)` }} />
@@ -1435,6 +1548,7 @@ export function ImageCreator({
   brandName,
   productName,
   brandColors = [],
+  brandColorNames,
   logoUrl: defaultLogoUrl,
   logoAssets = [],
   analysisProfile,
@@ -1445,8 +1559,11 @@ export function ImageCreator({
   onImageGenerated,
   onBrandColorsChange,
   pdfImages: propPdfImages,
+  selectedPdfs = [],
   onRefreshEvidence,
   onUploadPdfFiles,
+  onReextractPdfs,
+  onDeleteEvidenceIds,
 }: ImageCreatorProps) {
   const derivedWording = useMemo(
     () => deriveWordingFromPost(confirmedPostText),
@@ -1456,11 +1573,36 @@ export function ImageCreator({
     () => normalizeLogoAssets(logoAssets),
     [logoAssets]
   );
+  const normalizedBrandColors = useMemo(
+    () => dedupeBrandColorList(brandColors),
+    [brandColors]
+  );
+  const derivedThemePalette = useMemo(
+    () => deriveStudioPalette(normalizedBrandColors),
+    [normalizedBrandColors]
+  );
   const primaryBrandLogoUrl = defaultLogoUrl || normalizedBrandLogos[0]?.url || null;
   const hasPostContext = Boolean(confirmedPostText?.trim());
   const confirmedPostKey = `${confirmedPostHeadline || ''}::${confirmedPostText || ''}::${confirmedPostImagePrompt || ''}`;
   const syncedHeadlineFromPost = (confirmedPostHeadline?.trim() || derivedWording.headline || '').slice(0, 80);
   const confirmedPostImageBrief = (confirmedPostImagePrompt || '').trim();
+  const postDerivedFeatureLines = useMemo(
+    () =>
+      derivePosterBenefitLines(
+        confirmedPostText,
+        confirmedPostImageBrief,
+        confirmedPostHeadline,
+        derivedWording.headline,
+        derivedWording.tagline
+      ),
+    [
+      confirmedPostHeadline,
+      confirmedPostImageBrief,
+      confirmedPostText,
+      derivedWording.headline,
+      derivedWording.tagline,
+    ]
+  );
 
   // Form state
   const [headline, setHeadline] = useState(confirmedPostHeadline || derivedWording.headline || '');
@@ -1481,9 +1623,10 @@ export function ImageCreator({
   const [footerWebsite, setFooterWebsite] = useState('');
   const [footerEmail, setFooterEmail] = useState('');
   const [benefitsText, setBenefitsText] = useState('');
-  const [useReferenceAsHero, setUseReferenceAsHero] = useState(true);
-  const [selectedBlendMode, setSelectedBlendMode] = useState<BlendModeId>('normal');
+  const [benefitsTouched, setBenefitsTouched] = useState(false);
+  const [selectedBlendMode] = useState<BlendModeId>('normal');
   const [imageAspect, setImageAspect] = useState<'landscape' | 'square' | 'portrait'>('landscape');
+  const [referenceSelectionTouched, setReferenceSelectionTouched] = useState(false);
 
   // Theme slot image assignments (maps slot id → image URL)
   const [slotAssignments, setSlotAssignments] = useState<Record<string, string | null>>({});
@@ -1495,8 +1638,15 @@ export function ImageCreator({
   const [selectedReferenceImage, setSelectedReferenceImage] = useState<string | null>(null);
 
   // PDF-extracted brand images (from Evidence Locker)
-  const [pdfEvidenceImages, setPdfEvidenceImages] = useState<Array<{ id: string; title: string; signed_url: string }>>([]);
+  const [pdfEvidenceImages, setPdfEvidenceImages] = useState<PdfImageReference[]>([]);
   const [isFetchingPdfImages, setIsFetchingPdfImages] = useState(false);
+  const [isUploadingPdfImages, setIsUploadingPdfImages] = useState(false);
+  const [isReextractingPdfImages, setIsReextractingPdfImages] = useState(false);
+  const [previewedPdfImageId, setPreviewedPdfImageId] = useState<string | null>(null);
+  const [pdfLibraryActionState, setPdfLibraryActionState] = useState<{
+    kind: 'delete-image' | 'reextract-pdf';
+    targetId: string;
+  } | null>(null);
   // Tracks PDF image suggestions the user has explicitly dismissed this session
   const [dismissedPdfSuggestions, setDismissedPdfSuggestions] = useState<Set<string>>(() => new Set());
 
@@ -1525,6 +1675,8 @@ export function ImageCreator({
   const allianceLogoInputRef = useRef<HTMLInputElement>(null);
   const partnerLogoInputRef = useRef<HTMLInputElement>(null);
   const referenceImageInputRef = useRef<HTMLInputElement>(null);
+  const baselineBrandIdRef = useRef('');
+  const baselineBrandColorsRef = useRef<string[]>([]);
   const lastSyncedPostKeyRef = useRef('');
   const appliedAnalysisDefaultsRef = useRef({
     tone: false,
@@ -1655,20 +1807,15 @@ export function ImageCreator({
   }, [primaryBrandLogoUrl, uploadedLogo, logoPlacement]);
 
   useEffect(() => {
-    if (selectedThemeId !== 'alliance-poster') return;
-    if (benefitsText.trim()) return;
+    setBenefitsTouched(false);
+  }, [confirmedPostKey]);
 
-    const nextBenefits = derivePosterBenefitLines(
-      confirmedPostText,
-      confirmedPostImageBrief,
-      contextBrief,
-      customPrompt
-    );
-
-    if (nextBenefits.length > 0) {
-      setBenefitsText(nextBenefits.join('\n'));
-    }
-  }, [benefitsText, confirmedPostImageBrief, confirmedPostText, contextBrief, customPrompt, selectedThemeId]);
+  useEffect(() => {
+    if (benefitsTouched) return;
+    const nextBenefits = postDerivedFeatureLines.join('\n');
+    if (benefitsText === nextBenefits) return;
+    setBenefitsText(nextBenefits);
+  }, [benefitsText, benefitsTouched, postDerivedFeatureLines]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !brandId) {
@@ -1707,6 +1854,18 @@ export function ImageCreator({
     }
   }, [brandId]);
 
+  useEffect(() => {
+    if (baselineBrandIdRef.current !== brandId) {
+      baselineBrandIdRef.current = brandId;
+      baselineBrandColorsRef.current = normalizedBrandColors;
+      return;
+    }
+
+    if (baselineBrandColorsRef.current.length === 0 && normalizedBrandColors.length > 0) {
+      baselineBrandColorsRef.current = normalizedBrandColors;
+    }
+  }, [brandId, normalizedBrandColors]);
+
   // Fetch PDF-extracted images from the brand's Evidence Locker.
   // Skipped when the parent passes pre-loaded images via the `pdfImages` prop.
   useEffect(() => {
@@ -1719,10 +1878,6 @@ export function ImageCreator({
     })
       .then((res) => (res.ok ? res.json() : Promise.resolve({ evidence: [] })))
       .then((payload: { evidence?: Array<{ id: string; type: string; title: string; tags?: string[]; file_path?: string; signed_url?: string | null }> }) => {
-        const allImages = (payload.evidence ?? []).filter((item) => item.type === 'image');
-        if (allImages.length > 0) {
-          console.log(`[ImageCreator] Found ${allImages.length} image evidence rows. PDF-extracted check:`, allImages.map(i => ({ id: i.id, title: i.title, tags: i.tags, file_path: i.file_path, has_signed_url: Boolean(i.signed_url) })));
-        }
         const extracted = (payload.evidence ?? []).filter(
           (item) =>
             item.type === 'image' &&
@@ -1738,6 +1893,7 @@ export function ImageCreator({
             id: item.id,
             title: item.title,
             signed_url: item.signed_url as string,
+            sourceEvidenceId: getPdfSourceEvidenceId(item.tags),
           }))
         );
       })
@@ -1747,11 +1903,36 @@ export function ImageCreator({
       .finally(() => setIsFetchingPdfImages(false));
   }, [brandId, propPdfImages]);
 
+  const applyBrandColors = useCallback(
+    (colors: string[]) => {
+      onBrandColorsChange?.(dedupeBrandColorList(colors));
+    },
+    [onBrandColorsChange]
+  );
+
   const toggleReferenceSelection = useCallback((imageUrl: string) => {
+    setReferenceSelectionTouched(true);
     setSelectedReferenceImage((prev) => (prev === imageUrl ? null : imageUrl));
   }, []);
 
   const activeThemeSlots = useMemo(() => getThemeSlots(selectedThemeId), [selectedThemeId]);
+  const themeUsesHeroReference = useMemo(
+    () => selectedThemeId === 'alliance-poster' || activeThemeSlots.some((slot) => slot.id === 'hero'),
+    [activeThemeSlots, selectedThemeId]
+  );
+  const additionalThemeSlots = useMemo(
+    () => activeThemeSlots.filter((slot) => slot.id !== 'hero'),
+    [activeThemeSlots]
+  );
+  const nonHeroSlotAssignments = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(slotAssignments).filter(
+          ([slotId, url]) => slotId !== 'hero' && typeof url === 'string' && url.length > 0
+        )
+      ) as Record<string, string>,
+    [slotAssignments]
+  );
 
   const handleThemeSelect = useCallback(
     (themeId: ThemeId) => {
@@ -1801,7 +1982,7 @@ export function ImageCreator({
       footerWebsite: footerWebsite.trim(),
       footerEmail: footerEmail.trim(),
       benefitsText: benefitsText.trim(),
-      useReferenceAsHero,
+      useReferenceAsHero: Boolean(selectedReferenceImage),
     };
 
     const nextPresets = [preset, ...savedPresets.filter((item) => item.name.toLowerCase() !== name.toLowerCase())].slice(0, 8);
@@ -1825,7 +2006,7 @@ export function ImageCreator({
     selectedStyle,
     selectedThemeId,
     selectedTone,
-    useReferenceAsHero,
+    selectedReferenceImage,
   ]);
 
   const handleApplyPreset = useCallback((preset: SavedImagePreset) => {
@@ -1841,7 +2022,7 @@ export function ImageCreator({
     setFooterWebsite(preset.footerWebsite || '');
     setFooterEmail(preset.footerEmail || '');
     setBenefitsText(preset.benefitsText || '');
-    setUseReferenceAsHero(preset.useReferenceAsHero ?? true);
+    setBenefitsTouched(Boolean(preset.benefitsText?.trim()));
     toast.success(`Applied preset "${preset.name}".`);
   }, []);
 
@@ -1869,6 +2050,7 @@ export function ImageCreator({
         setCustomPrompt((prev) => (prev.trim() ? `${prev.trim()}\n${promptSnippet}` : promptSnippet));
       }
 
+      setReferenceSelectionTouched(true);
       setSelectedReferenceImage(image.signed_url);
       setDismissedPdfSuggestions((prev) => {
         if (!prev.has(image.id)) return prev;
@@ -1994,6 +2176,7 @@ export function ImageCreator({
 
     const reader = new FileReader();
     reader.onload = () => {
+      setReferenceSelectionTouched(true);
       setSelectedReferenceImage(reader.result as string);
       toast.success('Reference image uploaded!');
     };
@@ -2002,6 +2185,76 @@ export function ImageCreator({
   }, []);
 
   // ── Fetch Images from URL ──
+  const handlePdfUploadSelection = useCallback(
+    async (files: File[]) => {
+      if (!onUploadPdfFiles || files.length === 0) return;
+      setIsUploadingPdfImages(true);
+      try {
+        await onUploadPdfFiles(files);
+      } finally {
+        setIsUploadingPdfImages(false);
+      }
+    },
+    [onUploadPdfFiles]
+  );
+
+  const handleReextractSelectedPdfs = useCallback(async () => {
+    if (!onReextractPdfs) return;
+
+    const targetIds = selectedPdfs
+      .filter((item) => item.extractedCount <= 0 && item.canReextract)
+      .map((item) => item.id);
+    if (targetIds.length === 0) return;
+
+    setIsReextractingPdfImages(true);
+    try {
+      await onReextractPdfs(targetIds);
+    } finally {
+      setIsReextractingPdfImages(false);
+    }
+  }, [onReextractPdfs, selectedPdfs]);
+
+  const handleReextractSinglePdf = useCallback(
+    async (pdfId: string) => {
+      if (!onReextractPdfs) return;
+      const normalized = String(pdfId || '').trim();
+      if (!normalized) return;
+
+      setPdfLibraryActionState({ kind: 'reextract-pdf', targetId: normalized });
+      try {
+        await onReextractPdfs([normalized]);
+      } finally {
+        setPdfLibraryActionState(null);
+      }
+    },
+    [onReextractPdfs]
+  );
+
+  const handleDeletePdfImage = useCallback(
+    async (image: PdfImageReference) => {
+      if (!onDeleteEvidenceIds) return;
+      const confirmed =
+        typeof window === 'undefined'
+          ? true
+          : window.confirm(
+              `Delete this extracted visual?\n\n${image.title}\n\nThis removes only the extracted image, not the source PDF.`
+            );
+      if (!confirmed) return;
+
+      setPdfLibraryActionState({ kind: 'delete-image', targetId: image.id });
+      try {
+        await onDeleteEvidenceIds([image.id]);
+        if (selectedReferenceImage === image.signed_url) {
+          setReferenceSelectionTouched(true);
+          setSelectedReferenceImage(null);
+        }
+      } finally {
+        setPdfLibraryActionState(null);
+      }
+    },
+    [onDeleteEvidenceIds, selectedReferenceImage]
+  );
+
   const handleFetchSiteImages = useCallback(async () => {
     const url = siteUrl.trim();
     if (!url) {
@@ -2063,29 +2316,30 @@ export function ImageCreator({
     const effectiveLogoPlacement = resolvedLogoForGeneration ? logoPlacement : 'none';
     const effectiveLogoForGeneration =
       effectiveLogoPlacement !== 'none' ? resolvedLogoForGeneration : null;
+    const manualFeatureLines = derivePosterBenefitLines(benefitsText);
+    const resolvedFeatureLines =
+      manualFeatureLines.length > 0 ? manualFeatureLines : postDerivedFeatureLines;
     const benefitBullets =
       selectedThemeId === 'alliance-poster'
-        ? splitMultilineList(benefitsText, 6)
+        ? resolvedFeatureLines.slice(0, 6)
         : selectedThemeId === 'industrial-campaign'
-          ? splitMultilineList(benefitsText, 4)
+          ? resolvedFeatureLines.slice(0, 4)
           : [];
-    // Build slot images map (only non-null assignments)
-    const resolvedSlotImages: Record<string, string> = {};
-    for (const [slotId, url] of Object.entries(slotAssignments)) {
-      if (url) resolvedSlotImages[slotId] = url;
-    }
-    const hasHeroSlot = activeThemeSlots.some((slot) => slot.id === 'hero');
-    if (
-      selectedThemeId !== 'alliance-poster' &&
-      hasHeroSlot &&
-      selectedReferenceImage &&
-      !resolvedSlotImages.hero
-    ) {
+    const resolvedSlotImages: Record<string, string> = { ...nonHeroSlotAssignments };
+    if (themeUsesHeroReference && selectedReferenceImage) {
       resolvedSlotImages.hero = selectedReferenceImage;
     }
+    const hasResolvedHeroReference = !themeUsesHeroReference || Boolean(selectedReferenceImage);
 
     if (!effectiveHeadline && !confirmedPostText) {
       toast.error('Please enter a headline or generate a post first');
+      return;
+    }
+
+    if (themeUsesHeroReference && !hasResolvedHeroReference) {
+      toast.error('Select a visual source first', {
+        description: 'Use a PDF-extracted image or a reference image. It will automatically fill the hero area for this theme.',
+      });
       return;
     }
 
@@ -2122,7 +2376,7 @@ export function ImageCreator({
             brandId,
             brandName,
             productName: productName || undefined,
-            brandColors,
+            brandColors: normalizedBrandColors,
             themeId: selectedThemeId,
             contextBrief: contextBrief.trim() || undefined,
             headline: effectiveHeadline,
@@ -2140,7 +2394,7 @@ export function ImageCreator({
             footerWebsite: footerWebsite.trim() || undefined,
             footerEmail: footerEmail.trim() || undefined,
             featureBullets: benefitBullets.length > 0 ? benefitBullets : undefined,
-            referenceAsHero: Boolean(useReferenceAsHero),
+            referenceAsHero: hasResolvedHeroReference,
             slotImages: Object.keys(resolvedSlotImages).length > 0 ? resolvedSlotImages : undefined,
             postText: confirmedPostText || undefined,
             postImagePrompt: confirmedPostImageBrief || undefined,
@@ -2260,7 +2514,6 @@ export function ImageCreator({
     activeTheme,
     contextBrief,
     uploadedLogo,
-    activeThemeSlots,
     effectiveAllianceLogos,
     benefitsText,
     primaryBrandLogoUrl,
@@ -2271,7 +2524,7 @@ export function ImageCreator({
     brandId,
     brandName,
     productName,
-    brandColors,
+    normalizedBrandColors,
     logoPlacement,
     imageAspect,
     partnerName,
@@ -2280,9 +2533,10 @@ export function ImageCreator({
     footerWebsite,
     selectedBlendMode,
     selectedReferenceImage,
-    useReferenceAsHero,
+    postDerivedFeatureLines,
     onImageGenerated,
-    slotAssignments,
+    nonHeroSlotAssignments,
+    themeUsesHeroReference,
   ]);
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Confirm Ã¢â€â‚¬Ã¢â€â‚¬
@@ -2304,10 +2558,10 @@ export function ImageCreator({
     ''
   ).trim();
   const activeTaglineText = (tagline || derivedWording.tagline || analyzedTaglineDefault || '').trim();
-  const allianceBenefitLines =
-    selectedThemeId === 'alliance-poster'
-      ? splitMultilineList(benefitsText, 6)
-      : [];
+  const manualFeatureLines = derivePosterBenefitLines(benefitsText);
+  const resolvedFeatureLines =
+    manualFeatureLines.length > 0 ? manualFeatureLines : postDerivedFeatureLines;
+  const previewFeatureLines = resolvedFeatureLines;
   const partnerLogo = effectiveAllianceLogos[0] || null;
   const additionalAllianceLogos = effectiveAllianceLogos.slice(1);
   const allianceHeaderLogos = effectiveAllianceLogos.slice(0, 3);
@@ -2323,14 +2577,163 @@ export function ImageCreator({
 
   // Use prop-supplied images when the parent passes them (keeps in sync after evidence uploads).
   // Fall back to internally-fetched images when no prop is provided.
-  const effectivePdfImages = propPdfImages ?? pdfEvidenceImages;
+  const effectivePdfImages = useMemo(
+    () => (propPdfImages !== undefined ? propPdfImages : sortPdfImageReferences(pdfEvidenceImages)),
+    [pdfEvidenceImages, propPdfImages]
+  );
   const isLoadingPdf = propPdfImages !== undefined ? false : isFetchingPdfImages;
   const normalizedPrompt = normalizeReferenceText(customPrompt);
   const selectedPdfImage =
     effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
+  const previewedPdfImage = useMemo(() => {
+    if (effectivePdfImages.length === 0) return null;
+    return (
+      effectivePdfImages.find((img) => img.id === previewedPdfImageId) ||
+      selectedPdfImage ||
+      effectivePdfImages[0] ||
+      null
+    );
+  }, [effectivePdfImages, previewedPdfImageId, selectedPdfImage]);
   const selectedSiteImage =
     fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
   const hasReadyLogo = Boolean(uploadedLogo || primaryBrandLogoUrl);
+  const selectedReferenceSummary = useMemo(() => {
+    if (!selectedReferenceImage) return null;
+    if (selectedPdfImage) {
+      return {
+        badge: 'PDF',
+        title: 'Hero visual is using a PDF image',
+        detail: selectedPdfImage.title,
+      };
+    }
+    if (selectedSiteImage) {
+      return {
+        badge: 'Website',
+        title: 'Hero visual is using a website image',
+        detail: selectedSiteImage.source || selectedSiteImage.url,
+      };
+    }
+    return {
+      badge: 'Upload',
+      title: 'Hero visual is using an uploaded image',
+      detail: 'Manual reference upload',
+    };
+  }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
+  const themePaletteRoles = useMemo(
+    () => [
+      { label: 'Primary', value: derivedThemePalette.bgStart, hint: 'Main backgrounds and headings' },
+      { label: 'Secondary', value: derivedThemePalette.bgEnd, hint: 'Large surfaces and gradients' },
+      { label: 'Accent', value: derivedThemePalette.accent, hint: 'CTA and key emphasis' },
+      { label: 'Support', value: derivedThemePalette.support, hint: 'Checks, tags, and highlights' },
+    ],
+    [derivedThemePalette]
+  );
+  const suggestedBrandColors = useMemo(
+    () =>
+      dedupeBrandColorList([
+        derivedThemePalette.bgStart,
+        derivedThemePalette.bgEnd,
+        derivedThemePalette.accent,
+        derivedThemePalette.support,
+        derivedThemePalette.surface,
+      ]).filter((color) => !normalizedBrandColors.includes(color)).slice(0, 5),
+    [derivedThemePalette, normalizedBrandColors]
+  );
+  const baselineBrandColors = baselineBrandColorsRef.current;
+  const paletteQuickActions = useMemo(
+    () =>
+      [
+        {
+          id: 'saved-brand',
+          label: 'Restore Saved',
+          description: 'Go back to the saved brand palette.',
+          colors: baselineBrandColors,
+          disabled: baselineBrandColors.length === 0,
+        },
+        {
+          id: 'balanced-theme',
+          label: 'Balanced Theme',
+          description: 'Dark base plus cleaner accent balance.',
+          colors: dedupeBrandColorList([
+            baselineBrandColors[0] || derivedThemePalette.bgStart,
+            baselineBrandColors[1] || derivedThemePalette.bgEnd,
+            derivedThemePalette.accent,
+            derivedThemePalette.support,
+          ]),
+          disabled: false,
+        },
+        {
+          id: 'high-contrast',
+          label: 'High Contrast',
+          description: 'Stronger contrast for sharper templates.',
+          colors: dedupeBrandColorList([
+            derivedThemePalette.bgStart,
+            '#ffffff',
+            derivedThemePalette.accent,
+            derivedThemePalette.support,
+          ]),
+          disabled: false,
+        },
+      ].filter((action) => action.colors.length > 0),
+    [baselineBrandColors, derivedThemePalette]
+  );
+  const canRestoreBrandColors =
+    baselineBrandColors.length > 0 &&
+    colorListSignature(baselineBrandColors) !== colorListSignature(normalizedBrandColors);
+  const selectedPdfVisualCount = useMemo(
+    () => selectedPdfs.reduce((sum, item) => sum + Math.max(0, item.extractedCount || 0), 0),
+    [selectedPdfs]
+  );
+  const selectedPdfsMissingVisuals = useMemo(
+    () => selectedPdfs.filter((item) => item.extractedCount <= 0),
+    [selectedPdfs]
+  );
+  const reextractableSelectedPdfIds = useMemo(
+    () =>
+      selectedPdfsMissingVisuals
+        .filter((item) => item.canReextract)
+        .map((item) => item.id),
+    [selectedPdfsMissingVisuals]
+  );
+  const generationBlockedReason =
+    !hasPostContext
+      ? 'Confirm a post in Step 1 first.'
+      : !activeHeadlineText && !confirmedPostText
+        ? 'Add a headline or use the confirmed post headline.'
+        : themeUsesHeroReference && !selectedReferenceImage
+          ? 'Choose a PDF image or uploaded reference for the hero visual.'
+          : null;
+  const canGenerateImage =
+    !isGenerating &&
+    !isApplyingBlend &&
+    !isUploadingPdfImages &&
+    !isReextractingPdfImages &&
+    !generationBlockedReason;
+  const defaultPdfReferenceUrl = effectivePdfImages[0]?.signed_url || null;
+
+  useEffect(() => {
+    if (referenceSelectionTouched) return;
+    if (!defaultPdfReferenceUrl) return;
+    if (selectedReferenceImage === defaultPdfReferenceUrl) return;
+    setSelectedReferenceImage(defaultPdfReferenceUrl);
+  }, [defaultPdfReferenceUrl, referenceSelectionTouched, selectedReferenceImage]);
+
+  useEffect(() => {
+    if (effectivePdfImages.length === 0) {
+      if (previewedPdfImageId !== null) {
+        setPreviewedPdfImageId(null);
+      }
+      return;
+    }
+
+    const previewStillExists = previewedPdfImageId
+      ? effectivePdfImages.some((img) => img.id === previewedPdfImageId)
+      : false;
+
+    if (!previewStillExists) {
+      setPreviewedPdfImageId(selectedPdfImage?.id || effectivePdfImages[0].id);
+    }
+  }, [effectivePdfImages, previewedPdfImageId, selectedPdfImage]);
 
   // Detect if the custom prompt mentions a PDF image by title so we can suggest auto-selecting it.
   // Match on any word ≥4 chars from an image title appearing in the prompt (case-insensitive).
@@ -2400,88 +2803,48 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 1. Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {hasPostContext && (
-          <Card className="p-4 bg-white border border-cyan-200 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700">
-                  AI Generated Headline
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {activeHeadlineText || 'Headline will be taken from your confirmed post'}
-                </p>
-                {activeTaglineText && (
-                  <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                    {activeTaglineText}
-                  </p>
-                )}
-                <p className="mt-2 text-[11px] text-slate-500">
-                  Your post already gives the wording. Pick a look and generate.
-                </p>
-              </div>
-              <Badge className="bg-cyan-100 text-cyan-700 border border-cyan-200 text-[10px]">
-                Auto
-              </Badge>
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3.5 py-2.5 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+              <p className="text-xs font-medium text-slate-700 truncate">
+                {brandName || 'Post confirmed'}
+              </p>
             </div>
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {brandName && (
-                  <Badge className="border border-cyan-200 bg-cyan-50 text-cyan-700 text-[10px]">
-                    Brand: {brandName}
-                  </Badge>
-                )}
-                {brandColors.length > 0 && (
-                  <Badge className="border border-amber-200 bg-amber-50 text-amber-700 text-[10px]">
-                    {brandColors.length} color{brandColors.length === 1 ? '' : 's'} selected
-                  </Badge>
-                )}
-                {hasReadyLogo && (
-                  <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
-                    Logo ready
-                  </Badge>
-                )}
-                {effectivePdfImages.length > 0 && (
-                  <Badge className="border border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
-                    {effectivePdfImages.length} extracted image{effectivePdfImages.length === 1 ? '' : 's'}
-                  </Badge>
-                )}
-                {selectedReferenceImage && (
-                  <Badge className="border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
-                    Reference selected
-                  </Badge>
-                )}
-              </div>
-              {brandColors.length > 0 && (
-                <div className="flex gap-1 mt-2">
-                  {brandColors.slice(0, 6).map((color, idx) => (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {normalizedBrandColors.length > 0 && (
+                <div className="flex gap-0.5">
+                  {normalizedBrandColors.slice(0, 4).map((color, idx) => (
                     <div
                       key={idx}
-                      className="w-5 h-5 rounded border border-white shadow-sm ring-1 ring-slate-200"
+                      className="w-3.5 h-3.5 rounded-sm border border-white shadow-sm ring-1 ring-slate-200/60"
                       style={{ backgroundColor: color }}
-                      title={color}
                     />
                   ))}
                 </div>
               )}
+              {hasReadyLogo && (
+                <span className="w-5 h-5 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-center" title="Logo ready">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                </span>
+              )}
+              {effectivePdfImages.length > 0 && (
+                <span className="text-[10px] font-medium text-violet-600 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5">
+                  {effectivePdfImages.length} img{effectivePdfImages.length === 1 ? '' : 's'}
+                </span>
+              )}
             </div>
-            {confirmedPostImageBrief && (
-              <div className="mt-3">
-                <Badge className="bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px]">
-                  Visual brief ready
-                </Badge>
-              </div>
-            )}
-          </Card>
+          </div>
         )}
 
-        <Card className="p-4 space-y-3 bg-gradient-to-br from-white via-white to-fuchsia-50/40 border border-fuchsia-200/50 shadow-sm">
+        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center shadow-sm">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-slate-900">Creative Brief</h3>
+              <h3 className="font-semibold text-sm text-slate-900">Theme & Style</h3>
               <p className="text-[11px] text-slate-500">
-                Choose a theme, give context, then generate.
+                Pick a layout, set your colors, then generate.
               </p>
             </div>
           </div>
@@ -2534,119 +2897,275 @@ export function ImageCreator({
               <p className="text-[11px] text-fuchsia-700 font-medium truncate">{activeTheme.label}: {activeTheme.summary}</p>
             </div>
 
-            {/* ── Theme Colors ──────────────────────────────────────────── */}
-            <div className="rounded-xl border border-amber-200/70 bg-amber-50/40 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Palette className="w-3.5 h-3.5 text-amber-600" />
-                  <p className="text-[11px] font-semibold text-amber-800">Theme Colors</p>
+            {/* ── Theme Palette & Brand Colors ── */}
+            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+              {/* Live palette gradient strip */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-slate-600" />
+                    <p className="text-xs font-semibold text-slate-800">Theme Palette</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {normalizedBrandColors.length} saved brand color{normalizedBrandColors.length === 1 ? '' : 's'}
+                  </span>
                 </div>
-                <span className="text-[10px] text-amber-600">
-                  {brandColors.length} color{brandColors.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {brandColors.slice(0, 8).map((color, idx) => (
-                  <div key={`${color}-${idx}`} className="relative group">
+                <div
+                  className="h-8 rounded-lg overflow-hidden shadow-inner ring-1 ring-slate-200/80"
+                  style={{
+                    backgroundImage: `linear-gradient(90deg, ${derivedThemePalette.bgStart} 0%, ${derivedThemePalette.bgEnd} 40%, ${derivedThemePalette.accent} 70%, ${derivedThemePalette.support} 100%)`,
+                  }}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  {themePaletteRoles.map((swatch) => (
                     <div
-                      className="h-8 w-8 rounded-lg border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer transition-transform hover:scale-110"
-                      style={{ backgroundColor: color }}
-                      title={color}
-                    />
-                    {isEditingColors && (
+                      key={swatch.label}
+                      className="rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-8 w-8 flex-shrink-0 rounded-lg border border-white shadow-sm ring-1 ring-slate-200/60"
+                          style={{ backgroundColor: swatch.value }}
+                          title={`${swatch.label}: ${swatch.value}`}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                            {swatch.label}
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-500">{swatch.value}</p>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[10px] leading-snug text-slate-500">{swatch.hint}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-slate-100" />
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Brand Colors</span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
+
+              {/* Brand color swatches — always editable */}
+              <div className="space-y-2.5">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {paletteQuickActions.map((action) => {
+                    const isActive =
+                      colorListSignature(action.colors) === colorListSignature(normalizedBrandColors);
+
+                    return (
+                      <button
+                        key={action.id}
+                        type="button"
+                        disabled={action.disabled}
+                        onClick={() => applyBrandColors(action.colors)}
+                        className={`rounded-xl border px-2.5 py-2 text-left transition-colors ${
+                          isActive
+                            ? 'border-purple-300 bg-purple-50'
+                            : 'border-slate-200 bg-slate-50 hover:border-purple-200 hover:bg-purple-50/50'
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                          {action.label}
+                        </p>
+                        <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                          {action.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {normalizedBrandColors.slice(0, 8).map((color, idx) => (
+                    <div key={`${color}-${idx}`} className="relative group text-center">
+                      <div
+                        className="h-10 w-10 rounded-xl border-2 border-white shadow-md ring-1 ring-slate-200 transition-transform hover:scale-110 cursor-pointer"
+                        style={{ backgroundColor: color }}
+                        title={`${resolveColorLabel(color, brandColorNames)} (${color})`}
+                      />
+                      <p className="mt-0.5 max-w-[64px] truncate text-[8px] font-semibold uppercase tracking-wide text-slate-500">
+                        {resolveColorLabel(color, brandColorNames)}
+                      </p>
+                      <p className="text-[8px] font-mono text-slate-400">{color}</p>
                       <button
                         type="button"
                         onClick={() => {
-                          const updated = brandColors.filter((_, i) => i !== idx);
-                          onBrandColorsChange?.(updated);
+                          const updated = normalizedBrandColors.filter((_, i) => i !== idx);
+                          applyBrandColors(updated);
                         }}
-                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center shadow-sm hover:bg-red-600"
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center shadow-sm hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Remove color"
                       >
                         <X className="w-2.5 h-2.5" />
                       </button>
+                    </div>
+                  ))}
+                  {normalizedBrandColors.length < 8 && (
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingColors(true)}
+                        className="h-10 w-10 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50 transition-colors"
+                        title="Add color"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                      <p className="mt-0.5 text-[8px] text-slate-300">Add</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline color picker — always visible when editing or no colors */}
+                {(isEditingColors || normalizedBrandColors.length === 0) && normalizedBrandColors.length < 8 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/50 p-2">
+                    <input
+                      type="color"
+                      value={newColorInput.startsWith('#') && newColorInput.length === 7 ? newColorInput : '#6366f1'}
+                      onChange={(e) => setNewColorInput(e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-purple-200 cursor-pointer p-0 shadow-sm"
+                      title="Pick a color"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={newColorInput}
+                        onChange={(e) => setNewColorInput(e.target.value)}
+                        placeholder="#hex"
+                        className="w-full h-9 text-sm px-3 border border-purple-200 rounded-lg bg-white text-slate-700 font-mono"
+                        maxLength={7}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const hex = normalizeHexColor(newColorInput);
+                        if (hex && !normalizedBrandColors.includes(hex)) {
+                          applyBrandColors([...normalizedBrandColors, hex]);
+                          setNewColorInput('#');
+                        }
+                      }}
+                      className="h-9 px-4 text-xs font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                    >
+                      Add
+                    </button>
+                    {normalizedBrandColors.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingColors(false)}
+                        className="h-9 px-2 text-xs font-medium text-slate-500 hover:text-slate-700"
+                      >
+                        Done
+                      </button>
                     )}
                   </div>
-                ))}
-                {brandColors.length < 8 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingColors(true)}
-                    className="h-8 w-8 rounded-lg border-2 border-dashed border-amber-300 bg-white flex items-center justify-center text-amber-500 hover:border-amber-400 hover:text-amber-600 transition-colors"
-                    title="Add color"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                )}
+
+                {/* Suggested colors */}
+                {suggestedBrandColors.length > 0 && !isEditingColors && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 font-medium">Suggestions:</span>
+                    {suggestedBrandColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => applyBrandColors([...normalizedBrandColors, color])}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:border-purple-300 hover:bg-purple-50 transition-colors"
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full ring-1 ring-slate-200"
+                          style={{ backgroundColor: color }}
+                        />
+                        {color}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {canRestoreBrandColors && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => applyBrandColors(baselineBrandColors)}
+                      className="text-[10px] font-semibold text-purple-700 hover:text-purple-900"
+                    >
+                      Restore saved brand colors
+                    </button>
+                  </div>
                 )}
               </div>
-              {isEditingColors && brandColors.length < 8 && (
-                <div className="flex items-center gap-1.5 pt-1">
-                  <input
-                    type="color"
-                    value={newColorInput.startsWith('#') && newColorInput.length === 7 ? newColorInput : '#6366f1'}
-                    onChange={(e) => setNewColorInput(e.target.value)}
-                    className="w-8 h-8 rounded-lg border border-amber-300 cursor-pointer p-0"
-                    title="Pick a color"
-                  />
-                  <input
-                    type="text"
-                    value={newColorInput}
-                    onChange={(e) => setNewColorInput(e.target.value)}
-                    placeholder="#hex"
-                    className="w-20 h-8 text-xs px-2 border border-amber-200 rounded-lg bg-white text-slate-700"
-                    maxLength={7}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const hex = newColorInput.trim();
-                      if (/^#[0-9a-fA-F]{6}$/.test(hex) && !brandColors.includes(hex)) {
-                        onBrandColorsChange?.([...brandColors, hex]);
-                        setNewColorInput('#');
-                      }
-                    }}
-                    className="h-8 px-3 text-xs font-semibold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-                  >
-                    Add
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingColors(false)}
-                    className="h-8 px-2 text-xs font-semibold text-amber-600 hover:text-amber-800"
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
-              {!isEditingColors && brandColors.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingColors(true)}
-                  className="text-[10px] font-semibold text-amber-600 hover:text-amber-800"
-                >
-                  Edit colors
-                </button>
-              )}
-              <p className="text-[9px] text-amber-500/80">
-                These colors drive the theme palette — backgrounds, accents, text, and overlays all derive from your brand colors.
-              </p>
             </div>
 
             {/* ── Theme Image Slot Pickers ──────────────────────────────── */}
-            {activeThemeSlots.length > 0 && (
+            {(themeUsesHeroReference || additionalThemeSlots.length > 0) && (
               <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/30 p-3 space-y-3">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
-                  <p className="text-[11px] font-semibold text-indigo-700">
-                    Image slots for {activeTheme.label}
-                  </p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                    <p className="text-[11px] font-semibold text-indigo-700">
+                      {themeUsesHeroReference ? 'Hero Visual Source' : `Additional image slots for ${activeTheme.label}`}
+                    </p>
+                  </div>
+                  {selectedReferenceSummary && themeUsesHeroReference && (
+                    <Badge className="border border-indigo-200 bg-indigo-100 text-indigo-700 text-[10px]">
+                      {selectedReferenceSummary.badge}
+                    </Badge>
+                  )}
                 </div>
-                <div className={`grid gap-2 ${activeThemeSlots.length >= 3 ? 'grid-cols-3' : activeThemeSlots.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  {activeThemeSlots.map((slot) => {
-                    const assigned = slotAssignments[slot.id];
+                {themeUsesHeroReference && (
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                    {selectedReferenceImage ? (
+                      <>
+                        <img
+                          src={selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage}
+                          alt="Hero source"
+                          className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-slate-900">
+                            {selectedReferenceSummary?.title || 'Hero visual selected'}
+                          </p>
+                          <p className="mt-1 truncate text-[11px] text-slate-500">
+                            {selectedReferenceSummary?.detail || selectedReferenceImage}
+                          </p>
+                          <p className="mt-1 text-[10px] text-indigo-600">
+                            This image fills the hero area automatically for {activeTheme.label}.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setReferenceSelectionTouched(true);
+                            setSelectedReferenceImage(null);
+                          }}
+                          className="h-8 px-2 text-slate-500 hover:text-red-500"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="w-full rounded-xl border border-dashed border-indigo-200 bg-white/80 px-3 py-4 text-center">
+                        <p className="text-xs font-semibold text-indigo-700">
+                          Pick a PDF image or uploaded reference below
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500">
+                          The selected visual becomes the hero automatically. There is no separate hero picker anymore.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {additionalThemeSlots.length > 0 && (
+                <div className={`grid gap-2 ${additionalThemeSlots.length >= 3 ? 'grid-cols-3' : additionalThemeSlots.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {additionalThemeSlots.map((slot) => {
+                    const assigned = nonHeroSlotAssignments[slot.id] || null;
                     return (
                       <div key={slot.id} className="rounded-lg border border-slate-200 bg-white p-2 space-y-1.5">
-                        <p className="text-[10px] font-semibold text-slate-600 truncate">{slot.label}</p>
+                        <p className="text-[10px] font-semibold text-slate-600 truncate">
+                          {slot.label}
+                        </p>
                         {assigned ? (
                           <div className="relative">
                             <img
@@ -2659,9 +3178,7 @@ export function ImageCreator({
                             />
                             <button
                               type="button"
-                              onClick={() =>
-                                setSlotAssignments((prev) => ({ ...prev, [slot.id]: null }))
-                              }
+                              onClick={() => setSlotAssignments((prev) => ({ ...prev, [slot.id]: null }))}
                               className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"
                             >
                               <X className="w-3 h-3 text-white" />
@@ -2757,8 +3274,11 @@ export function ImageCreator({
                     );
                   })}
                 </div>
+                )}
                 <p className="text-[9px] text-indigo-500/70">
-                  Pick images for each slot from your PDFs, website, or uploaded references. These will be composited into the final image.
+                  {additionalThemeSlots.length > 0
+                    ? 'Use these extra slots only when the layout needs more than one image. The hero still comes from the selected PDF/reference automatically.'
+                    : 'The PDF library is the default source. If a new page 1 PDF visual arrives and you have not manually overridden the selection, Studio will update the hero source automatically.'}
                 </p>
               </div>
             )}
@@ -2780,57 +3300,17 @@ export function ImageCreator({
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              AI will use
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Badge className="border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 text-[10px]">
-                Theme: {activeTheme.label}
-              </Badge>
-              {selectedReferenceImage && (
-                <Badge className="border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
-                  1 reference image selected
-                </Badge>
-              )}
-              {brandColors.length > 0 && (
-                <Badge className="border border-amber-200 bg-amber-50 text-amber-700 text-[10px]">
-                  {brandColors.length} brand color{brandColors.length === 1 ? '' : 's'}
-                </Badge>
-              )}
-              {hasReadyLogo && (
-                <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
-                  Brand logo available
-                </Badge>
-              )}
-              {partnerLogo && (
-                <Badge className="border border-sky-200 bg-sky-50 text-sky-700 text-[10px]">
-                  Partner logo linked
-                </Badge>
-              )}
-              {additionalAllianceLogos.length > 0 && (
-                <Badge className="border border-cyan-200 bg-cyan-50 text-cyan-700 text-[10px]">
-                  {additionalAllianceLogos.length} extra logo{additionalAllianceLogos.length === 1 ? '' : 's'}
-                </Badge>
-              )}
-              {effectivePdfImages.length > 0 && (
-                <Badge className="border border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
-                  PDF image library ready
-                </Badge>
-              )}
-            </div>
-          </div>
         </Card>
 
         <Card className="p-4 space-y-4 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-sm">
-              <Upload className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <Upload className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-slate-900">Linked Logos</h3>
+              <h3 className="font-semibold text-sm text-slate-900">Logos & Details</h3>
               <p className="text-[11px] text-slate-500">
-                Brand &amp; partner logos for the selected theme.
+                Brand marks, partner logos, footer info, and proof points.
               </p>
             </div>
           </div>
@@ -3064,19 +3544,12 @@ export function ImageCreator({
               </div>
             )}
           </div>
-        </Card>
 
-        <Card className="p-4 space-y-4 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-sm">
-              <Building2 className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Theme Details</h3>
-              <p className="text-[11px] text-gray-400">
-                Fill what you want — AI handles the rest automatically.
-              </p>
-            </div>
+          {/* ── Theme Details (merged) ── */}
+          <div className="flex items-center gap-2 pt-1">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Footer & Details</span>
+            <div className="flex-1 h-px bg-slate-200" />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -3108,62 +3581,40 @@ export function ImageCreator({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-              Feature bullets <span className="font-normal text-slate-400">(optional)</span>
-            </label>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Theme proof points <span className="font-normal text-slate-400">(from the confirmed post)</span>
+              </label>
+              {postDerivedFeatureLines.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBenefitsTouched(false);
+                    setBenefitsText(postDerivedFeatureLines.join('\n'));
+                  }}
+                  className="text-[10px] font-semibold text-sky-600 hover:text-sky-800"
+                >
+                  Reset from post
+                </button>
+              )}
+            </div>
             <Textarea
               value={benefitsText}
-              onChange={(e) => setBenefitsText(e.target.value)}
+              onChange={(e) => {
+                setBenefitsTouched(true);
+                setBenefitsText(e.target.value);
+              }}
               rows={3}
               placeholder={
-                'Key benefit one\nKey benefit two\nKey benefit three'
+                postDerivedFeatureLines.length > 0
+                  ? postDerivedFeatureLines.slice(0, 3).join('\n')
+                  : 'Proof point from the confirmed post\nSecond proof point\nThird proof point'
               }
               className="resize-none bg-slate-50 border-slate-300 text-sm text-slate-900 placeholder:text-gray-400"
             />
             <p className="mt-1 text-[10px] text-gray-400">
-              One per line. Used as checkmark bullets in themes that support them (Alliance Poster, Industrial Campaign).
+              One per line. Studio keeps these synced to the current confirmed post until you manually edit them.
             </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-            <p className="text-xs font-semibold text-slate-800">Hero image source</p>
-            <p className="mt-1 text-[10px] text-gray-400">
-              Use your reference image as the main visual, or let AI generate it.
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setUseReferenceAsHero(true)}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition-all ${
-                  useReferenceAsHero
-                    ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <p className={`font-semibold ${useReferenceAsHero ? 'text-sky-800' : 'text-slate-800'}`}>
-                  Use my reference
-                </p>
-                <p className="mt-0.5 text-[10px] text-slate-500">
-                  Your uploaded image fills the hero area.
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseReferenceAsHero(false)}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition-all ${
-                  !useReferenceAsHero
-                    ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <p className={`font-semibold ${!useReferenceAsHero ? 'text-sky-800' : 'text-slate-800'}`}>
-                  Let AI generate
-                </p>
-                <p className="mt-0.5 text-[10px] text-slate-500">
-                  AI creates the visual from your brief.
-                </p>
-              </button>
-            </div>
           </div>
         </Card>
 
@@ -3176,8 +3627,8 @@ export function ImageCreator({
                 <ImageIcon className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm text-slate-900">Reference Image</h3>
-                <p className="text-[11px] text-gray-400">Upload your own image or fetch from a URL</p>
+                <h3 className="font-semibold text-sm text-slate-900">Additional References</h3>
+                <p className="text-[11px] text-gray-400">Upload your own image or fetch from a URL. Any selected image here becomes the hero visual automatically.</p>
               </div>
             </div>
           </div>
@@ -3234,9 +3685,12 @@ export function ImageCreator({
                 {fetchedSiteImages.map((img, i) => (
                   <button
                     key={i}
-                    onClick={() => setSelectedReferenceImage(
-                      selectedReferenceImage === img.url ? null : img.url
-                    )}
+                    onClick={() => {
+                      setReferenceSelectionTouched(true);
+                      setSelectedReferenceImage(
+                        selectedReferenceImage === img.url ? null : img.url
+                      );
+                    }}
                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
                       selectedReferenceImage === img.url
                         ? 'border-indigo-50 ring-2 ring-indigo-300'
@@ -3268,16 +3722,22 @@ export function ImageCreator({
               />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-slate-900">
-                  {selectedPdfImage ? 'PDF reference selected' : 'Reference image selected'}
+                  {selectedReferenceSummary?.title || (selectedPdfImage ? 'PDF reference selected' : 'Reference image selected')}
                 </p>
                 <p className="text-[10px] text-slate-500 truncate">
-                  {selectedPdfImage?.title || selectedReferenceImage}
+                  {selectedReferenceSummary?.detail || selectedPdfImage?.title || selectedReferenceImage}
+                </p>
+                <p className="mt-0.5 text-[10px] text-indigo-600">
+                  This image is currently driving the hero area.
                 </p>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setSelectedReferenceImage(null)}
+                onClick={() => {
+                  setReferenceSelectionTouched(true);
+                  setSelectedReferenceImage(null);
+                }}
                 className="h-6 w-6 p-0 text-gray-500 hover:text-red-500"
               >
                 <X className="w-3.5 h-3.5" />
@@ -3295,7 +3755,7 @@ export function ImageCreator({
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm text-slate-900">
-                    PDF Extracted Images
+                    PDF Visual Library
                     {effectivePdfImages.length > 0 && (
                       <span className="ml-1.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
                         {effectivePdfImages.length}
@@ -3306,6 +3766,29 @@ export function ImageCreator({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {onUploadPdfFiles && (
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
+                    {isUploadingPdfImages ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    {isUploadingPdfImages ? 'Uploading...' : 'Upload PDF'}
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (files && files.length > 0) {
+                          await handlePdfUploadSelection(Array.from(files));
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                )}
                 {onRefreshEvidence && (
                   <button
                     type="button"
@@ -3320,7 +3803,10 @@ export function ImageCreator({
                 {selectedPdfImage && (
                   <button
                     type="button"
-                    onClick={() => setSelectedReferenceImage(null)}
+                    onClick={() => {
+                      setReferenceSelectionTouched(true);
+                      setSelectedReferenceImage(null);
+                    }}
                     className="text-[10px] text-red-500 hover:text-red-700 font-medium"
                   >
                     Clear
@@ -3329,6 +3815,126 @@ export function ImageCreator({
               </div>
             </div>
 
+            {selectedPdfs.length > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold text-emerald-900">
+                      Selected PDFs for this post
+                    </p>
+                    <p className="mt-1 text-[10px] text-emerald-700">
+                      {selectedPdfs.length} selected PDF{selectedPdfs.length === 1 ? '' : 's'} •{' '}
+                      {selectedPdfVisualCount} extracted visual
+                      {selectedPdfVisualCount === 1 ? '' : 's'} ready in scope
+                    </p>
+                  </div>
+                  {reextractableSelectedPdfIds.length > 0 && onReextractPdfs && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleReextractSelectedPdfs}
+                      disabled={isReextractingPdfImages || isUploadingPdfImages}
+                      className="h-8 border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
+                    >
+                      {isReextractingPdfImages ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          Extracting...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          Extract Missing
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {selectedPdfs.map((pdf) => {
+                    const missingVisuals = pdf.extractedCount <= 0;
+                    const reextractingThisPdf =
+                      pdfLibraryActionState?.kind === 'reextract-pdf' &&
+                      pdfLibraryActionState.targetId === pdf.id;
+
+                    return (
+                      <div
+                        key={pdf.id}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-white/80 bg-white/80 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[11px] font-medium text-slate-800">
+                            {pdf.title}
+                          </p>
+                          <p
+                            className={`mt-1 text-[10px] ${
+                              missingVisuals ? 'text-amber-700' : 'text-emerald-700'
+                            }`}
+                          >
+                            {missingVisuals
+                              ? pdf.canReextract
+                                ? 'No visuals saved yet. Re-extract to populate the image panel.'
+                                : 'No visuals saved yet. Re-upload this PDF because the stored file is unavailable.'
+                              : `${pdf.extractedCount} extracted visual${pdf.extractedCount === 1 ? '' : 's'} ready.`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {pdf.canReextract && onReextractPdfs && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleReextractSinglePdf(pdf.id)}
+                              disabled={isUploadingPdfImages || Boolean(pdfLibraryActionState)}
+                              className="h-7 border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                            >
+                              {reextractingThisPdf ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  Redo
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="mr-1 h-3 w-3" />
+                                  Redo
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          <Badge
+                            className={
+                              missingVisuals
+                                ? 'border border-amber-200 bg-amber-100 text-amber-800'
+                                : 'border border-emerald-200 bg-emerald-100 text-emerald-800'
+                            }
+                          >
+                            {missingVisuals ? 'Needs visuals' : `${pdf.extractedCount} ready`}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(isUploadingPdfImages || isReextractingPdfImages || pdfLibraryActionState) && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>
+                  {isUploadingPdfImages
+                    ? 'Uploading PDFs and extracting visuals...'
+                    : isReextractingPdfImages
+                      ? 'Re-extracting visuals from selected PDFs...'
+                      : pdfLibraryActionState?.kind === 'delete-image'
+                        ? 'Removing extracted image from the library...'
+                        : 'Refreshing extracted visuals from the source PDF...'}
+                </span>
+              </div>
+            )}
+
             {isLoadingPdf ? (
               <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -3336,17 +3942,75 @@ export function ImageCreator({
               </div>
             ) : effectivePdfImages.length > 0 ? (
               <>
+                {previewedPdfImage && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Large Preview
+                        </p>
+                        <p className="mt-1 truncate text-xs font-medium text-slate-800">
+                          {previewedPdfImage.title}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {selectedReferenceImage === previewedPdfImage.signed_url && (
+                          <Badge className="bg-emerald-600/90 text-white text-[9px]">
+                            Hero
+                          </Badge>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setPreviewedPdfImageId(previewedPdfImage.id);
+                            toggleReferenceSelection(previewedPdfImage.signed_url);
+                          }}
+                          className="h-7 px-2 text-[10px]"
+                        >
+                          {selectedReferenceImage === previewedPdfImage.signed_url
+                            ? 'Deselect hero'
+                            : 'Use as hero'}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={previewedPdfImage.signed_url}
+                        alt={previewedPdfImage.title}
+                        className="h-52 w-full object-contain bg-slate-50"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-500">
+                      Hover a thumbnail to preview it here before choosing it as the hero
+                      visual.
+                    </p>
+                  </div>
+                )}
+
                 {/* Grid thumbnail view */}
                 <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto pr-1">
-                  {effectivePdfImages.map((img) => {
+                  {effectivePdfImages.map((img, index) => {
                     const selected = selectedReferenceImage === img.signed_url;
                     const inPrompt = normalizedPrompt.includes(normalizeReferenceText(img.title));
                     const displayTitle = getPdfImageDisplayTitle(img.title);
+                    const isDefaultHero = !referenceSelectionTouched && index === 0;
+                    const deletingThisImage =
+                      pdfLibraryActionState?.kind === 'delete-image' &&
+                      pdfLibraryActionState.targetId === img.id;
+                    const reextractingSourcePdf =
+                      pdfLibraryActionState?.kind === 'reextract-pdf' &&
+                      Boolean(img.sourceEvidenceId) &&
+                      pdfLibraryActionState.targetId === img.sourceEvidenceId;
+                    const tileActionBusy = deletingThisImage || reextractingSourcePdf;
 
                     return (
                       <div
                         key={img.id}
-                        className={`group relative rounded-xl border-2 transition-all cursor-pointer overflow-hidden ${
+                        onMouseEnter={() => setPreviewedPdfImageId(img.id)}
+                        className={`group relative rounded-xl border-2 transition-all overflow-hidden ${
                           selected
                             ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md'
                             : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'
@@ -3354,9 +4018,13 @@ export function ImageCreator({
                       >
                         <button
                           type="button"
-                          onClick={() => toggleReferenceSelection(img.signed_url)}
+                          onClick={() => {
+                            setPreviewedPdfImageId(img.id);
+                            toggleReferenceSelection(img.signed_url);
+                          }}
                           title={`${selected ? 'Deselect' : 'Select'}: ${img.title}`}
                           className="w-full text-left"
+                          onFocus={() => setPreviewedPdfImageId(img.id)}
                         >
                           <div className="relative aspect-square overflow-hidden bg-slate-100">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3381,11 +4049,26 @@ export function ImageCreator({
                                 <CheckCircle2 className="h-6 w-6 text-white drop-shadow-lg" />
                               </div>
                             )}
+                            {isDefaultHero && !selected && (
+                              <div className="absolute top-1 left-1">
+                                <Badge className="bg-emerald-600/85 text-white text-[8px] px-1 py-0">
+                                  Auto hero
+                                </Badge>
+                              </div>
+                            )}
                             {inPrompt && !selected && (
                               <div className="absolute top-1 right-1">
                                 <Badge className="bg-slate-800/70 text-white text-[8px] px-1 py-0">
                                   In prompt
                                 </Badge>
+                              </div>
+                            )}
+                            {tileActionBusy && (
+                              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 backdrop-blur-[1px]">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold text-slate-700 shadow-sm">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  {deletingThisImage ? 'Deleting...' : 'Redoing...'}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -3400,22 +4083,75 @@ export function ImageCreator({
                             )}
                           </div>
                         </button>
-                        <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity p-1 border-t border-slate-100">
+                        <div className="grid grid-cols-4 gap-1 border-t border-slate-100 bg-white p-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPreviewedPdfImageId(img.id)}
+                            disabled={Boolean(pdfLibraryActionState)}
+                            className="h-6 px-1 text-[10px]"
+                            title="Preview this image"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant={inPrompt ? 'secondary' : 'outline'}
-                            onClick={(e) => { e.stopPropagation(); insertPdfImageIntoPrompt(img); }}
-                            className="w-full h-6 text-[10px]"
+                            onClick={() => insertPdfImageIntoPrompt(img)}
+                            disabled={Boolean(pdfLibraryActionState)}
+                            className="h-6 px-1 text-[10px]"
                           >
                             {inPrompt ? '✓ In prompt' : '+ Add to prompt'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              img.sourceEvidenceId
+                                ? void handleReextractSinglePdf(img.sourceEvidenceId)
+                                : undefined
+                            }
+                            disabled={
+                              !img.sourceEvidenceId ||
+                              !onReextractPdfs ||
+                              isUploadingPdfImages ||
+                              Boolean(pdfLibraryActionState)
+                            }
+                            className="h-6 px-1 text-[10px]"
+                          >
+                            {reextractingSourcePdf ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              'Redo'
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleDeletePdfImage(img)}
+                            disabled={!onDeleteEvidenceIds || Boolean(pdfLibraryActionState)}
+                            className="h-6 px-1 text-[10px] text-red-600 hover:text-red-700"
+                          >
+                            {deletingThisImage ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" />
+                            )}
                           </Button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-gray-400">Click an image to select it as the reference. Hover to add it to your creative prompt.</p>
+                <p className="text-[10px] text-gray-400">
+                  Click an image to make it the hero source. Use the tile actions to
+                  add it to the prompt, redo extraction from its source PDF, or remove
+                  that extracted visual.
+                </p>
               </>
             ) : (
               <div className="flex flex-col items-center gap-2.5 py-5 text-center">
@@ -3423,24 +4159,51 @@ export function ImageCreator({
                   <ImageIcon className="w-5 h-5 text-slate-300" />
                 </div>
                 <p className="text-xs font-medium text-gray-500">
-                  No PDF images found
+                  {selectedPdfs.length > 0 ? 'Selected PDFs have no visuals yet' : 'No PDF images found'}
                 </p>
                 <p className="text-[10px] text-gray-400 max-w-[250px]">
-                  Upload a brand PDF — images will be auto-extracted and appear here for use as visual references.
+                  {selectedPdfs.length > 0
+                    ? 'Extract visuals for the selected PDFs, or upload a new PDF. Once extraction finishes, those images will appear here automatically.'
+                    : 'Upload a brand PDF — images will be auto-extracted and appear here for use as visual references.'}
                 </p>
+                {reextractableSelectedPdfIds.length > 0 && onReextractPdfs && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReextractSelectedPdfs}
+                    disabled={isReextractingPdfImages || isUploadingPdfImages}
+                    className="h-9 border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {isReextractingPdfImages ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Extracting visuals...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        Extract visuals from selected PDFs
+                      </>
+                    )}
+                  </Button>
+                )}
                 {onUploadPdfFiles && (
                   <label className="mt-1 cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
-                    <Upload className="w-3.5 h-3.5" />
-                    Upload PDF
+                    {isUploadingPdfImages ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    {isUploadingPdfImages ? 'Uploading...' : 'Upload PDF'}
                     <input
                       type="file"
                       accept=".pdf,application/pdf"
                       multiple
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const files = e.target.files;
                         if (files && files.length > 0) {
-                          onUploadPdfFiles(Array.from(files));
+                          await handlePdfUploadSelection(Array.from(files));
                           e.target.value = '';
                         }
                       }}
@@ -3453,15 +4216,10 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. Your Vision / Creative Prompt Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Your Vision */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
-              <Wand2 className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Your Vision <span className="text-[10px] font-normal text-gray-400">(optional)</span></h3>
-              <p className="text-[11px] text-gray-400">Add extra image instructions without losing alignment to the confirmed post</p>
-            </div>
+        <Card className="p-3.5 space-y-2.5 bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-violet-500" />
+            <h3 className="font-semibold text-sm text-slate-900">Your Vision <span className="text-[10px] font-normal text-gray-400">(optional)</span></h3>
           </div>
           {confirmedPostImageBrief && (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5">
@@ -3522,15 +4280,10 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Text / Wording Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Text on Image */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shadow-sm">
-              <Type className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Text on Image</h3>
-              <p className="text-[11px] text-gray-400">Headline &amp; tagline appear on your generated image</p>
-            </div>
+        <Card className="p-3.5 space-y-2.5 bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Type className="w-4 h-4 text-cyan-500" />
+            <h3 className="font-semibold text-sm text-slate-900">Text on Image</h3>
           </div>
 
           <div className="space-y-3">
@@ -3594,16 +4347,8 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 6. Image Size Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Image Size */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm">
-              <ImageIcon className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-slate-900">Image Size</h3>
-              <p className="text-[11px] text-gray-400">Format for your LinkedIn post</p>
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Image Size</p>
           <div className="grid grid-cols-3 gap-1.5">
             {[
               { id: 'landscape' as const, label: 'Landscape', ratio: '1200x628' },
@@ -3613,58 +4358,52 @@ export function ImageCreator({
               <button
                 key={size.id}
                 onClick={() => setImageAspect(size.id)}
-                className={`px-2 py-2.5 rounded-lg border text-center transition-all text-xs ${
+                className={`px-2 py-2 rounded-lg border text-center transition-all text-xs ${
                   imageAspect === size.id
-                    ? 'border-slate-50 bg-slate-100 ring-1 ring-slate-400'
-                    : 'border-slate-200 bg-white hover:border-slate-400'
+                    ? 'border-purple-300 bg-purple-50 ring-1 ring-purple-200 text-purple-700'
+                    : 'border-slate-200 bg-white hover:border-purple-200 text-slate-600'
                 }`}
               >
-                <p className={`font-semibold text-[11px] ${imageAspect === size.id ? 'text-slate-900' : 'text-slate-700'}`}>{size.label}</p>
-                <p className="text-[9px] text-gray-400 mt-0.5">{size.ratio}</p>
+                <p className="font-semibold text-[11px]">{size.label}</p>
+                <p className="text-[9px] text-slate-400 mt-0.5">{size.ratio}</p>
               </button>
             ))}
           </div>
-        </Card>
+        </div>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Brand Colors Preview Ã¢â€â‚¬Ã¢â€â‚¬ */}
         </div>
         {/* ── Sticky Generate Footer ── */}
-        <div className="flex-shrink-0 border-t border-slate-100 pt-3 space-y-2">
+        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/50 pt-3 pb-1 px-1 space-y-2 rounded-b-xl">
 
-        {brandColors.length > 0 && (
-          <div className="flex items-center gap-2 px-1 py-1">
-            <span className="text-[11px] text-slate-600 font-semibold">Brand colors:</span>
-            <div className="flex gap-1">
-              {brandColors.slice(0, 6).map((color, idx) => (
-                <div
-                  key={idx}
-                  className="w-4 h-4 rounded border border-slate-200/80"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
-            {brandName && (
-              <span className="text-[11px] text-slate-600 font-medium ml-auto">{brandName}</span>
-            )}
-          </div>
+        {/* Compact palette strip in footer */}
+        {normalizedBrandColors.length > 0 && (
+          <div
+            className="h-2 rounded-full overflow-hidden ring-1 ring-slate-200/60"
+            style={{
+              backgroundImage: `linear-gradient(90deg, ${derivedThemePalette.bgStart} 0%, ${derivedThemePalette.bgEnd} 40%, ${derivedThemePalette.accent} 70%, ${derivedThemePalette.support} 100%)`,
+            }}
+          />
         )}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Generate Button Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* ── Image Count Selector ── */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Images to generate</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3 h-3 text-purple-500" />
+            <p className="text-[11px] font-semibold text-slate-700 truncate">
+              {activeTheme.label} &middot; {imageAspect}
+            </p>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
             {[1, 2, 3, 4].map((n) => (
               <button
                 key={n}
                 onClick={() => setBatchSize(n)}
-                className={`w-8 h-7 rounded-md border text-xs font-bold transition-all ${
+                className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
                   batchSize === n
-                    ? 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-fuchsia-200 hover:text-fuchsia-600'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-white text-slate-400 border border-slate-200 hover:border-purple-300 hover:text-purple-500'
                 }`}
               >
                 {n}
@@ -3673,18 +4412,47 @@ export function ImageCreator({
           </div>
         </div>
 
-        {/* ── Active Theme + Generate Summary ── */}
-        <div className="rounded-lg border border-fuchsia-200/50 bg-fuchsia-50/30 px-3 py-1.5 flex items-center gap-2">
-          <Sparkles className="w-3 h-3 text-fuchsia-500 flex-shrink-0" />
-          <p className="text-[11px] text-fuchsia-700 font-medium truncate">
-            {activeTheme.label} &middot; {batchSize} image{batchSize > 1 ? 's' : ''} &middot; {imageAspect}
-          </p>
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Post</p>
+              <p className={`mt-1 text-[11px] font-medium ${hasPostContext ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {hasPostContext ? 'Ready' : 'Needs confirmation'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Hero Visual</p>
+              <p
+                className={`mt-1 text-[11px] font-medium ${
+                  !themeUsesHeroReference || selectedReferenceImage ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                {!themeUsesHeroReference
+                  ? 'Template-managed'
+                  : selectedReferenceImage
+                    ? selectedReferenceSummary?.badge || 'Selected'
+                    : 'Choose one'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">PDF Visuals</p>
+              <p className="mt-1 text-[11px] font-medium text-slate-700">
+                {effectivePdfImages.length} ready
+              </p>
+            </div>
+          </div>
+          {generationBlockedReason && (
+            <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>{generationBlockedReason}</span>
+            </div>
+          )}
         </div>
 
         <Button
           size="lg"
           onClick={handleGenerate}
-          disabled={isGenerating || isApplyingBlend || !hasPostContext || (!activeHeadlineText && !confirmedPostText)}
+          disabled={!canGenerateImage}
           className="w-full h-14 text-base font-bold bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 hover:from-purple-700 hover:via-fuchsia-600 hover:to-pink-600 shadow-lg shadow-purple-200/40 hover:shadow-xl hover:shadow-purple-300/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-xl ring-1 ring-purple-500/20"
         >
           {isGenerating || isApplyingBlend ? (
@@ -3815,22 +4583,19 @@ export function ImageCreator({
               themeId={selectedThemeId}
               previewAspectClass={previewAspectClass}
               uploadedLogo={uploadedLogo}
-              brandColors={brandColors}
+              brandColors={normalizedBrandColors}
               allianceHeaderLogos={allianceHeaderLogos}
               brandName={brandName}
               partnerName={partnerName}
               partnerTagline={partnerTagline}
               activeHeadlineText={activeHeadlineText}
               activeTaglineText={activeTaglineText}
-              allianceBenefitLines={allianceBenefitLines}
+              featureLines={previewFeatureLines}
               footerWebsite={footerWebsite}
               footerEmail={footerEmail}
               selectedReferenceImage={selectedReferenceImage}
-              useReferenceAsHero={useReferenceAsHero}
-              selectedPdfImage={selectedPdfImage}
-              selectedSiteImage={selectedSiteImage}
               hasPostContext={hasPostContext}
-              slotAssignments={slotAssignments}
+              slotAssignments={nonHeroSlotAssignments}
             />
           )}
         </Card>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FileText, Search, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, Loader2, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EvidenceAsset } from '@/lib/studio/types';
+import { EvidenceUploadState } from '@/components/studio/hooks/use-evidence-locker';
 
 type EvidenceModalProps = {
   open: boolean;
@@ -21,6 +22,7 @@ type EvidenceModalProps = {
   selectedEvidenceIds: string[];
   loading: boolean;
   mutating: boolean;
+  uploadState: EvidenceUploadState;
   onToggleEvidence: (evidenceId: string) => void;
   onClearSelection: () => void;
   onDeleteEvidenceIds: (ids: string[]) => Promise<void>;
@@ -53,6 +55,7 @@ export function EvidenceModal({
   selectedEvidenceIds,
   loading,
   mutating,
+  uploadState,
   onToggleEvidence,
   onClearSelection,
   onDeleteEvidenceIds,
@@ -69,6 +72,10 @@ export function EvidenceModal({
   );
 
   const selectedSet = useMemo(() => new Set(selectedEvidenceIds), [selectedEvidenceIds]);
+  const uploadPercent =
+    uploadState.totalFiles > 0
+      ? Math.round((uploadState.completedFiles / uploadState.totalFiles) * 100)
+      : 0;
 
   const filteredEvidence = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -136,39 +143,97 @@ export function EvidenceModal({
                 onChange={(event) => setUploadTitle(event.target.value)}
                 placeholder="Title (optional for a single PDF)"
                 className="border-gray-200/60 bg-white text-gray-900"
+                disabled={uploadState.active}
               />
             </div>
 
+            {uploadState.active ? (
+              <div className="mt-4 rounded-xl border border-cyan-200 bg-white/90 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Loader2 className="h-4 w-4 animate-spin text-cyan-600" />
+                      Uploading PDFs
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {uploadState.completedFiles} of {uploadState.totalFiles} finished
+                      {uploadState.currentFileName ? `, working on ${uploadState.currentFileName}` : ''}.
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                    {uploadPercent}%
+                  </div>
+                </div>
+
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-cyan-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all"
+                    style={{ width: `${uploadPercent}%` }}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {uploadState.successfulFiles} uploaded
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {Math.max(uploadState.totalFiles - uploadState.completedFiles, 0)} remaining
+                  </span>
+                  {uploadState.failedFiles > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {uploadState.failedFiles} failed
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <label
-              className={`mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-sm transition-colors ${
+              className={`mt-3 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-sm transition-colors ${
                 isUploadActive
                   ? 'border-cyan-400 bg-cyan-50 text-cyan-800'
-                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  : uploadState.active
+                    ? 'border-cyan-200 bg-cyan-50/60 text-cyan-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
               }`}
-              tabIndex={0}
+              tabIndex={uploadState.active ? -1 : 0}
               onDragOver={(event) => {
+                if (uploadState.active) return;
                 event.preventDefault();
                 setIsUploadActive(true);
               }}
               onDragLeave={() => setIsUploadActive(false)}
               onDrop={(event) => {
+                if (uploadState.active) return;
                 event.preventDefault();
                 setIsUploadActive(false);
                 void submitUploadFiles(event.dataTransfer.files);
               }}
             >
-              <Upload className="h-5 w-5" />
+              {uploadState.active ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Upload className="h-5 w-5" />
+              )}
               <span className="font-medium">
-                Choose or drop one or more PDF files
+                {uploadState.active
+                  ? 'Uploading PDFs...'
+                  : 'Choose or drop one or more PDF files'}
               </span>
               <span className="text-center text-xs text-gray-500">
-                PDF text is extracted and used as knowledge for post generation.
+                {uploadState.active
+                  ? 'Keep this window open. Uploaded PDFs will appear below as each file completes.'
+                  : 'PDF text is extracted and used as knowledge for post generation.'}
               </span>
               <input
                 type="file"
                 accept="application/pdf,.pdf"
                 multiple
                 className="hidden"
+                disabled={uploadState.active}
                 onChange={(event) => {
                   void submitUploadFiles(event.target.files);
                   event.currentTarget.value = '';
@@ -182,7 +247,9 @@ export function EvidenceModal({
               <div>
                 <p className="text-sm font-semibold text-slate-900">All PDFs</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  {pdfEvidence.length} PDF{pdfEvidence.length === 1 ? '' : 's'} in this knowledge base
+                  {uploadState.active
+                    ? `${pdfEvidence.length} visible so far. New PDFs appear here as each upload finishes.`
+                    : `${pdfEvidence.length} PDF${pdfEvidence.length === 1 ? '' : 's'} in this knowledge base`}
                 </p>
               </div>
               <div className="flex items-center gap-2">

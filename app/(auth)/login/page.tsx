@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedLogo } from '@/components/brand/animated-logo';
+import { getClientAuthRedirectOrigin } from '@/lib/auth/redirect-origin';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
@@ -118,7 +119,7 @@ export default function LoginPage() {
     
     try {
       const supabase = createClient();
-      const callbackUrl = new URL('/auth/callback', window.location.origin);
+      const callbackUrl = new URL('/auth/callback', getClientAuthRedirectOrigin());
       callbackUrl.searchParams.set('next', redirectPath);
 
       const { error: authError } = await supabase.auth.signInWithOAuth({

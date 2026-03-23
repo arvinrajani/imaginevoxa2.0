@@ -132,6 +132,41 @@ const STOP_WORDS = new Set([
 const DOCUMENT_LED_PROMPT_REGEX =
   /\b(pdf|document|documents|file|files|brochure|catalog|catalogue|datasheet|data sheet|spec sheet|manual|deck|summary|summar(?:y|ize|ise)|provided|attached|uploaded)\b/i;
 
+const CHANNEL_WRITING_GUIDANCE: Record<string, string> = {
+  linkedin:
+    "LinkedIn-first. Lead with a strong professional hook, keep the insight depth high, and end with a clear business CTA.",
+  facebook:
+    "Facebook-first. Keep the copy conversational, easy to scan, and community-friendly without losing substance.",
+  instagram:
+    "Instagram-first. Use tighter phrasing, visual momentum, and a caption flow that reads cleanly on mobile.",
+};
+
+const INTERNAL_PROMPT_LINE_PATTERNS = [
+  /^selected pdfs? are the main source/i,
+  /^selected pdf titles:/i,
+  /^selected brand knowledge assets/i,
+  /^knowledge base context:/i,
+  /^evidence locker context:/i,
+  /^document-led instruction:/i,
+  /^primary channel:/i,
+  /^generate copy for these channels:/i,
+  /^generate copy optimized for\b/i,
+  /^keep the strategic message aligned across channels/i,
+  /^optimize for (linkedin|facebook|instagram)/i,
+  /^brand \(exact name to preserve\):/i,
+  /^core prompt:/i,
+];
+
+const INTERNAL_PROMPT_INLINE_PATTERNS = [
+  /Selected PDFs are the main source for this post\.[\s\S]*?write the post from that material\.?/gi,
+  /Use the selected PDFs as the main source of truth for the post topic and proof\.?/gi,
+  /Generate copy for these channels:\s*[^.\n]+\.?/gi,
+  /Generate copy optimized for\s+[a-z]+\./gi,
+  /Keep the strategic message aligned across channels while adjusting formatting and tone\.?/gi,
+  /Optimize for (?:LinkedIn|Facebook|Instagram)[^.\n]*\.?/gi,
+  /Document-led instruction:\s*[^\n]+/gi,
+];
+
 type ToneId =
   | "professional"
   | "conversational"
@@ -169,6 +204,22 @@ type InputLinks = z.infer<typeof inputSchema>["links"];
 type NormalizedLinks = {
   website: string | null;
   chatbot: string | null;
+};
+
+type DocumentSupportFlags = {
+  supportsRealTime: boolean;
+  supportsOutageClaims: boolean;
+  supportsClientEvidence: boolean;
+  sourceLooksMarketing: boolean;
+};
+
+type DocumentContext = {
+  enabled: boolean;
+  focusName: string | null;
+  snippets: string[];
+  defaultHashtags: string[];
+  supportFlags: DocumentSupportFlags;
+  bodyExpansionPool: string[];
 };
 
 const TONE_EMOJI_DEFAULTS: Record<
@@ -294,8 +345,47 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function stripInternalPromptArtifacts(value: string) {
+  let output = value.replace(/\r\n/g, "\n");
+
+  for (const pattern of INTERNAL_PROMPT_INLINE_PATTERNS) {
+    output = output.replace(pattern, " ");
+  }
+
+  output = output
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      return !INTERNAL_PROMPT_LINE_PATTERNS.some((pattern) => pattern.test(trimmed));
+    })
+    .join("\n");
+
+  return output
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeEvidenceTitleForPrompt(value: string) {
+  const cleaned = stripInternalPromptArtifacts(value)
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b[A-Z0-9]{10,}\b/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return cleaned || stripInternalPromptArtifacts(value).trim();
+}
+
+function resolveChannelWritingGuidance(postType: string | undefined) {
+  const normalized = typeof postType === "string" ? postType.trim().toLowerCase() : "";
+  return normalized ? CHANNEL_WRITING_GUIDANCE[normalized] || null : null;
+}
+
 function sanitizePromptText(value: string) {
-  return value
+  return stripInternalPromptArtifacts(value)
     .replace(PLACEHOLDER_TOKEN_REGEX, "")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/__(.*?)__/g, "$1")
@@ -313,7 +403,7 @@ function sanitizePromptText(value: string) {
 }
 
 function cleanGeneratedText(value: string) {
-  return value
+  const normalized = value
     .replace(/\r\n/g, "\n")
     // Convert markdown links to plain-text label + URL for LinkedIn-friendly output.
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, "$1: $2")
@@ -326,6 +416,8 @@ function cleanGeneratedText(value: string) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  return stripInternalPromptArtifacts(normalized);
 }
 
 function normalizeInputUrl(value: unknown): string | null {
@@ -431,7 +523,11 @@ function inferContentIntent(prompt: string, brief?: OutcomeBrief): ContentIntent
   if (/\b(intern|internship|fresher|graduate program|campus)\b/.test(text)) {
     return "internship";
   }
-  if (/\b(launch|feature|product|release|new tool|new platform)\b/.test(text)) {
+  if (
+    /\b(launch|feature|product|release|new tool|new platform|model|sku|circuit-?breaker|switchgear|relay|controller|equipment|motor protection|panel)\b/.test(
+      text
+    )
+  ) {
     return "product";
   }
   if (/\b(webinar|event|workshop|meetup|conference)\b/.test(text)) {
@@ -481,11 +577,256 @@ function toHashtag(token: string) {
   return `#${token[0].toUpperCase()}${token.slice(1)}`;
 }
 
-function normalizeHashtags(tags: unknown): string[] {
-  const defaults = ["#LinkedIn", "#B2B", "#ContentStrategy", "#Marketing"];
+const DOCUMENT_SNIPPET_REJECT_PATTERNS = [
+  /\b(page\s+\d+|selected pdf|knowledge base|content strategy|conversion quality|response quality|pipeline|demand gen)\b/i,
+  /\bhttps?:\/\//i,
+  /\.(pdf|png|jpg|jpeg)$/i,
+];
+
+const DOCUMENT_MARKETING_DRIFT_PATTERNS = [
+  /teams are expected to do more with less/i,
+  /content quality/i,
+  /response quality/i,
+  /conversion quality/i,
+  /\bscorecard\b/i,
+  /\bpipeline\b/i,
+  /\bdemand gen\b/i,
+  /\bcontent strategy\b/i,
+  /\blinkedin\b/i,
+  /\bb2b\b/i,
+  /\bmarketing\b/i,
+];
+
+const DOCUMENT_TESTIMONIAL_PATTERNS = [
+  /\bmany clients report\b/i,
+  /\bour clients\b/i,
+  /\bcustomers report\b/i,
+  /\bcase study\b/i,
+  /\btestimonial\b/i,
+  /\bproven roi\b/i,
+];
+
+const DOCUMENT_OUTAGE_PATTERNS = [
+  /\bpower outages?\b/i,
+  /\boutages?\b/i,
+  /\bbackup power\b/i,
+  /\buptime\b/i,
+  /\bconsistent power delivery\b/i,
+  /\buninterrupt(?:ed|ible)\b/i,
+];
+
+function splitDocumentFragments(text: string) {
+  return text
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((part) => sanitizePromptText(part))
+    .map((part) => part.replace(/^[•\-–—\d.)\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+function inferDocumentFocusName(params: {
+  productName?: string | null;
+  evidenceTitles?: string[];
+  prompt: string;
+}) {
+  if (params.productName) {
+    return sanitizePromptText(params.productName);
+  }
+
+  const firstTitle = params.evidenceTitles?.[0];
+  if (firstTitle) {
+    const cleaned = normalizeEvidenceTitleForPrompt(firstTitle)
+      .replace(
+        /\b(pdf|catalog|catalogue|manual|brochure|datasheet|data sheet|spec sheet|technical guide)\b/gi,
+        ""
+      )
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (cleaned) return cleaned;
+  }
+
+  const promptKeywords = extractKeywords(params.prompt, 4)
+    .filter((token) => !/^\d+$/.test(token))
+    .map(toTitleCase);
+  return promptKeywords.join(" ") || null;
+}
+
+function extractDocumentEvidenceSnippets(texts: string[], limit = 5) {
+  const scored = texts
+    .flatMap((text) => splitDocumentFragments(text))
+    .map((fragment) => {
+      const wordCount = fragment.split(/\s+/).filter(Boolean).length;
+      const lower = fragment.toLowerCase();
+      if (wordCount < 4 || wordCount > 24) return null;
+      if (DOCUMENT_SNIPPET_REJECT_PATTERNS.some((pattern) => pattern.test(fragment))) {
+        return null;
+      }
+
+      let score = 0;
+      if (/\b(power factor|power quality|reactive|compensation|capacitor|controller|protection|voltage|current|temperature|communication|network|diagnosis|monitor|reliability|low power consumption)\b/i.test(fragment)) {
+        score += 6;
+      }
+      if (/\b(improv\w*|enhanc\w*|support\w*|provid\w*|reduc\w*|protect\w*|communicat\w*|network\w*|diagnos\w*|compensat\w*|control\w*)\b/i.test(fragment)) {
+        score += 3;
+      }
+      if (/\d/.test(fragment)) score += 1;
+      if (wordCount >= 6 && wordCount <= 16) score += 1;
+
+      return {
+        fragment,
+        lower,
+        score,
+      };
+    })
+    .filter((item): item is { fragment: string; lower: string; score: number } => Boolean(item))
+    .sort((left, right) => right.score - left.score || left.fragment.length - right.fragment.length);
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const item of scored) {
+    if (seen.has(item.lower)) continue;
+    seen.add(item.lower);
+    unique.push(item.fragment.replace(/[.;:,]+$/, ""));
+    if (unique.length >= limit) break;
+  }
+
+  return unique;
+}
+
+function buildDocumentSupportFlags(sourceText: string): DocumentSupportFlags {
+  const normalized = sourceText.toLowerCase();
+  return {
+    supportsRealTime: /\breal[- ]time\b/.test(normalized),
+    supportsOutageClaims:
+      /\b(outage|uptime|backup power|uninterrupt(?:ed|ible)|consistent power delivery)\b/.test(
+        normalized
+      ),
+    supportsClientEvidence:
+      /\b(client|customer|case study|testimonial|reported|deployment|site result|roi)\b/.test(
+        normalized
+      ),
+    sourceLooksMarketing:
+      /\b(content strategy|conversion quality|response quality|pipeline|demand gen|linkedin marketing|campaign)\b/.test(
+        normalized
+      ),
+  };
+}
+
+function buildDocumentDefaultHashtags(params: {
+  sourceText: string;
+  prompt: string;
+  focusName: string | null;
+}) {
+  const haystack = `${params.focusName || ""} ${params.prompt} ${params.sourceText}`.toLowerCase();
+  const tags: string[] = [];
+  const add = (tag: string) => {
+    if (!tags.includes(tag)) tags.push(tag);
+  };
+
+  if (/\bpower quality\b/.test(haystack)) add("#PowerQuality");
+  if (/\bpower factor\b/.test(haystack)) add("#PowerFactor");
+  if (/\breactive\b/.test(haystack)) add("#ReactivePowerCompensation");
+  if (/\blow[- ]voltage\b/.test(haystack)) add("#LowVoltage");
+  if (/\bcapacitor\b/.test(haystack)) add("#CapacitorBank");
+  if (/\bcontroller|communication|monitor|network\b/.test(haystack)) add("#PowerMonitoring");
+  if (/\belectrical|switchgear|breaker|relay|panel\b/.test(haystack)) add("#ElectricalEngineering");
+  if (/\benergy\b/.test(haystack)) add("#EnergyManagement");
+
+  if (tags.length < 4) {
+    for (const keyword of extractKeywords(`${params.focusName || ""} ${params.prompt}`, 8)) {
+      if (/^\d+$/.test(keyword) || STOP_WORDS.has(keyword)) continue;
+      add(toHashtag(keyword.replace(/[^a-z0-9]/gi, "")));
+      if (tags.length >= 6) break;
+    }
+  }
+
+  return tags.slice(0, 6);
+}
+
+function buildDocumentExpansionPool(params: {
+  focusName: string | null;
+  snippets: string[];
+  supportFlags: DocumentSupportFlags;
+}) {
+  const focus = params.focusName || "the product";
+  const pool = [
+    `${focus} is easier to evaluate when the message stays close to the documented functions, protections, and application fit.`,
+    `For technical buyers, the stronger story is usually the mechanism: what it improves, how it is controlled, and what safeguards are built in.`,
+    params.snippets[0]
+      ? `One of the clearest takeaways from the source material is this: ${params.snippets[0]}.`
+      : null,
+    params.snippets[1]
+      ? `Another practical proof point in the document is ${params.snippets[1].charAt(0).toLowerCase()}${params.snippets[1].slice(1)}.`
+      : null,
+    params.supportFlags.supportsClientEvidence
+      ? null
+      : `That is why a professional post in this category should stay grounded in documented capabilities rather than invented field results.`,
+  ].filter((item): item is string => Boolean(item));
+
+  return pool;
+}
+
+function cleanDocumentLedText(
+  value: string,
+  context: DocumentContext,
+  mode: "headline" | "hook" | "body" | "cta" = "body"
+) {
+  let output = sanitizePromptText(value);
+  if (!output) return output;
+
+  if (!context.supportFlags.supportsRealTime) {
+    output = output.replace(/\breal-time monitoring\b/gi, "status monitoring");
+  }
+
+  if (!context.supportFlags.supportsOutageClaims) {
+    output = output
+      .replace(/\bensure consistent power delivery\b/gi, "support better power quality")
+      .replace(/\bprevent(?:s|ing)? outages?\b/gi, "support more stable operation");
+  }
+
+  const paragraphs = output
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((paragraph) => {
+      if (!context.supportFlags.supportsClientEvidence) {
+        if (DOCUMENT_TESTIMONIAL_PATTERNS.some((pattern) => pattern.test(paragraph))) {
+          return false;
+        }
+      }
+
+      if (!context.supportFlags.supportsOutageClaims) {
+        if (DOCUMENT_OUTAGE_PATTERNS.some((pattern) => pattern.test(paragraph))) {
+          return false;
+        }
+      }
+
+      if (!context.supportFlags.sourceLooksMarketing) {
+        if (DOCUMENT_MARKETING_DRIFT_PATTERNS.some((pattern) => pattern.test(paragraph))) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+  output = paragraphs.join("\n\n").trim();
+
+  if (mode !== "body") {
+    return output;
+  }
+
+  return output
+    .replace(/\bThis is where most strategies fail:[^\n]*/gi, "")
+    .replace(/\bWhen readers can see themselves in the example,[^\n]*/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeHashtags(tags: unknown, defaults: string[] = []): string[] {
+  const baseDefaults = defaults.filter(Boolean);
 
   if (!Array.isArray(tags)) {
-    return defaults.slice(0, 4);
+    return baseDefaults.slice(0, 6);
   }
 
   const normalized = tags
@@ -495,7 +836,7 @@ function normalizeHashtags(tags: unknown): string[] {
     .map((tag) => `#${tag.replace(/\s+/g, "")}`);
 
   const unique = Array.from(new Set(normalized));
-  return Array.from(new Set([...unique, ...defaults])).slice(0, 8);
+  return Array.from(new Set([...unique, ...baseDefaults])).slice(0, 8);
 }
 
 function countWords(text: string) {
@@ -514,24 +855,25 @@ function isDocumentLedPrompt(prompt: string) {
   return DOCUMENT_LED_PROMPT_REGEX.test(prompt);
 }
 
-function ensureBodyLength(body: string, length: LengthId, topic: string) {
+function ensureBodyLength(body: string, length: LengthId, expansionPool?: string[]) {
   const minWords = LENGTH_GUIDANCE[length].minWords;
   let output = sanitizePromptText(body);
 
-  const expansionPool = [
+  const fallbackExpansionPool = [
     `What makes this relevant now is that teams are expected to do more with less while keeping quality high.`,
     `The practical move is to standardize the process so execution does not depend on individual heroics.`,
     `When you document the workflow, coach the team, and review outcomes weekly, the quality curve changes fast.`,
     `A simple scorecard helps: content quality, response quality, and conversion quality over time.`,
-    `If you apply this to ${topic}, you can create repeatable output without sacrificing brand trust.`,
+    `The strongest posts make the claim, the mechanism, and the proof easy for the reader to follow.`,
     `This is where most strategies fail: they focus on volume but ignore positioning and message clarity.`,
     `The better approach is to start from audience needs, then map each paragraph to one decision the reader should make.`,
     `When readers can see themselves in the example, they are much more likely to respond and take action.`,
   ];
 
+  const pool = expansionPool && expansionPool.length ? expansionPool : fallbackExpansionPool;
   let i = 0;
-  while (countWords(output) < minWords && i < expansionPool.length * 3) {
-    output += `\n\n${expansionPool[i % expansionPool.length]}`;
+  while (countWords(output) < minWords && i < pool.length * 3) {
+    output += `\n\n${pool[i % pool.length]}`;
     i += 1;
   }
 
@@ -560,24 +902,37 @@ function buildFallbackOptions(params: {
   experimentAxes: string[];
   outcomeBrief?: OutcomeBrief;
   emojiPolicy: { min: number; max: number; style: "none" | "minimal" | "balanced" };
+  documentContext?: DocumentContext | null;
 }): GeneratedOption[] {
-  const keywords = extractKeywords(params.prompt, 8);
-  const intent = inferContentIntent(params.prompt, params.outcomeBrief);
-  const skills = extractSkillMentions(params.prompt, 6);
-  const primaryTopic = keywords[0] || "content strategy";
-  const secondaryTopic = keywords[1] || "pipeline growth";
+  const normalizedPrompt = stripInternalPromptArtifacts(params.prompt);
+  const keywords = extractKeywords(normalizedPrompt, 8);
+  const intent = inferContentIntent(normalizedPrompt, params.outcomeBrief);
+  const skills = extractSkillMentions(normalizedPrompt, 6);
+  const documentLike =
+    params.documentContext?.enabled || isDocumentLedPrompt(normalizedPrompt) || intent === "product";
+  const primaryTopic =
+    params.documentContext?.focusName || keywords[0] || (documentLike ? "the product" : "content strategy");
+  const secondaryTopic = keywords[1] || (documentLike ? "buyer trust" : "pipeline growth");
   const audience = params.outcomeBrief?.audience || "your ideal buyers";
   const pain =
     params.outcomeBrief?.painPoint ||
-    `inconsistent output and low trust around ${primaryTopic}`;
+    (documentLike
+      ? `generic claims and weak proof around ${primaryTopic}`
+      : `inconsistent output and low trust around ${primaryTopic}`);
   const solution =
     params.outcomeBrief?.solution ||
-    `a clear, repeatable operating system for ${primaryTopic}`;
+    (documentLike
+      ? `a clearer explanation of how ${primaryTopic} is built, where it fits, and why it matters in the real application`
+      : `a clear, repeatable operating system for ${primaryTopic}`);
   const proof =
     params.outcomeBrief?.proof ||
-    "improved engagement quality and stronger conversion intent";
-  const goal = params.outcomeBrief?.goal || "start qualified conversations";
-  const ctaOffer = params.outcomeBrief?.offer || "comment and I will share the exact template";
+    (documentLike
+      ? "stronger buyer understanding and more credible technical conversations"
+      : "improved engagement quality and stronger conversion intent");
+  const goal = params.outcomeBrief?.goal || (documentLike ? "start informed product conversations" : "start qualified conversations");
+  const ctaOffer =
+    params.outcomeBrief?.offer ||
+    (documentLike ? "comment or DM and I will share the key takeaways" : "comment and I will share the exact template");
 
   const toneHooks: Record<ToneId, string[]> = {
     professional: [
@@ -612,13 +967,221 @@ function buildFallbackOptions(params: {
     ],
   };
 
+  const documentToneHooks: Record<ToneId, string[]> = {
+    professional: [
+      `Technical buyers do not need broader claims. They need clarity on how ${primaryTopic} is built and where it fits.`,
+      `The strongest product posts do not lead with hype. They lead with construction details, application fit, and proof.`,
+      `When the source material is technical, the copy should make the engineering value easier to understand, not noisier.`,
+    ],
+    conversational: [
+      `Quick truth: technical products earn trust faster when the explanation is as clear as the engineering behind them.`,
+      `Most buyers are not asking for more adjectives. They are asking what the product does, where it fits, and why it matters.`,
+      `If ${secondaryTopic} feels weak, the fix is usually clearer proof, not louder claims.`,
+    ],
+    inspiring: [
+      `Strong engineering deserves strong explanation.`,
+      `When the product story is grounded in real construction details, buyer confidence moves faster.`,
+      `Clarity is not a copy upgrade. It is a trust multiplier.`,
+    ],
+    provocative: [
+      `Hot take: most product posts fail because they trade proof for polished wording.`,
+      `If the copy sounds smoother than the evidence behind it, buyers notice immediately.`,
+      `The market does not reward technical hype. It rewards clarity, fit, and proof.`,
+    ],
+    educational: [
+      `If you are explaining ${primaryTopic}, start with the construction, the application fit, and the proof.`,
+      `A better technical post makes the buyer's evaluation easier, not busier.`,
+      `Use this sequence: feature, why it matters, then where it fits in the real workflow.`,
+    ],
+    storytelling: [
+      `The turning point was simple: we stopped describing the product in slogans and started explaining it with proof.`,
+      `Once the message matched the source material, the post became much easier to trust.`,
+      `The difference was not more copy. It was better grounding.`,
+    ],
+  };
+
   const frameworkHint = params.framework ? FRAMEWORK_HINTS[params.framework] : null;
   const hashtagPool = Array.from(new Set(keywords.map(toHashtag))).slice(0, 5);
   const variantLabels = ["Core", "Audience-first", "Proof-first", "How-to", "Contrarian"];
 
+  if (params.documentContext?.enabled) {
+    const focusName = params.documentContext.focusName || toTitleCase(primaryTopic);
+    const snippets =
+      params.documentContext.snippets.length > 0
+        ? params.documentContext.snippets
+        : [
+            `${focusName} is documented with clear operating, control, and protection details`,
+            `The source material highlights application fit and practical engineering value`,
+          ];
+    const fallbackHashtags =
+      params.documentContext.defaultHashtags.length > 0
+        ? params.documentContext.defaultHashtags
+        : hashtagPool;
+    const ctaOffer =
+      params.outcomeBrief?.offer ||
+      "comment or DM and I will share the key catalog takeaways";
+    const sentenceCaseSnippet = (value: string) =>
+      value ? `${value.charAt(0).toLowerCase()}${value.slice(1)}` : value;
+    const snippetAt = (offset: number) => snippets[offset % snippets.length];
+
+    return Array.from({ length: params.count }).map((_, index) => {
+      const axis = params.experimentAxes[index % Math.max(1, params.experimentAxes.length)] || "angle";
+      const leadSnippet = snippetAt(index);
+      const detailSnippets = snippets
+        .filter((snippet, snippetIndex) => snippetIndex !== index % snippets.length)
+        .slice(0, 3);
+      const hookSets: Record<ToneId, string[]> = {
+        professional: [
+          `${focusName} deserves a closer look for one reason: ${sentenceCaseSnippet(leadSnippet)}.`,
+          `The strongest product story around ${focusName} is the documented mechanism behind it, not the marketing headline.`,
+          `For technical buyers, credibility starts with what ${focusName} is actually documented to do.`,
+        ],
+        conversational: [
+          `Quick take: ${focusName} is easier to understand once you strip away the vague language and look at the actual functions.`,
+          `What stands out about ${focusName} is not hype. It is how clearly the documented features connect to day-to-day use.`,
+          `If you are evaluating ${focusName}, the useful conversation starts with the documented capabilities, not the adjectives.`,
+        ],
+        inspiring: [
+          `${focusName} is a good reminder that strong engineering speaks loudest when the proof points are clear.`,
+          `When the product details are solid, the message does not need hype. ${focusName} is a good example.`,
+          `Clear documentation makes it much easier to explain where ${focusName} creates value.`,
+        ],
+        provocative: [
+          `Hot take: most product posts say too much and prove too little. ${focusName} should be explained the other way around.`,
+          `If the product claim is broader than the documented function, buyers notice. ${focusName} is better framed through proof.`,
+          `Technical products do not need louder wording. They need sharper proof. ${focusName} is a strong case for that.`,
+        ],
+        educational: [
+          `If you are evaluating ${focusName}, start with the documented functions, protections, and control logic.`,
+          `A practical way to understand ${focusName} is to look at the application value behind each documented feature.`,
+          `The clearest way to explain ${focusName} is feature first, operating value second, application fit third.`,
+        ],
+        storytelling: [
+          `The interesting part about ${focusName} is what happens when you stop describing it in slogans and start with the documented proof points.`,
+          `The closer we look at ${focusName}, the clearer the story becomes: function first, hype second.`,
+          `What makes ${focusName} easier to trust is not the headline. It is the documented detail behind the offer.`,
+        ],
+      };
+
+      const headlineSets: Record<StructureStyle, string[]> = {
+        natural: [
+          `${focusName}: what stands out for technical buyers`,
+          `A closer look at ${focusName}`,
+          `Why ${focusName} deserves more attention`,
+          `${focusName}: documented value, clearer positioning`,
+        ],
+        "problem-solution": [
+          `${focusName}: practical proof over vague claims`,
+          `How ${focusName} addresses real operating demands`,
+          `${focusName}: a more grounded product story`,
+          `Where ${focusName} creates practical value`,
+        ],
+        "story-led": [
+          `What stands out when you look closely at ${focusName}`,
+          `The clearer story behind ${focusName}`,
+          `Why ${focusName} reads stronger through proof`,
+          `The detail that changes how you see ${focusName}`,
+        ],
+        "how-to": [
+          `How to explain ${focusName} professionally`,
+          `A practical way to evaluate ${focusName}`,
+          `How technical buyers can assess ${focusName}`,
+          `${focusName}: a simple product-evaluation lens`,
+        ],
+      };
+
+      const hook = hookSets[params.tone][index % hookSets[params.tone].length];
+      const headline = sanitizePromptText(
+        headlineSets[params.structureStyle][index % headlineSets[params.structureStyle].length]
+      );
+
+      const bodyTemplateByStyle: Record<StructureStyle, string> = {
+        natural: [
+          hook,
+          "",
+          `${focusName} is positioned around documented operating value, not vague promises.`,
+          `What stands out most is ${sentenceCaseSnippet(leadSnippet)}.`,
+          detailSnippets.length ? "Three details worth highlighting:" : null,
+          ...detailSnippets.slice(0, 3).map((snippet, snippetIndex) => `${snippetIndex + 1}) ${snippet}.`),
+          "",
+          `For buyers, that matters because the evaluation usually comes down to application fit, control coverage, and protection confidence.`,
+          frameworkHint ? `Optional frame: ${frameworkHint}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        "problem-solution": [
+          hook,
+          "",
+          `The challenge is rarely attention. It is making the product value concrete and credible.`,
+          `In ${focusName}, the documented answer starts with ${sentenceCaseSnippet(leadSnippet)}.`,
+          detailSnippets.length ? "Supporting proof points:" : null,
+          ...detailSnippets.slice(0, 3).map((snippet, snippetIndex) => `${snippetIndex + 1}) ${snippet}.`),
+          "",
+          `That is the kind of product story technical and commercial decision-makers can evaluate with confidence.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        "story-led": [
+          hook,
+          "",
+          `The more practical reading of ${focusName} is not about bigger claims. It is about clearer proof.`,
+          `That proof shows up in points like ${sentenceCaseSnippet(leadSnippet)}.`,
+          detailSnippets[0] ? `${detailSnippets[0]}.` : null,
+          detailSnippets[1] ? `${detailSnippets[1]}.` : null,
+          "",
+          `That is what makes the positioning feel professional: the message stays close to the documented product behavior.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        "how-to": [
+          hook,
+          "",
+          `A simple way to evaluate ${focusName}:`,
+          `1) Start with the operating value: ${sentenceCaseSnippet(leadSnippet)}.`,
+          `2) Check the supporting details: ${
+            detailSnippets[0] ? sentenceCaseSnippet(detailSnippets[0]) : "look for the documented control and protection functions"
+          }.`,
+          `3) Translate that into buyer value: clearer application fit, more credible technical discussion, and stronger confidence in the offer.`,
+          "",
+          `That sequence keeps the product story professional and grounded.`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+
+      return {
+        headline,
+        hook,
+        body: ensureBodyLength(
+          bodyTemplateByStyle[params.structureStyle],
+          params.length,
+          params.documentContext?.bodyExpansionPool
+        ),
+        cta: sanitizePromptText(
+          params.tone === "provocative"
+            ? `If you think technical products should be positioned differently, challenge this in the comments. If this is useful, ${ctaOffer}.`
+            : `If you are evaluating products in this category, ${ctaOffer}.`
+        ),
+        hashtags: normalizeHashtags(fallbackHashtags, fallbackHashtags),
+        image_prompt: sanitizePromptText(
+          `Professional LinkedIn visual for ${focusName}. Highlight the product category with a premium industrial composition, clear hero subject, subtle technical detail, clean brand-safe lighting, and no text overlay.`
+        ),
+        variant_label: params.experimentMode
+          ? `${variantLabels[index % variantLabels.length]} (${axis})`
+          : variantLabels[index % variantLabels.length],
+        test_hypothesis: params.experimentMode
+          ? `Varying ${axis} will improve qualified engagement.`
+          : undefined,
+        notes: "Document-grounded fallback template used.",
+        risk_flags: [],
+      };
+    });
+  }
+
   return Array.from({ length: params.count }).map((_, index) => {
     const axis = params.experimentAxes[index % Math.max(1, params.experimentAxes.length)] || "angle";
-    const hook = toneHooks[params.tone][index % toneHooks[params.tone].length];
+    const hookPool = documentLike ? documentToneHooks : toneHooks;
+    const hook = hookPool[params.tone][index % hookPool[params.tone].length];
     const hiringLike = intent === "hiring" || intent === "internship";
     const skillList = skills.length
       ? skills.map((skill) => `- ${toTitleCase(skill)}`).join("\n")
@@ -635,34 +1198,42 @@ function buildFallbackOptions(params: {
           ? intent === "internship"
             ? "Career-focused internship opportunities are open"
             : "We are hiring: join our growing team"
-          : `${primaryTopic[0]?.toUpperCase() || "S"}${primaryTopic.slice(1)}: the repeatable playbook`,
+          : documentLike
+            ? `${toTitleCase(primaryTopic)}: what technical buyers should notice`
+            : `${primaryTopic[0]?.toUpperCase() || "S"}${primaryTopic.slice(1)}: the repeatable playbook`,
         hiringLike
           ? "Open positions for practical, growth-focused roles"
-          : `How strong teams execute ${primaryTopic} without complexity`,
+          : documentLike
+            ? `How to explain ${primaryTopic} without generic claims`
+            : `How strong teams execute ${primaryTopic} without complexity`,
         hiringLike
           ? "Build your portfolio with real-world projects"
-          : `A better operating model for ${secondaryTopic}`,
+          : documentLike
+            ? `Why proof matters more than polish in ${primaryTopic}`
+            : `A better operating model for ${secondaryTopic}`,
         hiringLike
           ? "Apply now for high-impact roles"
-          : `What finally made ${primaryTopic} predictable`,
+          : documentLike
+            ? `The product details that deserve more attention`
+            : `What finally made ${primaryTopic} predictable`,
       ],
       "problem-solution": [
-        hiringLike ? "The talent gap is real. Here is how we are solving it." : `From ${pain} to predictable outcomes`,
-        hiringLike ? "Why most candidates miss practical growth opportunities" : `The execution gap behind weak ${secondaryTopic}`,
-        hiringLike ? "A clearer pathway from learning to career outcomes" : `Why ${primaryTopic} fails and how to fix it`,
-        hiringLike ? "Hiring playbook: practical skills first" : `${primaryTopic[0]?.toUpperCase() || "S"}${primaryTopic.slice(1)}: problem to playbook`,
+        hiringLike ? "The talent gap is real. Here is how we are solving it." : documentLike ? `From vague claims to clear proof in ${primaryTopic}` : `From ${pain} to predictable outcomes`,
+        hiringLike ? "Why most candidates miss practical growth opportunities" : documentLike ? `The trust gap behind weak product posts` : `The execution gap behind weak ${secondaryTopic}`,
+        hiringLike ? "A clearer pathway from learning to career outcomes" : documentLike ? `Why technical copy drifts and how to fix it` : `Why ${primaryTopic} fails and how to fix it`,
+        hiringLike ? "Hiring playbook: practical skills first" : documentLike ? `${toTitleCase(primaryTopic)}: proof before polish` : `${primaryTopic[0]?.toUpperCase() || "S"}${primaryTopic.slice(1)}: problem to playbook`,
       ],
       "story-led": [
-        hiringLike ? "How we redesigned our hiring funnel for better fit" : `The week our ${primaryTopic} process finally clicked`,
-        hiringLike ? "A practical path from internship to real outcomes" : `We changed one thing and ${secondaryTopic} improved`,
-        hiringLike ? "What candidates taught us about building better roles" : `What a messy quarter taught us about ${primaryTopic}`,
-        hiringLike ? "The turning point in our recruitment process" : `The turning point in our ${primaryTopic} workflow`,
+        hiringLike ? "How we redesigned our hiring funnel for better fit" : documentLike ? `The moment our ${primaryTopic} message stopped sounding generic` : `The week our ${primaryTopic} process finally clicked`,
+        hiringLike ? "A practical path from internship to real outcomes" : documentLike ? `We changed one thing and buyer clarity improved` : `We changed one thing and ${secondaryTopic} improved`,
+        hiringLike ? "What candidates taught us about building better roles" : documentLike ? `What technical source material taught us about product messaging` : `What a messy quarter taught us about ${primaryTopic}`,
+        hiringLike ? "The turning point in our recruitment process" : documentLike ? `The turning point in how we explained ${primaryTopic}` : `The turning point in our ${primaryTopic} workflow`,
       ],
       "how-to": [
-        hiringLike ? "How to apply for our open positions" : `How to build a repeatable ${primaryTopic} workflow`,
-        hiringLike ? "A practical checklist for applicants" : `A practical 3-step system for ${secondaryTopic}`,
-        hiringLike ? "How we evaluate candidates for impact roles" : `The operator's guide to ${primaryTopic}`,
-        hiringLike ? "Steps to stand out in this hiring cycle" : `Use this framework to improve ${secondaryTopic}`,
+        hiringLike ? "How to apply for our open positions" : documentLike ? `How to turn ${primaryTopic} into a credible LinkedIn post` : `How to build a repeatable ${primaryTopic} workflow`,
+        hiringLike ? "A practical checklist for applicants" : documentLike ? `A practical 3-step system for stronger product proof` : `A practical 3-step system for ${secondaryTopic}`,
+        hiringLike ? "How we evaluate candidates for impact roles" : documentLike ? `The operator's guide to evidence-led product copy` : `The operator's guide to ${primaryTopic}`,
+        hiringLike ? "Steps to stand out in this hiring cycle" : documentLike ? `Use this framework to improve technical positioning` : `Use this framework to improve ${secondaryTopic}`,
       ],
     };
 
@@ -755,11 +1326,7 @@ function buildFallbackOptions(params: {
         .join("\n"),
     };
 
-    const body = ensureBodyLength(
-      bodyTemplateByStyle[params.structureStyle],
-      params.length,
-      primaryTopic
-    );
+    const body = ensureBodyLength(bodyTemplateByStyle[params.structureStyle], params.length);
 
     const cta = sanitizePromptText(
       hiringLike
@@ -813,28 +1380,67 @@ function normalizeOption(params: {
   structureStyle: StructureStyle;
   prompt: string;
   experimentMode: boolean;
+  canonicalBrandName?: string | null;
+  links?: NormalizedLinks;
+  defaultHashtags?: string[];
+  documentContext?: DocumentContext | null;
 }) {
-  const headline = cleanGeneratedText(
-    sanitizePromptText(params.option.headline || params.fallback.headline)
+  const baseHeadline = enforceCanonicalBrandName(
+    cleanGeneratedText(sanitizePromptText(params.option.headline || params.fallback.headline)),
+    params.canonicalBrandName || null
+  );
+  const headline = (
+    params.documentContext?.enabled
+      ? cleanDocumentLedText(baseHeadline, params.documentContext, "headline")
+      : baseHeadline
   ).slice(0, 180);
-  const hook = cleanGeneratedText(sanitizePromptText(params.option.hook || params.fallback.hook));
+  const baseHook = enforceCanonicalBrandName(
+    cleanGeneratedText(sanitizePromptText(params.option.hook || params.fallback.hook)),
+    params.canonicalBrandName || null
+  );
+  const hook = params.documentContext?.enabled
+    ? cleanDocumentLedText(baseHook, params.documentContext, "hook")
+    : baseHook;
 
   const rawBody = cleanGeneratedText(
     sanitizePromptText(params.option.body || params.fallback.body)
   );
-  const cleanedBody =
+  const strippedBody =
     params.structureStyle === "problem-solution"
       ? rawBody
       : stripStructuredScaffolding(rawBody);
-  const body = ensureBodyLength(cleanedBody, params.length, params.prompt);
-
-  const cta = cleanGeneratedText(sanitizePromptText(params.option.cta || params.fallback.cta));
-  const hashtags = normalizeHashtags(params.option.hashtags || params.fallback.hashtags);
-  const image_prompt = cleanGeneratedText(
-    sanitizePromptText(
-      params.option.image_prompt || params.fallback.image_prompt || `${headline}. ${body.slice(0, 180)}`
-    )
+  const cleanedBody = params.documentContext?.enabled
+    ? cleanDocumentLedText(strippedBody, params.documentContext, "body")
+    : strippedBody;
+  const body = ensureBodyLength(
+    enforceCanonicalBrandName(cleanedBody, params.canonicalBrandName || null),
+    params.length,
+    params.documentContext?.bodyExpansionPool
   );
+
+  const baseCta = enforceCanonicalBrandName(
+    cleanGeneratedText(sanitizePromptText(params.option.cta || params.fallback.cta)),
+    params.canonicalBrandName || null
+  );
+  const cta = appendLinksToCta(
+    params.documentContext?.enabled
+      ? cleanDocumentLedText(baseCta, params.documentContext, "cta")
+      : baseCta,
+    params.links || { website: null, chatbot: null }
+  );
+  const hashtags = normalizeHashtags(
+    params.option.hashtags || params.fallback.hashtags,
+    params.defaultHashtags || []
+  );
+  const baseImagePrompt = enforceCanonicalBrandName(
+    cleanGeneratedText(
+      sanitizePromptText(
+        params.option.image_prompt || params.fallback.image_prompt || `${headline}. ${body.slice(0, 180)}`
+      )
+    ),
+    params.canonicalBrandName || null
+  );
+  const image_prompt = baseImagePrompt;
 
   return {
     headline,
@@ -850,10 +1456,13 @@ function normalizeOption(params: {
       : undefined,
     test_hypothesis: params.experimentMode
       ? cleanGeneratedText(
-          sanitizePromptText(
-            params.option.test_hypothesis ||
-              params.fallback.test_hypothesis ||
-              "This variation should improve engagement quality."
+          enforceCanonicalBrandName(
+            sanitizePromptText(
+              params.option.test_hypothesis ||
+                params.fallback.test_hypothesis ||
+                "This variation should improve engagement quality."
+            ),
+            params.canonicalBrandName || null
           )
         )
       : undefined,
@@ -1113,12 +1722,17 @@ export async function POST(request: Request) {
     const lengthGuide = LENGTH_GUIDANCE[length];
     const intent = inferContentIntent(sanitizedPrompt, input.outcomeBrief);
     const skillMentions = extractSkillMentions(sanitizedPrompt, 6);
+    const channelWritingGuidance = resolveChannelWritingGuidance(input.postType);
     const evidenceTitles = selectedEvidenceAssets
       .map((asset) => asContextString(asset.title))
+      .filter((title): title is string => Boolean(title))
+      .map((title) => normalizeEvidenceTitleForPrompt(title))
       .filter(Boolean)
       .slice(0, 8);
+    const hasSelectedPdfEvidence = selectedEvidenceAssets.some((asset) => asset.type === "pdf");
     const documentLedPrompt =
-      selectedEvidenceAssets.length > 0 && isDocumentLedPrompt(sanitizedPrompt);
+      hasSelectedPdfEvidence ||
+      (selectedEvidenceAssets.length > 0 && isDocumentLedPrompt(sanitizedPrompt));
     const relevancePrompt = documentLedPrompt
       ? [sanitizedPrompt, evidenceTitles.join(" "), sources.map((source) => source.title || "").join(" ")]
           .filter(Boolean)
@@ -1153,6 +1767,72 @@ export async function POST(request: Request) {
         }
       }
     }
+
+    const selectedPdfTexts = selectedEvidenceAssets
+      .filter((asset) => asset.type === "pdf")
+      .map((asset) =>
+        evidenceSourceContentMap.get(asset.id) ||
+        asContextString(asset.description) ||
+        asContextString(asset.title) ||
+        ""
+      )
+      .filter(Boolean);
+    const documentSourceText = [
+      sanitizedPrompt,
+      ...evidenceTitles,
+      ...selectedPdfTexts,
+      ...sources
+        .map((source) => source.content || source.content_excerpt || source.title || "")
+        .filter(Boolean),
+    ]
+      .join("\n")
+      .slice(0, MAX_SELECTED_EVIDENCE_CONTENT_CHARS * 2);
+    const documentContext: DocumentContext | null = documentLedPrompt
+      ? {
+          enabled: true,
+          focusName: inferDocumentFocusName({
+            productName: productContext?.name || null,
+            evidenceTitles,
+            prompt: sanitizedPrompt,
+          }),
+          snippets: extractDocumentEvidenceSnippets(
+            [
+              ...selectedPdfTexts,
+              ...selectedEvidenceAssets
+                .map((asset) => asContextString(asset.description) || asContextString(asset.note_text) || "")
+                .filter(Boolean),
+            ],
+            5
+          ),
+          defaultHashtags: buildDocumentDefaultHashtags({
+            sourceText: documentSourceText,
+            prompt: sanitizedPrompt,
+            focusName: inferDocumentFocusName({
+              productName: productContext?.name || null,
+              evidenceTitles,
+              prompt: sanitizedPrompt,
+            }),
+          }),
+          supportFlags: buildDocumentSupportFlags(documentSourceText),
+          bodyExpansionPool: buildDocumentExpansionPool({
+            focusName: inferDocumentFocusName({
+              productName: productContext?.name || null,
+              evidenceTitles,
+              prompt: sanitizedPrompt,
+            }),
+            snippets: extractDocumentEvidenceSnippets(
+              [
+                ...selectedPdfTexts,
+                ...selectedEvidenceAssets
+                  .map((asset) => asContextString(asset.description) || asContextString(asset.note_text) || "")
+                  .filter(Boolean),
+              ],
+              5
+            ),
+            supportFlags: buildDocumentSupportFlags(documentSourceText),
+          }),
+        }
+      : null;
 
     const evidencePrompt = selectedEvidenceAssets.length
       ? [
@@ -1190,13 +1870,16 @@ export async function POST(request: Request) {
       "- Never output placeholders like [audience], [proof], or [X%]. Every claim, stat, and example must be concrete and real.",
       "",
       "CONTENT INTELLIGENCE:",
-      "- When PDF documents or knowledge assets are provided, deeply analyze them: extract key statistics, quotes, case study details, product features, metrics, client outcomes, and unique insights.",
+      "- When PDF documents or knowledge assets are provided, deeply analyze them: extract key statistics, quotes, product features, specifications, protections, application fit, metrics, and any case-study or customer details only when they are actually present.",
       "- Transform raw document data into compelling narrative — do not just summarize. Find the most interesting angle, the surprising stat, the counterintuitive insight.",
       "- Cross-reference multiple sources when available to build a richer, more credible narrative.",
       "- If a PDF contains data points, use specific numbers (e.g., '43% reduction' not 'significant reduction').",
       sources.length || selectedEvidenceAssets.length
         ? "Knowledge grounding rule: treat provided sources/knowledge/PDF content as primary truth. Mine them for specific facts, figures, and examples. If data is uncertain, use conservative wording and avoid invented numbers."
         : "No factual sources are provided. Do not invent statistics, client names, or precise claims.",
+      documentLedPrompt
+        ? "- When selected PDFs are present, keep the post inside the documented product, application, and proof scope even if the user's prompt is short."
+        : null,
       "",
       "WRITING CRAFT:",
       `- Brand naming rule: when you mention the brand/company, use this exact token only: "${canonicalBrandName}". Do not append words like Solutions, Inc, Group, etc unless they already exist in that exact token.`,
@@ -1206,11 +1889,30 @@ export async function POST(request: Request) {
       "- End every post with a clear CTA that tells the reader exactly what to do next.",
       "- Avoid corporate clichés: 'leverage', 'synergy', 'cutting-edge', 'game-changer', 'revolutionize', 'delighted to announce'.",
       "- If the core prompt explicitly names a product, model, SKU, or product family, keep the post centered on that named product even when no structured product dropdown selection was made.",
+      "- Never repeat briefing labels or prompt scaffolding in the final post. Do not echo phrases like 'Selected PDF titles', 'Knowledge base context', 'Primary channel', or 'Core prompt'.",
       selectedEvidenceAssets.length > 0
         ? "- When the prompt names a product and PDF knowledge is attached, pull facts, features, specifications, proof points, and use cases for that product from the PDFs instead of drifting into generic brand copy."
         : null,
       documentLedPrompt
         ? "- Document-led request detected: treat the selected PDFs as the primary topic source. Infer the core product, solution, or narrative from those documents even if the user's prompt wording is generic."
+        : null,
+      documentLedPrompt
+        ? "- For document-led technical product posts, write like a professional product marketer addressing engineers, plant teams, technical buyers, and commercial decision-makers."
+        : null,
+      documentLedPrompt
+        ? "- Never drift into generic content-strategy, pipeline, conversion, or LinkedIn-advice commentary unless the source documents are actually about marketing."
+        : null,
+      documentLedPrompt
+        ? "- Keep every performance claim traceable to the document. If the source does not explicitly support a strong claim, soften it with wording like 'helps', 'supports', or 'is designed to'."
+        : null,
+      documentLedPrompt && !(documentContext?.supportFlags.supportsClientEvidence)
+        ? "- Do not invent customer testimonials, deployment results, ROI claims, or phrases like 'many clients report' unless they are explicitly in the source material."
+        : null,
+      documentLedPrompt && !(documentContext?.supportFlags.supportsOutageClaims)
+        ? "- Do not frame the product as backup power, outage prevention, uptime insurance, or guaranteed continuous power delivery unless the document explicitly says that."
+        : null,
+      documentLedPrompt && !(documentContext?.supportFlags.supportsRealTime)
+        ? "- Do not upgrade communication or status-indicator features into 'real-time monitoring' unless the document explicitly uses that phrase."
         : null,
       `Structure style: ${STRUCTURE_STYLE_GUIDANCE[structureStyle]}`,
       productContext
@@ -1225,6 +1927,7 @@ export async function POST(request: Request) {
       structureStyle !== "problem-solution"
         ? "Do not use rigid section labels like 'The challenge:' or 'The approach:'. Keep prose natural and flowing."
         : null,
+      channelWritingGuidance ? `Channel rule: ${channelWritingGuidance}` : null,
       `Tone directive: ${TONE_DIRECTIVES[tone]}`,
       `Emoji policy: use at least ${emojiPolicy.min} and up to ${emojiPolicy.max} emojis. Style: ${emojiPolicy.style}. Spread emojis naturally across hook, key pointers, and CTA. Never cluster emojis together.`,
       "",
@@ -1260,11 +1963,18 @@ export async function POST(request: Request) {
       evidenceTitles.length
         ? `Selected PDF titles: ${evidenceTitles.join(" | ")}`
         : null,
+      documentContext?.focusName
+        ? `Document-backed product/topic focus: ${documentContext.focusName}`
+        : null,
+      documentContext?.snippets.length
+        ? `Document-supported proof points: ${documentContext.snippets.join(" | ")}`
+        : null,
       `Detected intent: ${intent}`,
       skillMentions.length ? `Detected skill/domain mentions: ${skillMentions.join(", ")}` : null,
       intent === "hiring" || intent === "internship"
         ? "Write like a real LinkedIn recruitment post: clear opportunity summary, role/domain bullets, and practical CTA."
         : null,
+      input.postType ? `Requested channel: ${input.postType}` : null,
       input.postType ? `Post type: ${input.postType}` : null,
       `Requested structure style: ${structureStyle}`,
       frameworkHint ? `Preferred framework: ${frameworkHint}` : null,
@@ -1426,6 +2136,7 @@ export async function POST(request: Request) {
       experimentAxes,
       outcomeBrief: input.outcomeBrief,
       emojiPolicy,
+      documentContext,
     });
 
     if (!options.length || options.length < desiredCount) {
@@ -1445,6 +2156,10 @@ export async function POST(request: Request) {
           structureStyle,
           prompt: relevancePrompt,
           experimentMode,
+          canonicalBrandName,
+          links: normalizedLinks,
+          defaultHashtags: documentContext?.defaultHashtags,
+          documentContext,
         });
       }
 
@@ -1458,57 +2173,22 @@ export async function POST(request: Request) {
         throw new Error("AI output was incomplete. Please regenerate.");
       }
 
-      return {
-        headline: enforceCanonicalBrandName(
-          cleanGeneratedText(sanitizePromptText(option.headline)).slice(0, 180),
-          canonicalBrandName
-        ),
-        hook: enforceCanonicalBrandName(
-          cleanGeneratedText(sanitizePromptText(option.hook || option.headline)),
-          canonicalBrandName
-        ),
-        body: ensureBodyLength(
-          enforceCanonicalBrandName(
-            structureStyle === "problem-solution"
-              ? cleanGeneratedText(sanitizePromptText(option.body))
-              : stripStructuredScaffolding(cleanGeneratedText(sanitizePromptText(option.body))),
-            canonicalBrandName
-          ),
-          length,
-          relevancePrompt
-        ),
-        cta: appendLinksToCta(
-          enforceCanonicalBrandName(cleanGeneratedText(sanitizePromptText(option.cta)), canonicalBrandName),
-          normalizedLinks
-        ),
-        hashtags: normalizeHashtags(option.hashtags),
-        image_prompt: enforceCanonicalBrandName(
-          cleanGeneratedText(sanitizePromptText(option.image_prompt)),
-          canonicalBrandName
-        ),
-        variant_label: experimentMode
-          ? sanitizePromptText(option.variant_label || "Core")
-          : undefined,
-        test_hypothesis: experimentMode
-          ? enforceCanonicalBrandName(
-              sanitizePromptText(
-                option.test_hypothesis || "This variation should improve engagement quality."
-              ),
-              canonicalBrandName
-            )
-          : undefined,
-        risk_flags: Array.isArray(option.risk_flags)
-          ? option.risk_flags
-              .filter((item): item is string => typeof item === "string")
-              .map((item) => sanitizePromptText(item))
-              .filter(Boolean)
-          : [],
-        notes: option.notes ? sanitizePromptText(option.notes) : undefined,
-      } as GeneratedOption;
+      return normalizeOption({
+        option,
+        fallback,
+        length,
+        structureStyle,
+        prompt: relevancePrompt,
+        experimentMode,
+        canonicalBrandName,
+        links: normalizedLinks,
+        defaultHashtags: documentContext?.defaultHashtags,
+        documentContext,
+      });
     });
 
     const lowRelevance = !fallbackUsed && normalized.some(
-      (option) => scoreRelevanceToPrompt(relevancePrompt, option) < 0.2
+      (option) => scoreRelevanceToPrompt(relevancePrompt, option) < (documentLedPrompt ? 0.35 : 0.2)
     );
     const finalOptions = lowRelevance
       ? Array.from({ length: desiredCount }).map((_, index) =>
@@ -1519,6 +2199,10 @@ export async function POST(request: Request) {
             structureStyle,
             prompt: relevancePrompt,
             experimentMode,
+            canonicalBrandName,
+            links: normalizedLinks,
+            defaultHashtags: documentContext?.defaultHashtags,
+            documentContext,
           })
         )
       : normalized;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { PDFParse } from "pdf-parse";
+import { createPdfParser } from "@/lib/pdf-parse-config";
 
 export const runtime = 'nodejs';
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     try {
       // Use pdf-parse to extract text
-      const parser = new PDFParse({ data: buffer });
+      const parser = createPdfParser({ data: buffer });
       const pdfData = await parser.getText();
       await parser.destroy();
       

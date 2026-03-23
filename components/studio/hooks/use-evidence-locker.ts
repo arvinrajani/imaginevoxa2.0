@@ -24,10 +24,20 @@ type UploadKnowledgeSync = {
 };
 
 type UploadEvidencePayload = {
-  evidence?: {
+  evidence?: Partial<EvidenceAsset> & {
     id?: string | null;
   };
+  extracted_evidence?: Array<
+    Partial<EvidenceAsset> & {
+      id?: string | null;
+    }
+  >;
   knowledge_sync?: UploadKnowledgeSync;
+  chatbot_sync?: {
+    status?: string;
+    detail?: string;
+    chunks_created?: number;
+  };
   storage_warning?: string | null;
 };
 
@@ -39,12 +49,24 @@ type ReextractPdfPayload = {
   detail?: string;
 };
 
+export type EvidenceUploadState = {
+  active: boolean;
+  totalFiles: number;
+  completedFiles: number;
+  successfulFiles: number;
+  failedFiles: number;
+  currentFileName: string | null;
+  pendingFileNames: string[];
+  failedFileNames: string[];
+};
+
 type UseEvidenceLockerResult = {
   evidence: EvidenceAsset[];
   selectedEvidenceIds: string[];
   selectedEvidence: EvidenceAsset[];
   loading: boolean;
   mutating: boolean;
+  uploadState: EvidenceUploadState;
   refresh: () => Promise<void>;
   toggleEvidence: (evidenceId: string) => void;
   clearSelection: () => void;
@@ -76,9 +98,94 @@ type UseEvidenceLockerResult = {
 };
 
 const MAX_EVIDENCE_FILE_BYTES = 1024 * 1024 * 1024;
+const EMPTY_UPLOAD_STATE: EvidenceUploadState = {
+  active: false,
+  totalFiles: 0,
+  completedFiles: 0,
+  successfulFiles: 0,
+  failedFiles: 0,
+  currentFileName: null,
+  pendingFileNames: [],
+  failedFileNames: [],
+};
 
 function dedupeStringList(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalizeEvidenceAsset(
+  asset: UploadEvidencePayload['evidence'],
+  fallback: { brandId: string; fileName: string; options?: UploadEvidenceOptions }
+): EvidenceAsset | null {
+  if (!asset || typeof asset.id !== 'string' || !asset.id.trim()) {
+    return null;
+  }
+
+  const type =
+    asset.type === 'image' ||
+    asset.type === 'url' ||
+    asset.type === 'note' ||
+    asset.type === 'pdf'
+      ? asset.type
+      : 'pdf';
+
+  return {
+    id: asset.id,
+    brand_id:
+      typeof asset.brand_id === 'string' && asset.brand_id.trim()
+        ? asset.brand_id
+        : fallback.brandId,
+    owner_user_id:
+      typeof asset.owner_user_id === 'string' ? asset.owner_user_id : '',
+    type,
+    title:
+      typeof asset.title === 'string' && asset.title.trim()
+        ? asset.title
+        : fallback.fileName,
+    description:
+      typeof asset.description === 'string'
+        ? asset.description
+        : fallback.options?.description ?? null,
+    bucket:
+      typeof asset.bucket === 'string' && asset.bucket.trim()
+        ? asset.bucket
+        : fallback.options?.bucket || 'general',
+    tags: Array.isArray(asset.tags)
+      ? asset.tags
+          .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+          .filter(Boolean)
+      : fallback.options?.tags || [],
+    file_path:
+      typeof asset.file_path === 'string' && asset.file_path.trim()
+        ? asset.file_path
+        : null,
+    url:
+      typeof asset.url === 'string' && asset.url.trim()
+        ? asset.url
+        : null,
+    note_text:
+      typeof asset.note_text === 'string' && asset.note_text.trim()
+        ? asset.note_text
+        : null,
+    created_at:
+      typeof asset.created_at === 'string' && asset.created_at.trim()
+        ? asset.created_at
+        : new Date().toISOString(),
+    signed_url:
+      typeof asset.signed_url === 'string' && asset.signed_url.trim()
+        ? asset.signed_url
+        : null,
+  };
+}
+
+function upsertEvidenceAsset(list: EvidenceAsset[], asset: EvidenceAsset) {
+  const next = [asset, ...list.filter((item) => item.id !== asset.id)];
+  next.sort((left, right) => {
+    const rightTime = Date.parse(right.created_at || '') || 0;
+    const leftTime = Date.parse(left.created_at || '') || 0;
+    return rightTime - leftTime;
+  });
+  return next;
 }
 
 export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResult {
@@ -86,6 +193,7 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const [uploadState, setUploadState] = useState<EvidenceUploadState>(EMPTY_UPLOAD_STATE);
 
   const refresh = useCallback(async () => {
     if (!brandId) {
@@ -188,11 +296,31 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             ? payload.evidence.id
             : null;
 
+        const extractedAssets = Array.isArray(payload.extracted_evidence)
+          ? payload.extracted_evidence
+              .map((asset) =>
+                normalizeEvidenceAsset(asset, {
+                  brandId,
+                  fileName: file.name,
+                  options,
+                })
+              )
+              .filter((asset): asset is EvidenceAsset => Boolean(asset))
+          : [];
+
+        if (extractedAssets.length > 0) {
+          setEvidence((prev) =>
+            extractedAssets.reduce((next, asset) => upsertEvidenceAsset(next, asset), prev)
+          );
+        }
+
         if (uploadedEvidenceId) {
           setSelectedEvidenceIds((prev) =>
             dedupeStringList([...prev, uploadedEvidenceId])
           );
         }
+
+        const chatbotIndexed = payload.chatbot_sync?.status === 'indexed';
 
         if (payload.knowledge_sync?.status === 'ingested') {
           const extractedCount = payload.knowledge_sync.image_extraction?.saved_count ?? 0;
@@ -200,11 +328,23 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             toast.success(
               `PDF uploaded, indexed, and ${extractedCount} image${
                 extractedCount === 1 ? '' : 's'
-              } extracted`
+              } extracted`,
+              chatbotIndexed
+                ? {
+                    description:
+                      'Ready for post generation, Image Creator, and chatbot answers.',
+                  }
+                : undefined
             );
           } else {
-            toast.success('PDF uploaded and indexed for post generation');
+            toast.success(
+              chatbotIndexed
+                ? 'PDF uploaded and indexed for post generation + chatbot'
+                : 'PDF uploaded and indexed for post generation'
+            );
           }
+        } else if (chatbotIndexed) {
+          toast.success('PDF uploaded and indexed for chatbot answers');
         } else if (payload.knowledge_sync?.status) {
           const extractedCount = payload.knowledge_sync.image_extraction?.saved_count ?? 0;
           if (extractedCount > 0) {
@@ -249,15 +389,34 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
     async (files: File[], options?: UploadEvidenceOptions) => {
       if (!brandId || files.length === 0) return;
 
+      const fileNames = files.map((file) => file.name);
       setMutating(true);
+      setUploadState({
+        active: true,
+        totalFiles: files.length,
+        completedFiles: 0,
+        successfulFiles: 0,
+        failedFiles: 0,
+        currentFileName: fileNames[0] || null,
+        pendingFileNames: fileNames,
+        failedFileNames: [],
+      });
+
       const uploadedEvidenceIds: string[] = [];
       const failures: string[] = [];
       let indexedPdfCount = 0;
+      let chatbotIndexedCount = 0;
       let extractedImageCount = 0;
       let storageWarningCount = 0;
 
       try {
-        for (const file of files) {
+        for (const [index, file] of files.entries()) {
+          setUploadState((prev) => ({
+            ...prev,
+            currentFileName: file.name,
+            pendingFileNames: fileNames.slice(index),
+          }));
+
           try {
             const payload = await performFileUpload(file, options);
             const uploadedEvidenceId =
@@ -268,8 +427,39 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             if (uploadedEvidenceId) {
               uploadedEvidenceIds.push(uploadedEvidenceId);
             }
+
+            const uploadedAsset = normalizeEvidenceAsset(payload.evidence, {
+              brandId,
+              fileName: file.name,
+              options,
+            });
+            if (uploadedAsset) {
+              setEvidence((prev) => upsertEvidenceAsset(prev, uploadedAsset));
+            }
+
+            const extractedAssets = Array.isArray(payload.extracted_evidence)
+              ? payload.extracted_evidence
+                  .map((asset) =>
+                    normalizeEvidenceAsset(asset, {
+                      brandId,
+                      fileName: file.name,
+                      options,
+                    })
+                  )
+                  .filter((asset): asset is EvidenceAsset => Boolean(asset))
+              : [];
+            if (extractedAssets.length > 0) {
+              setEvidence((prev) =>
+                extractedAssets.reduce((next, asset) => upsertEvidenceAsset(next, asset), prev)
+              );
+            }
+
             if (payload.knowledge_sync?.status === 'ingested') {
               indexedPdfCount += 1;
+            }
+
+            if (payload.chatbot_sync?.status === 'indexed') {
+              chatbotIndexedCount += 1;
             }
 
             extractedImageCount += payload.knowledge_sync?.image_extraction?.saved_count ?? 0;
@@ -277,12 +467,31 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             if (payload.storage_warning) {
               storageWarningCount += 1;
             }
+
+            setUploadState((prev) => ({
+              ...prev,
+              completedFiles: prev.completedFiles + 1,
+              successfulFiles: prev.successfulFiles + 1,
+              currentFileName:
+                index + 1 < fileNames.length ? fileNames[index + 1] || null : null,
+              pendingFileNames: fileNames.slice(index + 1),
+            }));
           } catch (error) {
             failures.push(
               error instanceof Error && error.message
                 ? `${file.name}: ${error.message}`
                 : `${file.name}: Upload failed`
             );
+
+            setUploadState((prev) => ({
+              ...prev,
+              completedFiles: prev.completedFiles + 1,
+              failedFiles: prev.failedFiles + 1,
+              failedFileNames: [...prev.failedFileNames, file.name],
+              currentFileName:
+                index + 1 < fileNames.length ? fileNames[index + 1] || null : null,
+              pendingFileNames: fileNames.slice(index + 1),
+            }));
           }
         }
 
@@ -301,6 +510,10 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
               description:
                 indexedPdfCount > 0
                   ? `${indexedPdfCount} PDF${indexedPdfCount === 1 ? '' : 's'} indexed for post generation${
+                      chatbotIndexedCount > 0
+                        ? `, ${chatbotIndexedCount} ready for chatbot answers`
+                        : ''
+                    }${
                       extractedImageCount > 0
                         ? ` and ${extractedImageCount} extracted image${
                             extractedImageCount === 1 ? '' : 's'
@@ -327,6 +540,7 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
           );
         }
       } finally {
+        setUploadState(EMPTY_UPLOAD_STATE);
         setMutating(false);
       }
     },
@@ -415,6 +629,11 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
         new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))
       );
       if (uniqueIds.length === 0) return;
+      const matchedItems = evidence.filter((item) => uniqueIds.includes(item.id));
+      const allPdfs =
+        matchedItems.length > 0 && matchedItems.every((item) => item.type === 'pdf');
+      const allImages =
+        matchedItems.length > 0 && matchedItems.every((item) => item.type === 'image');
 
       setMutating(true);
       try {
@@ -440,11 +659,27 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
         await refresh();
         setSelectedEvidenceIds((prev) => prev.filter((id) => !uniqueIds.includes(id)));
 
-        toast.success(`${deletedCount} PDF${deletedCount === 1 ? '' : 's'} deleted`, {
+        const deletedLabel = allPdfs
+          ? `PDF${deletedCount === 1 ? '' : 's'}`
+          : allImages
+            ? `extracted image${deletedCount === 1 ? '' : 's'}`
+            : `evidence item${deletedCount === 1 ? '' : 's'}`;
+        const emptyLabel = allPdfs
+          ? 'PDFs'
+          : allImages
+            ? 'extracted images'
+            : 'evidence items';
+        const deletedDescription = allPdfs
+          ? 'Removed from Knowledge Base and post grounding.'
+          : allImages
+            ? 'Removed from the PDF visual library.'
+            : 'Removed from Studio evidence.';
+
+        toast.success(`${deletedCount} ${deletedLabel} deleted`, {
           description:
             deletedCount > 0
-              ? 'Removed from Knowledge Base and post grounding.'
-              : 'No matching PDFs were found to delete.',
+              ? deletedDescription
+              : `No matching ${emptyLabel} were found to delete.`,
         });
       } catch (error) {
         toast.error('Delete failed', {
@@ -454,7 +689,7 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
         setMutating(false);
       }
     },
-    [brandId, refresh]
+    [brandId, evidence, refresh]
   );
 
   const reextractPdfEvidence = useCallback(
@@ -519,6 +754,7 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
     selectedEvidence,
     loading,
     mutating,
+    uploadState,
     refresh,
     toggleEvidence,
     clearSelection,
