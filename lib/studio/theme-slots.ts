@@ -90,12 +90,6 @@ export const THEME_SCHEMAS: Record<string, ThemeSlotSchema> = {
       { id: 'hero', label: 'Editorial Image', x: 3, y: 3, width: 30, height: 94, shape: 'rounded-rect', required: false },
     ],
   },
-  'guided-auto': {
-    themeId: 'guided-auto',
-    imageSlots: [
-      { id: 'hero', label: 'Main Image', x: 4, y: 4, width: 46, height: 92, shape: 'rounded-rect', required: false },
-    ],
-  },
 };
 
 /** Get image slot definitions for a theme (empty array for alliance-poster which uses its own composer) */

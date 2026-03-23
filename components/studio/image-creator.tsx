@@ -144,6 +144,32 @@ function sanitizeVisualText(value: string | null | undefined, maxLength = 160) {
     .slice(0, maxLength);
 }
 
+function wrapPreviewText(value: string | null | undefined, maxChars: number, maxLines = 2) {
+  const cleaned = sanitizeVisualText(value, maxChars * Math.max(2, maxLines));
+  if (!cleaned) return [];
+
+  const words = cleaned.split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+      if (lines.length >= maxLines) break;
+    } else {
+      current = next;
+    }
+  }
+
+  if (lines.length < maxLines && current) {
+    lines.push(current);
+  }
+
+  return lines.slice(0, maxLines);
+}
+
 function normalizeHexColor(value: string | null | undefined) {
   if (typeof value !== 'string') return null;
   const raw = value.trim();
@@ -387,10 +413,10 @@ const THEME_OPTIONS: ThemeOption[] = [
     id: 'guided-auto',
     label: 'AI Guided',
     category: 'General',
-    description: 'Simple mode. Tell AI the context, references, and look you want.',
-    summary: 'Best default when you want ChatGPT-style prompting without extra setup.',
+    description: 'Fully AI-built image mode driven by your vision, references, and brand direction.',
+    summary: 'Best when you want AI to compose the full visual instead of forcing a fixed template.',
     promptHint:
-      'What should the image communicate? Mention the product, audience, partner, campaign context, and any must-show elements.',
+      'Describe the exact image you want: subject, setting, camera angle, composition, lighting, typography treatment, and must-show elements.',
     recommendedTone: 'professional',
     recommendedStyle: 'split-layout',
     recommendedLogoPlacement: 'overlay',
@@ -652,7 +678,7 @@ function ThemePreviewMini({
 }) {
   const ringClass = isActive ? 'ring-1 ring-white/40' : '';
 
-  if (themeId === 'alliance-poster') {
+  if ((themeId as string) === 'alliance-poster') {
     return (
       <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0a1e3d] via-[#0f4180] to-[#0a4a8a] p-2 shadow-sm ${ringClass}`}>
         <div className="flex h-full flex-col">
@@ -727,7 +753,7 @@ function ThemePreviewMini({
     );
   }
 
-  if (themeId === 'industrial-campaign') {
+  if ((themeId as string) === 'industrial-campaign') {
     return (
       <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-950 via-[#13325e] to-[#1d5aa8] p-2 shadow-sm ${ringClass}`}>
         <div className="flex h-full gap-2">
@@ -921,6 +947,9 @@ interface ThemePreviewLargeProps {
   selectedReferenceImage: string | null;
   hasPostContext: boolean;
   slotAssignments?: Record<string, string | null>;
+  customPrompt?: string;
+  selectedToneLabel?: string;
+  selectedStyleLabel?: string;
 }
 
 function ThemePreviewLarge({
@@ -940,21 +969,28 @@ function ThemePreviewLarge({
   selectedReferenceImage,
   hasPostContext,
   slotAssignments,
+  customPrompt,
+  selectedToneLabel,
+  selectedStyleLabel,
 }: ThemePreviewLargeProps) {
   const previewPalette = deriveStudioPalette(brandColors);
   const slotHero = slotAssignments?.['hero'] || null;
   const heroSrc = selectedReferenceImage || slotHero || null;
   const showHero = Boolean(heroSrc);
+  const safeHeadline = sanitizeVisualText(activeHeadlineText || brandName || 'Campaign headline', 96);
+  const safeTagline = sanitizeVisualText(activeTaglineText || partnerTagline || '', 120);
+  const safeFeatureLines = derivePosterBenefitLines(...featureLines).slice(0, 6);
+  const safeFooterWebsite = sanitizeVisualText(footerWebsite || '', 48);
+  const safeFooterEmail = sanitizeVisualText(footerEmail || '', 48);
+  const visionLines = wrapPreviewText(customPrompt || '', 34, 4);
+  const headlineLines = wrapPreviewText(safeHeadline, 28, 2);
+  const allianceTaglineLines = wrapPreviewText(safeTagline || partnerName || '', 24, 2);
+  const previewTone = sanitizeVisualText(selectedToneLabel || '', 24);
+  const previewStyle = sanitizeVisualText(selectedStyleLabel || '', 24);
 
   /** Get the assigned image URL for a named slot */
   const getSlotSrc = (slotId: string) => slotAssignments?.[slotId] || null;
-
-  const generateCta = (
-    <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-2 bg-black/50 backdrop-blur-sm py-2.5 z-20">
-      <Sparkles className="w-3.5 h-3.5 text-white/80" />
-      <span className="text-xs font-semibold text-white/80 tracking-wide">Click Generate to bring this to life</span>
-    </div>
-  );
+  const generateCta = null;
 
   function renderHeroZone(className: string) {
     return (
@@ -1001,13 +1037,96 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Alliance Poster ──────────────────────────────────────────────────────────
-  if (themeId === 'alliance-poster') {
+  if (themeId === 'guided-auto') {
     return (
-      <div
-        className={`${previewAspectClass} overflow-hidden`}
-        style={{ backgroundColor: previewPalette.bgStart }}
-      >
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(circle at 22% 28%, ${previewPalette.accent}26, transparent 22%), radial-gradient(circle at 78% 76%, ${previewPalette.support}20, transparent 18%)` }} />
+
+        <div className="absolute inset-[4%] grid grid-cols-[0.9fr_1.1fr] gap-[3%]">
+          <div className="rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/12">
+                  <Wand2 className="h-4 w-4 text-white/85" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">AI Guided</p>
+                  <p className="text-[12px] font-semibold text-white">Fully AI-composed visual</p>
+                </div>
+              </div>
+              {uploadedLogo && (
+                <div className="h-9 w-16 rounded-lg bg-white/92 p-1">
+                  <img src={uploadedLogo} alt="Brand logo" className="h-full w-full object-contain" />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-[20px] border border-white/10 bg-black/12 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Your Vision</p>
+              <div className="mt-2 space-y-2">
+                {visionLines.length > 0 ? (
+                  visionLines.map((line, index) => (
+                    <p key={`${line}-${index}`} className="text-[13px] leading-relaxed text-white/95">
+                      {line}
+                    </p>
+                  ))
+                ) : (
+                  <>
+                    <p className="text-[13px] leading-relaxed text-white/90">Describe the scene, subject, framing, mood, and must-show details.</p>
+                    <p className="text-[12px] leading-relaxed text-white/55">AI Guided uses this box as the main creative brief instead of forcing a fixed template.</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">Tone</p>
+                <p className="mt-1 text-[12px] font-semibold text-white">{previewTone || 'Professional'}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">Style</p>
+                <p className="mt-1 text-[12px] font-semibold text-white">{previewStyle || 'Split Layout'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm">
+            <div className="relative h-full overflow-hidden rounded-[22px] border border-white/10 bg-slate-950/20">
+              {showHero ? (
+                <img src={heroSrc!} alt="Reference" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-white/55">
+                  <ImageIcon className="h-10 w-10" />
+                  <p className="text-[12px] font-semibold">AI will build the full composition</p>
+                  <p className="max-w-[70%] text-center text-[11px] leading-relaxed text-white/45">
+                    Add a reference image if you want the AI to follow a product or scene more closely.
+                  </p>
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-5 pb-5 pt-12">
+                <div className="max-w-[82%] space-y-1">
+                  {wrapPreviewText(safeHeadline, 24, 2).map((line, index) => (
+                    <p key={`${line}-${index}`} className="text-[24px] font-black leading-tight text-white drop-shadow-sm">
+                      {line}
+                    </p>
+                  ))}
+                  {safeTagline && (
+                    <p className="text-[13px] font-medium text-white/82">{safeTagline}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if ((themeId as string) === 'alliance-poster') {
+    return (
+      <div className={`${previewAspectClass} overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div
           className="relative h-full w-full text-white"
           style={{
@@ -1017,28 +1136,27 @@ function ThemePreviewLarge({
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: `radial-gradient(circle at 20% 45%, ${previewPalette.muted}38, transparent 20%), radial-gradient(circle at 70% 20%, rgba(255,255,255,0.12), transparent 18%)`,
+              backgroundImage: `radial-gradient(circle at 18% 48%, ${previewPalette.muted}30, transparent 26%), radial-gradient(circle at 74% 18%, rgba(255,255,255,0.08), transparent 18%)`,
             }}
           />
-          <div className="absolute inset-x-0 top-0 h-[18%] border-b border-white/20 bg-black/12" />
-          <div
-            className="absolute inset-x-0 bottom-0 h-[11%] border-t border-white/20"
-            style={{ backgroundColor: previewPalette.footer }}
-          />
-          <div className="absolute left-[2%] top-[2.5%] flex h-[11%] w-[19%] items-center justify-center rounded-md bg-white/95 p-2 shadow-lg">
+          <div className="absolute inset-x-0 top-0 h-[17.5%] border-b border-white/20 bg-black/12" />
+          <div className="absolute inset-x-0 bottom-0 h-[8.5%] border-t border-white/20" style={{ backgroundColor: previewPalette.footer }} />
+
+          <div className="absolute left-[3%] top-[3.2%] flex h-[9%] w-[19%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
             {uploadedLogo ? (
               <img src={uploadedLogo} alt="Primary logo preview" className="h-full w-full object-contain" />
             ) : (
               <span className="text-[11px] font-bold text-slate-700">{brandName || 'Your brand'}</span>
             )}
           </div>
+
           <div
-            className="absolute right-[2%] top-[2.5%] flex h-[11%] w-[22%] items-center justify-center gap-2 rounded-md px-2 backdrop-blur-sm"
+            className="absolute right-[2.5%] top-[3.2%] flex h-[9%] w-[22%] items-center justify-center gap-2 rounded-xl px-2 backdrop-blur-sm"
             style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
           >
             {allianceHeaderLogos.length > 0 ? (
               allianceHeaderLogos.map((logo) => (
-                <div key={logo.id} className="flex h-[70%] flex-1 items-center justify-center rounded bg-white/92 p-1">
+                <div key={logo.id} className="flex h-[72%] flex-1 items-center justify-center rounded-lg bg-white/92 p-1">
                   <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
                 </div>
               ))
@@ -1049,29 +1167,192 @@ function ThemePreviewLarge({
               </div>
             )}
           </div>
-          <div className="absolute left-[23%] right-[25%] top-[3.5%] text-center">
-            <p className="text-[24px] font-semibold italic leading-tight text-white drop-shadow-sm">
-              {activeHeadlineText || 'Header line 1'}
-            </p>
-            <p
-              className="mt-1 text-[30px] font-black italic leading-none drop-shadow-sm"
-              style={{ color: previewPalette.accent }}
-            >
-              {activeTaglineText || partnerName || 'Header line 2'}
-            </p>
+
+          <div className="absolute left-[24%] right-[25%] top-[4.2%] text-center">
+            <div className="space-y-1">
+              {headlineLines.map((line, index) => (
+                <p key={`${line}-${index}`} className="text-[19px] font-semibold italic leading-tight text-white drop-shadow-sm">
+                  {line}
+                </p>
+              ))}
+            </div>
+            {allianceTaglineLines.length > 0 && (
+              <div className="mt-1.5 space-y-0.5">
+                {allianceTaglineLines.map((line, index) => (
+                  <p
+                    key={`${line}-${index}`}
+                    className="text-[25px] font-black italic leading-none drop-shadow-sm"
+                    style={{ color: previewPalette.accent }}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="absolute bottom-[14%] left-[3%] top-[22%] w-[29%]">
-            <div className="absolute bottom-[4%] left-[2%] right-[8%] h-[12%] rounded-[18px] bg-white/[18%] blur-sm" />
-            <div className="absolute bottom-[1%] left-[4%] right-[10%] h-[11%] rounded-[18px] border border-white/20 bg-white/10" />
-            <div className="absolute inset-x-[8%] top-[6%] bottom-[7%] flex items-end justify-center rounded-[24px] border border-white/10 bg-white/5">
+
+          <div className="absolute bottom-[11%] left-[5.5%] top-[28%] w-[25%]">
+            <div className="absolute bottom-[4%] left-[1%] right-[8%] h-[10%] rounded-[18px] bg-white/[16%] blur-sm" />
+            <div className="absolute bottom-[1%] left-[3%] right-[9%] h-[10%] rounded-[18px] border border-white/20 bg-white/10" />
+            <div className="absolute inset-0 rounded-[24px] border border-white/10 bg-white/5">
               {renderHeroZone('absolute inset-0 rounded-[24px]')}
             </div>
           </div>
-          <div className="absolute right-[3%] top-[22%] w-[47%] space-y-3">
-            {(featureLines.length > 0 ? featureLines : ['Post proof points appear here']).slice(0, 6).map((line, index) => (
-              <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full border-l-2 border-white/10 bg-slate-950/[28%] px-4 py-2">
+
+          <div className="absolute right-[4%] top-[28%] w-[41%] space-y-2.5">
+            {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Product proof points appear here']).slice(0, 6).map((line, index) => (
+              <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full bg-slate-950/[28%] px-4 py-2.5">
                 <div
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg font-black text-white shadow"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg font-black text-white shadow"
+                  style={{ backgroundColor: previewPalette.support }}
+                >
+                  ✓
+                </div>
+                <p className="text-[12px] font-semibold italic leading-tight text-white">{line}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="absolute inset-x-[6%] bottom-[2.4%] flex items-center justify-center gap-4 text-[12px] font-semibold tracking-wide text-white">
+            <span>{safeFooterWebsite || 'www.yoursite.com'}</span>
+            <span className="text-white/70">|</span>
+            <span>{safeFooterEmail || 'info@yoursite.com'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if ((themeId as string) === 'industrial-campaign') {
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}24, transparent 52%)` }} />
+        <div className="absolute inset-x-0 top-0 h-[12%] border-b border-white/10" style={{ backgroundColor: `${previewPalette.bgStart}88` }} />
+        <div className="absolute inset-x-0 bottom-0 h-[10%]" style={{ backgroundColor: previewPalette.footer }} />
+
+        <div className="absolute left-[3%] top-[3%] flex h-[8%] w-[14%] items-center justify-center rounded-xl bg-white/92 p-2">
+          {uploadedLogo ? (
+            <img src={uploadedLogo} alt="Brand logo" className="h-full w-full object-contain" />
+          ) : (
+            <span className="text-[10px] font-bold text-slate-700">{brandName || 'Brand'}</span>
+          )}
+        </div>
+
+        <div className="absolute bottom-[13%] left-[3%] top-[16%] w-[31%] rounded-[22px] border border-white/10 bg-white/5">
+          {renderHeroZone('absolute inset-0 rounded-[22px]')}
+        </div>
+
+        <div className="absolute bottom-[13%] right-[3%] top-[16%] w-[58%] rounded-[24px] border border-white/10 bg-slate-950/15 px-[4%] py-[5%]">
+          <div className="space-y-1.5">
+            {wrapPreviewText(safeHeadline, 24, 2).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[22px] font-black leading-tight text-white">
+                {line}
+              </p>
+            ))}
+          </div>
+          {safeTagline && (
+            <p className="mt-3 text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: previewPalette.accent }}>
+              {safeTagline}
+            </p>
+          )}
+          <div className="mt-4 h-1 w-[34%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="mt-5 space-y-3">
+            {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']).slice(0, 4).map((line, index) => (
+              <div key={`${line}-${index}`} className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-white" style={{ backgroundColor: previewPalette.support }}>
+                  ✓
+                </div>
+                <p className="text-[12px] font-semibold leading-snug text-white/95">{line}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="absolute inset-x-[6%] bottom-[3.1%] flex items-center justify-between text-[11px] font-semibold tracking-wide text-white/90">
+          <span>{safeFooterWebsite || brandName || 'Brand site'}</span>
+          <span>{safeFooterEmail || partnerName || 'Campaign footer'}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Alliance Poster ──────────────────────────────────────────────────────────
+  if ((themeId as string) === 'alliance-poster') {
+    return (
+      <div className={`${previewAspectClass} overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div
+          className="relative h-full w-full text-white"
+          style={{
+            backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)`,
+          }}
+        >
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `radial-gradient(circle at 20% 48%, ${previewPalette.muted}35, transparent 24%), radial-gradient(circle at 72% 18%, rgba(255,255,255,0.10), transparent 16%)`,
+            }}
+          />
+          <div className="absolute inset-x-0 top-0 h-[17.5%] border-b border-white/20 bg-black/12" />
+          <div className="absolute inset-x-0 bottom-0 h-[8.5%] border-t border-white/20" style={{ backgroundColor: previewPalette.footer }} />
+          <div className="absolute left-[3%] top-[3.2%] flex h-[9%] w-[19%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
+            {uploadedLogo ? (
+              <img src={uploadedLogo} alt="Primary logo preview" className="h-full w-full object-contain" />
+            ) : (
+              <span className="text-[11px] font-bold text-slate-700">{brandName || 'Your brand'}</span>
+            )}
+          </div>
+          <div
+            className="absolute right-[2.5%] top-[3.2%] flex h-[9%] w-[22%] items-center justify-center gap-2 rounded-xl px-2 backdrop-blur-sm"
+            style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
+          >
+            {allianceHeaderLogos.length > 0 ? (
+              allianceHeaderLogos.map((logo) => (
+                <div key={logo.id} className="flex h-[72%] flex-1 items-center justify-center rounded-lg bg-white/92 p-1">
+                  <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
+                </div>
+              ))
+            ) : (
+              <div className="text-center">
+                <p className="text-[11px] font-semibold">{partnerName || 'Partner logo'}</p>
+                <p className="text-[9px] text-white/70">{partnerTagline || 'Alliance header zone'}</p>
+              </div>
+            )}
+          </div>
+          <div className="absolute left-[24%] right-[25%] top-[4.2%] text-center">
+            <div className="space-y-1">
+              {headlineLines.map((line, index) => (
+                <p key={`${line}-${index}`} className="text-[19px] font-semibold italic leading-tight text-white drop-shadow-sm">
+                  {line}
+                </p>
+              ))}
+            </div>
+            {allianceTaglineLines.length > 0 && (
+              <div className="mt-1.5 space-y-0.5">
+                {allianceTaglineLines.map((line, index) => (
+                  <p
+                    key={`${line}-${index}`}
+                    className="text-[25px] font-black italic leading-none drop-shadow-sm"
+                    style={{ color: previewPalette.accent }}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="absolute bottom-[11%] left-[5.5%] top-[28%] w-[25%]">
+            <div className="absolute bottom-[4%] left-[1%] right-[8%] h-[10%] rounded-[18px] bg-white/[16%] blur-sm" />
+            <div className="absolute bottom-[1%] left-[3%] right-[9%] h-[10%] rounded-[18px] border border-white/20 bg-white/10" />
+            <div className="absolute inset-0 rounded-[24px] border border-white/10 bg-white/5">
+              {renderHeroZone('absolute inset-0 rounded-[24px]')}
+            </div>
+          </div>
+          <div className="absolute right-[4%] top-[28%] w-[41%] space-y-2.5">
+            {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Product proof points appear here']).slice(0, 6).map((line, index) => (
+              <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full bg-slate-950/[28%] px-4 py-2.5">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg font-black text-white shadow"
                   style={{ backgroundColor: previewPalette.support }}
                 >
                   ✓
@@ -1163,7 +1444,7 @@ function ThemePreviewLarge({
   }
 
   // ── Industrial Campaign ──────────────────────────────────────────────────────
-  if (themeId === 'industrial-campaign') {
+  if ((themeId as string) === 'industrial-campaign') {
     const benefits = featureLines.length > 0 ? featureLines : ['Post proof points appear here'];
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
@@ -2635,6 +2916,7 @@ export function ImageCreator({
       detail: 'Manual reference upload',
     };
   }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
+  const isAiGuidedTheme = selectedThemeId === 'guided-auto';
   const themePaletteRoles = useMemo(
     () => [
       { label: 'Primary', value: derivedThemePalette.bgStart, hint: 'Main backgrounds and headings' },
@@ -2716,6 +2998,8 @@ export function ImageCreator({
       ? 'Confirm a post in Step 1 first.'
       : !activeHeadlineText && !confirmedPostText
         ? 'Add a headline or use the confirmed post headline.'
+        : isAiGuidedTheme && !customPrompt.trim()
+          ? 'Add Your Vision so AI Guided knows exactly what to build.'
         : themeUsesHeroReference && !selectedReferenceImage
           ? 'Choose a PDF image or uploaded reference for the hero visual.'
           : null;
@@ -3113,22 +3397,26 @@ export function ImageCreator({
             </div>
 
             {/* ── Theme Image Slot Pickers ──────────────────────────────── */}
-            {(themeUsesHeroReference || additionalThemeSlots.length > 0) && (
+            {(themeUsesHeroReference || additionalThemeSlots.length > 0 || (isAiGuidedTheme && Boolean(selectedReferenceImage))) && (
               <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/30 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
                     <p className="text-[11px] font-semibold text-indigo-700">
-                      {themeUsesHeroReference ? 'Hero Visual Source' : `Additional image slots for ${activeTheme.label}`}
+                      {themeUsesHeroReference
+                        ? 'Hero Visual Source'
+                        : isAiGuidedTheme
+                          ? 'Reference Visual'
+                          : `Additional image slots for ${activeTheme.label}`}
                     </p>
                   </div>
-                  {selectedReferenceSummary && themeUsesHeroReference && (
+                  {selectedReferenceSummary && (themeUsesHeroReference || isAiGuidedTheme) && (
                     <Badge className="border border-indigo-200 bg-indigo-100 text-indigo-700 text-[10px]">
                       {selectedReferenceSummary.badge}
                     </Badge>
                   )}
                 </div>
-                {themeUsesHeroReference && (
+                {(themeUsesHeroReference || (isAiGuidedTheme && selectedReferenceImage)) && (
                   <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                     {selectedReferenceImage ? (
                       <>
@@ -3145,7 +3433,9 @@ export function ImageCreator({
                             {selectedReferenceSummary?.detail || selectedReferenceImage}
                           </p>
                           <p className="mt-1 text-[10px] text-indigo-600">
-                            This image fills the hero area automatically for {activeTheme.label}.
+                            {themeUsesHeroReference
+                              ? `This image fills the hero area automatically for ${activeTheme.label}.`
+                              : 'This reference guides the AI composition directly.'}
                           </p>
                         </div>
                         <Button
@@ -4232,11 +4522,28 @@ export function ImageCreator({
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. Your Vision / Creative Prompt Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Your Vision */}
-        <Card className="p-3.5 space-y-2.5 bg-white border border-slate-200 shadow-sm">
+        <Card className={`p-3.5 space-y-2.5 bg-white border shadow-sm ${isAiGuidedTheme ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-violet-500" />
-            <h3 className="font-semibold text-sm text-slate-900">Your Vision <span className="text-[10px] font-normal text-gray-400">(optional)</span></h3>
+            <h3 className="font-semibold text-sm text-slate-900">
+              {isAiGuidedTheme ? 'Your Vision' : 'Creative Notes'} <span className="text-[10px] font-normal text-gray-400">(optional)</span>
+            </h3>
+            {isAiGuidedTheme && (
+              <Badge className="border border-violet-200 bg-violet-100 text-violet-700 text-[9px]">
+                Primary driver for AI Guided
+              </Badge>
+            )}
           </div>
+          {isAiGuidedTheme && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">
+                AI Guided Mode
+              </p>
+              <p className="mt-1 text-xs leading-5 text-violet-900">
+                This theme is fully AI-composed. Describe the scene, subject, framing, lighting, hierarchy, and must-show details here.
+              </p>
+            </div>
+          )}
           {confirmedPostImageBrief && (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-700">
@@ -4251,8 +4558,8 @@ export function ImageCreator({
           <Textarea
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder={`e.g. Show a founder reviewing live analytics on a large screen, premium office lighting, clean headline-safe space at the top, realistic detail, strong navy and teal accents...`}
-            rows={3}
+            placeholder={activeTheme.promptHint || 'Describe the image you want.'}
+            rows={isAiGuidedTheme ? 5 : 3}
             className="text-sm resize-none bg-slate-50 border-slate-300 text-slate-900 placeholder:text-gray-400"
           />
 
@@ -4291,7 +4598,11 @@ export function ImageCreator({
             </div>
           )}
 
-          <p className="text-[10px] text-gray-400">Be specific: mention subject, setting, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.</p>
+          <p className="text-[10px] text-gray-400">
+            {isAiGuidedTheme
+              ? 'Be explicit: subject, camera angle, environment, composition, lighting, text treatment, and any must-show product or logo details.'
+              : 'Be specific: mention subject, setting, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.'}
+          </p>
         </Card>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Text / Wording Ã¢â€â‚¬Ã¢â€â‚¬ */}
@@ -4437,23 +4748,41 @@ export function ImageCreator({
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Hero Visual</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                {isAiGuidedTheme ? 'Your Vision' : 'Hero Visual'}
+              </p>
               <p
                 className={`mt-1 text-[11px] font-medium ${
-                  !themeUsesHeroReference || selectedReferenceImage ? 'text-emerald-700' : 'text-amber-700'
+                  isAiGuidedTheme
+                    ? customPrompt.trim()
+                      ? 'text-emerald-700'
+                      : 'text-amber-700'
+                    : !themeUsesHeroReference || selectedReferenceImage
+                      ? 'text-emerald-700'
+                      : 'text-amber-700'
                 }`}
               >
-                {!themeUsesHeroReference
-                  ? 'Template-managed'
-                  : selectedReferenceImage
-                    ? selectedReferenceSummary?.badge || 'Selected'
-                    : 'Choose one'}
+                {isAiGuidedTheme
+                  ? customPrompt.trim()
+                    ? 'Ready'
+                    : 'Add details'
+                  : !themeUsesHeroReference
+                    ? 'Template-managed'
+                    : selectedReferenceImage
+                      ? selectedReferenceSummary?.badge || 'Selected'
+                      : 'Choose one'}
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">PDF Visuals</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                {isAiGuidedTheme ? 'References' : 'PDF Visuals'}
+              </p>
               <p className="mt-1 text-[11px] font-medium text-slate-700">
-                {effectivePdfImages.length} ready
+                {isAiGuidedTheme
+                  ? selectedReferenceImage
+                    ? selectedReferenceSummary?.badge || 'Selected'
+                    : `${effectivePdfImages.length} ready`
+                  : `${effectivePdfImages.length} ready`}
               </p>
             </div>
           </div>
@@ -4612,6 +4941,9 @@ export function ImageCreator({
               selectedReferenceImage={selectedReferenceImage}
               hasPostContext={hasPostContext}
               slotAssignments={nonHeroSlotAssignments}
+              customPrompt={customPrompt}
+              selectedToneLabel={currentTone?.label}
+              selectedStyleLabel={currentStyle?.label}
             />
           )}
         </Card>

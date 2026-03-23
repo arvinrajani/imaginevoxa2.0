@@ -253,7 +253,7 @@ function buildThemeDirective(themeId: string) {
     'guided-auto': {
       label: 'AI Guided',
       direction:
-        'LAYOUT CONTRACT: The final image has a LEFT panel (4%-50% width) for a hero image and a RIGHT panel (54%-96% width) for headline text, tagline, and a CTA button. Generate a rich, atmospheric background plate using the brand colors as the dominant palette. Keep the left half suitable for a large hero image overlay and the right half dark/moody enough for text readability. Do NOT render any text, panels, or UI elements — the overlay system adds those.',
+        'FREEFORM AI MODE: Build the COMPLETE final image yourself based on the confirmed post, selected tone/style, brand colors, references, and the user\'s "Your Vision" brief. There is NO locked template overlay for this mode. If a reference image is supplied, use it as a strong visual anchor or subject reference, but compose the full poster/image yourself. The result should feel intentional, polished, and fully art-directed rather than like a fixed template.',
     },
     'alliance-poster': {
       label: 'Alliance Poster',
@@ -783,6 +783,7 @@ export async function POST(request: Request) {
       asTrimmedString(brandRow?.name) ||
       '';
     const isAlliancePoster = themeId === 'alliance-poster';
+    const isAiGuided = themeId === 'guided-auto';
     const hasThemeComposition = Boolean(THEME_SCHEMAS[themeId]);
     const effectiveBrandColors = requestedBrandColors.length
       ? requestedBrandColors
@@ -1007,6 +1008,13 @@ Use this as the main explanation of what the user wants the picture to communica
 ${safeCustomPrompt ? `USER IMAGE REQUEST (CREATIVE REFINEMENT):
 "${safeCustomPrompt}"
 Use this to refine the scene, angle, composition, and mood while staying aligned with the post generator brief and confirmed post.\n` : ''}
+
+${isAiGuided ? `AI GUIDED MODE (PRIMARY BEHAVIOR):
+- There is NO fixed poster/template overlay for this request.
+- "Your Vision" is the main creative brief for composition, scene choice, and visual storytelling.
+- Build the full image yourself: structure, hierarchy, focal subject, lighting, and any readable text.
+- If a reference image is supplied, use it as a real subject/style input, not as a hidden slot placeholder.
+- Make the final image feel bespoke and fully art-directed, not template-like.\n` : ''}
 
 CONTENT CONTEXT:
 ${postContext || 'Use the provided headline and tagline as the post message.'}
