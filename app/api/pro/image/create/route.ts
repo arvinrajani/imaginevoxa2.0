@@ -97,12 +97,10 @@ function deriveFeatureBullets(...sources: Array<string | null | undefined>) {
   const lines: string[] = [];
 
   const remember = (value: string) => {
-    const cleaned = value
-      .replace(/^[-*.\d)\s]+/, '')
-      .replace(/^[•✓✔]+\s*/, '')
-      .replace(/\s+/g, ' ')
+    const cleaned = sanitizeDisplayText(value, 96)
+      .replace(/^[-*+.\d)\s]+/, '')
       .trim()
-      .replace(/^["'“”]+|["'“”]+$/g, '');
+      .replace(/^["']+|["']+$/g, '');
     const key = cleaned.toLowerCase();
     if (
       !cleaned ||
@@ -478,6 +476,25 @@ function sanitizePromptText(text: string, maxLength: number): string {
     .slice(0, maxLength);
 }
 
+function sanitizeDisplayText(text: string | null | undefined, maxLength: number): string {
+  if (!text) return '';
+
+  return text
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[\u2022\u00B7•]/g, ' ')
+    .replace(/[✓✔✅☑]/g, ' ')
+    .replace(/[👉➜➤➡]/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
 function decodeDataUriToBuffer(dataUri: string): Buffer | null {
   if (dataUri.length > MAX_DATA_URI_LENGTH) return null;
 
@@ -804,6 +821,15 @@ export async function POST(request: Request) {
       asTrimmedString(brandRow?.website) ||
       '';
     const posterFooterEmail = footerEmail || deriveEmailFromWebsite(posterFooterWebsite) || '';
+    const composedBrandName = sanitizeDisplayText(effectiveBrandName, 48);
+    const composedHeadline = sanitizeDisplayText(displayHeadline, 80);
+    const composedTagline = sanitizeDisplayText(displayTagline, 120);
+    const composedFeatureBullets = posterFeatureBullets
+      .map((line) => sanitizeDisplayText(line, 96))
+      .filter(Boolean)
+      .slice(0, 6);
+    const composedFooterWebsite = sanitizeDisplayText(posterFooterWebsite, 72);
+    const composedFooterEmail = sanitizeDisplayText(posterFooterEmail, 72);
 
     if (!isAlliancePoster && logoPlacement !== 'none' && !hasLogo) {
       return NextResponse.json(
@@ -1425,14 +1451,14 @@ FINAL QUALITY FALLBACK (MANDATORY):
         primaryLogoBuffer,
         secondaryLogoBuffers: posterSecondaryLogoBuffers,
         heroImageBuffer: posterHeroBuffer,
-        headline: displayHeadline,
-        tagline: displayTagline,
-        brandName: effectiveBrandName,
+        headline: composedHeadline,
+        tagline: composedTagline,
+        brandName: composedBrandName,
         partnerName,
         partnerTagline,
-        featureBullets: posterFeatureBullets,
-        footerWebsite: posterFooterWebsite,
-        footerEmail: posterFooterEmail,
+        featureBullets: composedFeatureBullets,
+        footerWebsite: composedFooterWebsite,
+        footerEmail: composedFooterEmail,
         palette: effectiveBrandColors,
       });
 
@@ -1463,13 +1489,13 @@ FINAL QUALITY FALLBACK (MANDATORY):
         themeId,
         slotImageBuffers,
         primaryLogoBuffer,
-        headline: displayHeadline,
-        tagline: displayTagline,
-        brandName: effectiveBrandName,
-        footerWebsite: posterFooterWebsite,
-        footerEmail: posterFooterEmail,
+        headline: composedHeadline,
+        tagline: composedTagline,
+        brandName: composedBrandName,
+        footerWebsite: composedFooterWebsite,
+        footerEmail: composedFooterEmail,
         palette: effectiveBrandColors,
-        featureBullets: posterFeatureBullets,
+        featureBullets: composedFeatureBullets,
         partnerName,
       });
       logoApplied = Boolean(primaryLogoBuffer);
@@ -1503,8 +1529,8 @@ FINAL QUALITY FALLBACK (MANDATORY):
             width: canvas.width,
             height: canvas.height,
             metadata: {
-              headline: displayHeadline,
-              tagline: displayTagline,
+              headline: composedHeadline,
+              tagline: composedTagline,
               theme_id: themeId,
               theme_label: selectedTheme.label,
               tone,
@@ -1519,9 +1545,9 @@ FINAL QUALITY FALLBACK (MANDATORY):
               additional_logo_count: isAlliancePoster ? posterSecondaryLogoBuffers.length : 0,
               partner_name: partnerName || null,
               partner_tagline: partnerTagline || null,
-              footer_website: isAlliancePoster ? posterFooterWebsite || null : null,
-              footer_email: isAlliancePoster ? posterFooterEmail || null : null,
-              feature_bullets: isAlliancePoster ? posterFeatureBullets : [],
+              footer_website: composedFooterWebsite || null,
+              footer_email: composedFooterEmail || null,
+              feature_bullets: composedFeatureBullets,
               logo_source: providedLogoUrl ? 'uploaded' : brandKitLogoUrl ? 'brand-kit' : 'none',
               logo_url_used: effectiveLogoUrl || null,
               base_image_url: baseUrl,

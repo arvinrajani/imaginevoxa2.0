@@ -42,9 +42,30 @@ function escapeXml(value: string) {
     .replace(/'/g, '&apos;');
 }
 
+function sanitizeDisplayText(value: string | null | undefined, maxLength = 160) {
+  if (!value) return '';
+
+  return value
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[\u2022\u00B7•]/g, ' ')
+    .replace(/[✓✔✅☑]/g, ' ')
+    .replace(/[👉➜➤➡]/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
 function wrapText(text: string, maxChars: number) {
-  if (!text) return [];
-  const words = text.split(/\s+/);
+  const normalized = sanitizeDisplayText(text);
+  if (!normalized) return [];
+
+  const words = normalized.split(/\s+/);
   const lines: string[] = [];
   let current = '';
   for (const word of words) {
@@ -58,6 +79,35 @@ function wrapText(text: string, maxChars: number) {
   }
   if (current) lines.push(current);
   return lines;
+}
+
+function firstSafeLine(value: string | null | undefined, fallback = '', maxLength = 72) {
+  const normalized = sanitizeDisplayText(value, maxLength);
+  return normalized || fallback;
+}
+
+function getSafeFeatureBullets(values: string[] | null | undefined, max = 4) {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set<string>();
+  const picked: string[] = [];
+
+  for (const raw of values) {
+    const normalized = sanitizeDisplayText(raw, 96)
+      .replace(/^[-*+]+/, '')
+      .trim();
+
+    if (!normalized) continue;
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push(normalized);
+
+    if (picked.length >= max) break;
+  }
+
+  return picked;
 }
 
 function toDataUri(buffer: Buffer) {
@@ -206,19 +256,32 @@ function buildBrandStorySvg(w: number, h: number, images: Record<string, Prepare
 function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
-  const headline = wrapText(input.headline || input.brandName || 'Campaign Headline', 28).slice(0, 2);
-  const bullets = (input.featureBullets || []).filter(Boolean).slice(0, 4);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
+  const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 24).slice(0, 2);
+  const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
+  const footerLine =
+    [
+      firstSafeLine(input.footerWebsite, '', 48),
+      firstSafeLine(input.footerEmail, '', 48),
+    ]
+      .filter(Boolean)
+      .join(' | ') || safeBrandName;
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.03)}" width="${r(w * 0.13)}" height="${r(h * 0.09)}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${r(w * 0.05)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="800">${escapeXml(input.brandName || 'Brand')}</text>`;
+    : `<text x="${r(w * 0.05)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.03)}" y="${r(h * 0.18)}" width="${r(w * 0.37)}" height="${r(h * 0.70)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.16)}" width="${r(w * 0.30)}" height="${r(h * 0.72)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.44)}" y="${r(h * 0.30 + i * h * 0.06)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.038)}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.24 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.054)}" font-weight="900">${escapeXml(line)}</text>`)
+    .join('');
+
+  const taglineNodes = tagline
+    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.39 + i * h * 0.045)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="600">${escapeXml(line)}</text>`)
     .join('');
 
   const bulletNodes = bullets
@@ -230,21 +293,49 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
     })
     .join('');
 
-  const footerLine = [input.footerWebsite, input.footerEmail].filter(Boolean).join('  |  ');
+  const bulletNodesMarkup = bullets
+    .map((b, i) => {
+      const boxX = r(w * 0.42);
+      const boxSize = r(w * 0.038);
+      const baseY = r(h * 0.50 + i * h * 0.11);
+      const wrapped = wrapText(b, 28).slice(0, 2);
+      const checkStroke = Math.max(3, Math.round(boxSize * 0.13));
+      const checkPath = [
+        `M ${boxX + Math.round(boxSize * 0.26)} ${baseY + Math.round(boxSize * 0.55)}`,
+        `L ${boxX + Math.round(boxSize * 0.43)} ${baseY + Math.round(boxSize * 0.72)}`,
+        `L ${boxX + Math.round(boxSize * 0.76)} ${baseY + Math.round(boxSize * 0.30)}`,
+      ].join(' ');
+
+      const textNodes = wrapped
+        .map((line, lineIndex) => {
+          const lineY = baseY + Math.round(boxSize * 0.36) + lineIndex * Math.round(h * 0.038);
+          return `<text x="${r(w * 0.48)}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.024)}" font-weight="700">${escapeXml(line)}</text>`;
+        })
+        .join('');
+
+      return `
+        <rect x="${boxX}" y="${baseY}" width="${boxSize}" height="${boxSize}" rx="${Math.max(8, Math.round(boxSize * 0.22))}" fill="${c.support}" />
+        <path d="${checkPath}" fill="none" stroke="${c.bgStart}" stroke-width="${checkStroke}" stroke-linecap="round" stroke-linejoin="round" />
+        ${textNodes}
+      `;
+    })
+    .join('');
 
   return svg(w, h, `
     <defs><linearGradient id="indGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="100%" stop-color="${c.bgEnd}" /></linearGradient></defs>
     <rect width="${w}" height="${h}" fill="url(#indGrad)" />
-    <rect width="${w}" height="${r(h * 0.15)}" fill="${c.bgStart}" fill-opacity="0.40" />
+    <rect width="${w}" height="${r(h * 0.12)}" fill="${c.bgStart}" fill-opacity="0.42" />
     <rect y="${h - r(h * 0.10)}" width="${w}" height="${r(h * 0.10)}" fill="${c.footer}" />
     <rect x="${r(w * 0.03)}" y="${r(h * 0.03)}" width="${r(w * 0.14)}" height="${r(h * 0.09)}" rx="8" fill="${c.surface}" fill-opacity="0.95" />
     ${logoNode}
-    <rect x="${r(w * 0.03)}" y="${r(h * 0.18)}" width="${r(w * 0.37)}" height="${r(h * 0.70)}" rx="12" fill="${c.surface}" fill-opacity="0.05" stroke="${c.muted}" stroke-opacity="0.10" />
+    <rect x="${r(w * 0.03)}" y="${r(h * 0.16)}" width="${r(w * 0.31)}" height="${r(h * 0.72)}" rx="18" fill="${c.surface}" fill-opacity="0.06" stroke="${c.muted}" stroke-opacity="0.18" />
     ${heroNode}
+    <rect x="${r(w * 0.39)}" y="${r(h * 0.16)}" width="${r(w * 0.56)}" height="${r(h * 0.72)}" rx="22" fill="${c.bgStart}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.18" />
     ${headlineNodes}
-    <rect x="${r(w * 0.44)}" y="${r(h * 0.42)}" width="${r(w * 0.3)}" height="4" rx="2" fill="${c.accent}" />
-    ${bulletNodes}
-    <text x="${r(w * 0.50)}" y="${h - r(h * 0.035)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.02)}" font-weight="700" text-anchor="middle">${escapeXml(footerLine)}</text>
+    ${taglineNodes}
+    <rect x="${r(w * 0.42)}" y="${r(h * 0.45)}" width="${r(w * 0.30)}" height="4" rx="2" fill="${c.accent}" />
+    ${bulletNodesMarkup}
+    <text x="${r(w * 0.50)}" y="${h - r(h * 0.035)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="700" text-anchor="middle">${escapeXml(footerLine)}</text>
   `);
 }
 

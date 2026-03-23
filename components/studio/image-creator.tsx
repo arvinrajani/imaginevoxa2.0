@@ -111,10 +111,7 @@ function deriveWordingFromPost(postText?: string) {
   const secondLine = lines.find((line, index) => index > 0 && line.length > 10) || '';
 
   const clean = (text: string) =>
-    text
-      .replace(/^[-*\d.)\s]+/, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    sanitizeVisualText(text, 120).replace(/^[-*\d.)\s]+/, '').trim();
 
   return {
     headline: clean(firstLine).slice(0, 80),
@@ -127,6 +124,24 @@ function normalizeReferenceText(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+function sanitizeVisualText(value: string | null | undefined, maxLength = 160) {
+  if (!value) return '';
+
+  return value
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[\u2022\u00B7•]/g, ' ')
+    .replace(/[✓✔✅☑]/g, ' ')
+    .replace(/[👉➜➤➡]/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
 }
 
 function normalizeHexColor(value: string | null | undefined) {
@@ -584,6 +599,7 @@ function derivePosterBenefitLines(...sources: Array<string | undefined>) {
   const picked: string[] = [];
 
   const remember = (value: string) => {
+    value = sanitizeVisualText(value, 96);
     const cleaned = value
       .replace(/^[-*.\d)\s]+/, '')
       .replace(/^[•✓✔]+\s*/, '')
