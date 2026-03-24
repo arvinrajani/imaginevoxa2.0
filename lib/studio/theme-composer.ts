@@ -364,30 +364,25 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
   const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 20).slice(0, 3);
   const tagline = wrapText(input.tagline || '', 28).slice(0, 2);
-  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
-  const footerLine =
-    [
-      firstSafeLine(input.footerWebsite, '', 48),
-      firstSafeLine(input.footerEmail, '', 48),
-    ]
-      .filter(Boolean)
-      .join(' | ') || safeBrandName;
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
+  const footerWebsite = firstSafeLine(input.footerWebsite, safeBrandName, 46);
+  const footerEmail = firstSafeLine(input.footerEmail, 'info@yoursite.com', 34);
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.03)}" width="${r(w * 0.13)}" height="${r(h * 0.09)}" preserveAspectRatio="xMidYMid meet" />`
     : `<text x="${r(w * 0.05)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.06)}" y="${r(h * 0.23)}" width="${r(w * 0.22)}" height="${r(h * 0.52)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.055)}" y="${r(h * 0.22)}" width="${r(w * 0.25)}" height="${r(h * 0.56)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const headlineFontSize = headline.length >= 3 ? r(w * 0.036) : r(w * 0.040);
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.22 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.405)}" y="${r(h * 0.22 + i * h * 0.068)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.42 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="600">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.405)}" y="${r(h * 0.41 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" letter-spacing="${r(w * 0.0015)}">${escapeXml(line)}</text>`)
     .join('');
 
   const bulletNodes = bullets
@@ -402,9 +397,9 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
 
   const bulletNodesMarkup = bullets
     .map((b, i) => {
-      const boxX = r(w * 0.42);
+      const boxX = r(w * 0.405);
       const boxSize = r(w * 0.036);
-      const baseY = r(h * 0.53 + i * h * 0.11);
+      const baseY = r(h * 0.54 + i * h * 0.10);
       const wrapped = wrapText(b, 24).slice(0, 2);
       const checkStroke = Math.max(3, Math.round(boxSize * 0.13));
       const checkPath = [
@@ -416,7 +411,7 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
       const textNodes = wrapped
         .map((line, lineIndex) => {
           const lineY = baseY + Math.round(boxSize * 0.34) + lineIndex * Math.round(h * 0.036);
-          return `<text x="${r(w * 0.475)}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700">${escapeXml(line)}</text>`;
+          return `<text x="${r(w * 0.46)}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700">${escapeXml(line)}</text>`;
         })
         .join('');
 
@@ -435,14 +430,15 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
     <rect y="${h - r(h * 0.10)}" width="${w}" height="${r(h * 0.10)}" fill="${c.footer}" />
     <rect x="${r(w * 0.03)}" y="${r(h * 0.03)}" width="${r(w * 0.14)}" height="${r(h * 0.09)}" rx="8" fill="${c.surface}" fill-opacity="0.95" />
     ${logoNode}
-    <rect x="${r(w * 0.03)}" y="${r(h * 0.16)}" width="${r(w * 0.30)}" height="${r(h * 0.70)}" rx="18" fill="${c.surface}" fill-opacity="0.06" stroke="${c.muted}" stroke-opacity="0.18" />
+    <rect x="${r(w * 0.03)}" y="${r(h * 0.16)}" width="${r(w * 0.31)}" height="${r(h * 0.70)}" rx="20" fill="${c.surface}" fill-opacity="0.08" stroke="${c.muted}" stroke-opacity="0.18" />
     ${heroNode}
-    <rect x="${r(w * 0.39)}" y="${r(h * 0.16)}" width="${r(w * 0.56)}" height="${r(h * 0.70)}" rx="22" fill="${c.bgStart}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.18" />
+    <rect x="${r(w * 0.38)}" y="${r(h * 0.17)}" width="${r(w * 0.58)}" height="${r(h * 0.67)}" rx="24" fill="${c.bgStart}" fill-opacity="0.24" stroke="${c.muted}" stroke-opacity="0.18" />
     ${headlineNodes}
     ${taglineNodes}
-    <rect x="${r(w * 0.42)}" y="${r(h * 0.47)}" width="${r(w * 0.24)}" height="4" rx="2" fill="${c.accent}" />
+    <rect x="${r(w * 0.405)}" y="${r(h * 0.47)}" width="${r(w * 0.22)}" height="4" rx="2" fill="${c.accent}" />
     ${bulletNodesMarkup}
-    <text x="${r(w * 0.50)}" y="${h - r(h * 0.040)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">${escapeXml(footerLine)}</text>
+    <text x="${r(w * 0.05)}" y="${h - r(h * 0.040)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="700">${escapeXml(footerWebsite)}</text>
+    <text x="${w - r(w * 0.05)}" y="${h - r(h * 0.040)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="700" text-anchor="end">${escapeXml(footerEmail)}</text>
   `);
 }
 

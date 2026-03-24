@@ -293,6 +293,63 @@ function parsePdfImageSizeHint(description?: string | null) {
   };
 }
 
+function getPdfImageKind(image: {
+  title: string;
+  description?: string | null;
+  tags?: string[] | null;
+}) {
+  const normalized = image.title.toLowerCase();
+  const description = (image.description || '').toLowerCase();
+  const tags = Array.isArray(image.tags) ? image.tags : [];
+
+  const isRenderedPage =
+    tags.includes('pdf-rendered-page') ||
+    tags.includes('pdf-page-1') ||
+    /(?:cover|front|page)\s+\d*\s*visual/.test(normalized) ||
+    description.includes('rendered page');
+
+  const isEmbedded =
+    tags.includes('pdf-embedded-image') ||
+    normalized.includes('extracted image') ||
+    description.includes('embedded image');
+
+  if (isEmbedded && !isRenderedPage) return 'embedded';
+  if (isRenderedPage && /cover|front page/.test(normalized)) return 'cover-page';
+  if (isRenderedPage) return 'page';
+  return 'unknown';
+}
+
+function isPdfPageLike(image: {
+  title: string;
+  description?: string | null;
+  tags?: string[] | null;
+}) {
+  const kind = getPdfImageKind(image);
+  return kind === 'page' || kind === 'cover-page';
+}
+
+function getPdfImageMetaLabel(image: {
+  title: string;
+  description?: string | null;
+  tags?: string[] | null;
+}) {
+  const sizeHint = parsePdfImageSizeHint(image.description);
+  const kind = getPdfImageKind(image);
+  const kindLabel =
+    kind === 'embedded'
+      ? 'Extracted visual'
+      : kind === 'cover-page'
+        ? 'Cover page'
+        : kind === 'page'
+          ? 'Document page'
+          : 'PDF visual';
+
+  return {
+    kindLabel,
+    sizeLabel: sizeHint ? `${sizeHint.width}×${sizeHint.height}` : null,
+  };
+}
+
 function getPdfImagePriorityScore(image: {
   title: string;
   description?: string | null;
@@ -301,17 +358,16 @@ function getPdfImagePriorityScore(image: {
   const normalized = image.title.toLowerCase();
   const tags = Array.isArray(image.tags) ? image.tags : [];
   const sizeHint = parsePdfImageSizeHint(image.description);
+  const kind = getPdfImageKind(image);
 
   let score = 0;
-  if (normalized.includes('page 1 visual') || normalized.includes('front page visual') || normalized.includes('cover page visual')) {
-    score += 360;
-  } else if (/page\s+\d+\s+visual/.test(normalized)) {
-    score += 260;
-  }
+  if (kind === 'embedded') score += 220;
+  if (kind === 'cover-page') score -= 40;
+  if (kind === 'page') score -= 180;
 
-  if (tags.includes('pdf-page-1')) score += 220;
-  if (tags.includes('pdf-rendered-page')) score += 180;
-  if (tags.includes('pdf-embedded-image')) score += 40;
+  if (tags.includes('pdf-page-1')) score += 30;
+  if (tags.includes('pdf-rendered-page')) score -= 80;
+  if (tags.includes('pdf-embedded-image')) score += 70;
 
   if (sizeHint) {
     if (sizeHint.area >= 260000) score += 220;
@@ -332,6 +388,10 @@ function getPdfImagePriorityScore(image: {
   }
 
   if (normalized.includes('extracted image') && !sizeHint) {
+    score -= 120;
+  }
+
+  if (kind === 'page' && sizeHint && sizeHint.area > 900000) {
     score -= 120;
   }
 
@@ -369,11 +429,15 @@ function sortPdfImageReferences<
 
   const strongCandidates = sorted.filter((image) => getPdfImagePriorityScore(image) >= 120);
   if (strongCandidates.length >= 6) {
-    return strongCandidates;
+    return strongCandidates.slice(0, 24);
   }
 
   const usableCandidates = sorted.filter((image) => getPdfImagePriorityScore(image) >= 0);
-  return usableCandidates.length >= 6 ? usableCandidates : sorted;
+  if (usableCandidates.length >= 6) {
+    return usableCandidates.slice(0, 24);
+  }
+
+  return sorted.slice(0, 24);
 }
 
 function getPdfSourceEvidenceId(tags?: string[] | null) {
@@ -1153,15 +1217,31 @@ function ThemePreviewLarge({
   const getSlotSrc = (slotId: string) => slotAssignments?.[slotId] || null;
   const generateCta = null;
 
-  function renderHeroZone(className: string) {
+  function renderHeroZone(
+    className: string,
+    options?: {
+      fit?: 'contain' | 'cover';
+      imagePaddingClass?: string;
+      fallbackLabel?: string;
+    }
+  ) {
+    const fitClass = options?.fit === 'cover' ? 'object-cover' : 'object-contain';
+    const paddingClass =
+      options?.fit === 'cover' ? options?.imagePaddingClass || '' : options?.imagePaddingClass || 'p-3';
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`}>
         {showHero ? (
-          <img src={heroSrc!} alt="Reference" className="h-full w-full object-cover drop-shadow-lg" />
+          <img
+            src={heroSrc!}
+            alt="Reference"
+            className={`h-full w-full ${fitClass} ${paddingClass} drop-shadow-lg`}
+          />
         ) : (
           <div className="flex flex-col items-center gap-2 text-white/30">
             <ImageIcon className="h-8 w-8" />
-            <span className="text-[9px] font-medium">Hero area</span>
+            <span className="text-[9px] font-medium">
+              {options?.fallbackLabel || 'Hero area'}
+            </span>
           </div>
         )}
       </div>
@@ -1172,7 +1252,25 @@ function ThemePreviewLarge({
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`}>
         {uploadedLogo ? (
-          <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-1.5 drop-shadow-sm" />
+          <>
+            <img
+              src={uploadedLogo}
+              alt="Logo"
+              className="h-full w-full object-contain p-1.5 drop-shadow-sm"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling as HTMLSpanElement | null;
+                if (fallback) {
+                  fallback.style.display = 'block';
+                }
+              }}
+            />
+            <span
+              className={`hidden px-1.5 text-center text-[9px] font-bold leading-tight ${light ? 'text-white/85' : 'text-slate-600'}`}
+            >
+              {brandName || 'Brand'}
+            </span>
+          </>
         ) : (
           <span
             className={`px-1.5 text-center text-[9px] font-bold leading-tight ${light ? 'text-white/85' : 'text-slate-600'}`}
@@ -1414,19 +1512,22 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[14%] left-[3%] top-[18%] w-[30%] rounded-[22px] border border-white/10 bg-white/5">
-          {renderHeroZone('absolute inset-0 rounded-[22px]')}
+        <div className="absolute bottom-[14%] left-[3.2%] top-[18%] w-[31%] rounded-[22px] border border-white/10 bg-white/5 shadow-[0_18px_40px_rgba(0,0,0,0.14)]">
+          {renderHeroZone('absolute inset-0 rounded-[22px] bg-white/[0.03]', {
+            fit: 'contain',
+            imagePaddingClass: 'p-4',
+          })}
         </div>
 
-        <div className="absolute bottom-[14%] right-[3%] top-[18%] flex w-[58%] flex-col gap-3 rounded-[24px] border border-white/10 bg-slate-950/18 px-[4.5%] py-[5%]">
+        <div className="absolute bottom-[16%] right-[3.4%] top-[19%] flex w-[56.5%] flex-col gap-3 rounded-[24px] border border-white/10 bg-slate-950/24 px-[4.5%] py-[5%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]">
           <div className="space-y-1.5">
             {compactHeadlineLines.map((line, index) => (
               <p
                 key={`${line}-${index}`}
                 className="font-black text-white"
                 style={{
-                  fontSize: compactHeadlineLines.length > 3 ? '16px' : '18px',
-                  lineHeight: compactHeadlineLines.length > 3 ? 1.15 : 1.12,
+                  fontSize: compactHeadlineLines.length > 3 ? '15px' : '18px',
+                  lineHeight: compactHeadlineLines.length > 3 ? 1.14 : 1.1,
                 }}
               >
                 {line}
@@ -1447,7 +1548,7 @@ function ThemePreviewLarge({
             </div>
           )}
           <div className="h-1 w-[26%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-          <div className="space-y-3">
+          <div className="mt-auto space-y-2.5">
             {industrialFeatures.map((line, index) => (
               <div key={`${line}-${index}`} className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.support }}>
@@ -1455,7 +1556,7 @@ function ThemePreviewLarge({
                 </div>
                 <div className="flex-1">
                   {fitPreviewText(line, [24, 26, 28], 2).map((chunk, chunkIndex) => (
-                    <p key={`${chunk}-${chunkIndex}`} className="text-[11px] font-semibold leading-snug text-white/95">
+                    <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-white/95">
                       {chunk}
                     </p>
                   ))}
@@ -1465,10 +1566,13 @@ function ThemePreviewLarge({
           </div>
         </div>
 
-        <div className="absolute inset-x-[6%] bottom-[2.8%] flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide text-white/90">
-          {(footerPreviewLines.length > 0 ? footerPreviewLines : [safeFooterWebsite || brandName || 'Brand site']).map((line, index) => (
-            <span key={`${line}-${index}`}>{line}</span>
-          ))}
+        <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center justify-between gap-4 border-t border-white/10 px-[5%] text-[9px] font-semibold text-white/85" style={{ backgroundColor: previewPalette.footer }}>
+          <span className="max-w-[58%] truncate">
+            {safeFooterWebsite || brandName || 'Brand site'}
+          </span>
+          <span className="max-w-[34%] truncate text-right text-white/70">
+            {safeFooterEmail || 'info@yoursite.com'}
+          </span>
         </div>
       </div>
     );
@@ -4733,27 +4837,39 @@ export function ImageCreator({
                         </Button>
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={previewedPdfImage.signed_url}
                         alt={previewedPdfImage.title}
-                        className="h-52 w-full object-contain bg-slate-50"
+                        className={`w-full ${isPdfPageLike(previewedPdfImage) ? 'h-64 object-contain object-top bg-white p-2' : 'h-56 object-contain bg-slate-950 p-3'}`}
                       />
                     </div>
-                    <p className="mt-2 text-[10px] text-slate-500">
-                      Hover a thumbnail to preview it here before choosing it as the hero
-                      visual.
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Badge className="border border-slate-200 bg-white text-[9px] text-slate-700">
+                        {getPdfImageMetaLabel(previewedPdfImage).kindLabel}
+                      </Badge>
+                      {getPdfImageMetaLabel(previewedPdfImage).sizeLabel && (
+                        <Badge className="border border-slate-200 bg-white text-[9px] text-slate-600">
+                          {getPdfImageMetaLabel(previewedPdfImage).sizeLabel}
+                        </Badge>
+                      )}
+                      {isPdfPageLike(previewedPdfImage) && (
+                        <span className="text-[10px] text-amber-700">
+                          Page renders are usually weaker hero visuals than extracted product images.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {/* Grid thumbnail view */}
-                <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 gap-2.5 max-h-80 overflow-y-auto pr-1">
                   {effectivePdfImages.map((img, index) => {
                     const selected = selectedReferenceImage === img.signed_url;
                     const inPrompt = normalizedPrompt.includes(normalizeReferenceText(img.title));
                     const displayTitle = getPdfImageDisplayTitle(img.title);
+                    const imageMeta = getPdfImageMetaLabel(img);
                     const isDefaultHero = !referenceSelectionTouched && index === 0;
                     const deletingThisImage =
                       pdfLibraryActionState?.kind === 'delete-image' &&
@@ -4784,12 +4900,12 @@ export function ImageCreator({
                           className="w-full text-left"
                           onFocus={() => setPreviewedPdfImageId(img.id)}
                         >
-                          <div className="relative aspect-square overflow-hidden bg-slate-100">
+                          <div className={`relative aspect-[4/3] overflow-hidden ${isPdfPageLike(img) ? 'bg-white' : 'bg-slate-100'}`}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={img.signed_url}
                               alt={img.title}
-                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              className={`h-full w-full transition-transform group-hover:scale-[1.03] ${isPdfPageLike(img) ? 'object-contain object-top p-1.5' : 'object-cover'}`}
                               onError={(e) => {
                                 const target = e.currentTarget;
                                 target.style.display = 'none';
@@ -4821,6 +4937,11 @@ export function ImageCreator({
                                 </Badge>
                               </div>
                             )}
+                            <div className="absolute bottom-1 left-1">
+                              <Badge className={`text-[8px] px-1 py-0 ${isPdfPageLike(img) ? 'bg-amber-100 text-amber-800' : 'bg-white/90 text-slate-700'}`}>
+                                {imageMeta.kindLabel}
+                              </Badge>
+                            </div>
                             {tileActionBusy && (
                               <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 backdrop-blur-[1px]">
                                 <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold text-slate-700 shadow-sm">
@@ -4834,6 +4955,11 @@ export function ImageCreator({
                             <p className="truncate text-[10px] font-medium text-slate-700">
                               {displayTitle.primary}
                             </p>
+                            {imageMeta.sizeLabel && (
+                              <p className="truncate text-[9px] text-slate-400">
+                                {imageMeta.sizeLabel}
+                              </p>
+                            )}
                             {displayTitle.secondary && (
                               <p className="truncate text-[9px] text-slate-400">
                                 {displayTitle.secondary}
