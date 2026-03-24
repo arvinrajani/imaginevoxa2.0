@@ -515,12 +515,16 @@ type ThemeId =
   | 'brand-story'
   | 'offer-card'
   | 'comparison-board'
-  | 'premium-editorial';
+  | 'premium-editorial'
+  | 'job-posting'
+  | 'hiring-banner'
+  | 'team-spotlight'
+  | 'career-growth';
 
 type ThemeOption = {
   id: ThemeId;
   label: string;
-  category: 'General' | 'Campaign' | 'Technical' | 'Sales';
+  category: 'General' | 'Campaign' | 'Technical' | 'Sales' | 'Hiring';
   description: string;
   summary: string;
   promptHint: string;
@@ -745,6 +749,54 @@ const THEME_OPTIONS: ThemeOption[] = [
     recommendedStyle: 'cinematic',
     recommendedLogoPlacement: 'overlay',
   },
+  {
+    id: 'job-posting',
+    label: 'Job Posting',
+    category: 'Hiring',
+    description: 'Professional job listing card with role title, requirements, and a clear Apply Now call-to-action.',
+    summary: 'Best for sharing open positions, job listings, and role announcements on LinkedIn.',
+    promptHint:
+      'Describe the role title, key requirements, location, and what makes this opportunity stand out.',
+    recommendedTone: 'professional',
+    recommendedStyle: 'corporate',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'hiring-banner',
+    label: 'Hiring Banner',
+    category: 'Hiring',
+    description: 'Bold, attention-grabbing "We\'re Hiring" banner designed to stop the scroll and attract top talent.',
+    summary: 'Best for general recruitment announcements, hiring drives, and talent attraction campaigns.',
+    promptHint:
+      'Describe the energy and culture of your workplace so the banner radiates the right vibe for candidates.',
+    recommendedTone: 'bold',
+    recommendedStyle: 'vibrant',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'team-spotlight',
+    label: 'Team Spotlight',
+    category: 'Hiring',
+    description: 'Warm team culture showcase with a team photo, company values, and a welcoming "Join Us" message.',
+    summary: 'Best for employer branding, culture posts, team introductions, and "life at" content.',
+    promptHint:
+      'Describe your team culture, values, and what makes working here special. Upload a team or office photo.',
+    recommendedTone: 'warm',
+    recommendedStyle: 'lifestyle',
+    recommendedLogoPlacement: 'overlay',
+  },
+  {
+    id: 'career-growth',
+    label: 'Career Growth',
+    category: 'Hiring',
+    description: 'Career opportunity card highlighting benefits, perks, and growth path to attract ambitious candidates.',
+    summary: 'Best for showcasing career development, employee benefits, and why candidates should join.',
+    promptHint:
+      'Describe the key benefits, growth opportunities, and perks that make this role or company attractive.',
+    recommendedTone: 'inspirational',
+    recommendedStyle: 'corporate',
+    recommendedLogoPlacement: 'overlay',
+  },
 ];
 
 const THEME_CATEGORY_ORDER: Array<ThemeOption['category']> = [
@@ -752,6 +804,7 @@ const THEME_CATEGORY_ORDER: Array<ThemeOption['category']> = [
   'Campaign',
   'Technical',
   'Sales',
+  'Hiring',
 ];
 
 const BLEND_MODE_OPTIONS: Array<{ id: BlendModeId; label: string; description: string }> = [
@@ -1111,6 +1164,83 @@ function ThemePreviewMini({
             <div className="mt-3 h-2.5 w-full rounded bg-white/45" />
             <div className="h-2.5 w-5/6 rounded bg-white/45" />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'job-posting') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1a2744] via-[#2d4a7a] to-[#4a90d9] p-2 shadow-sm ${ringClass}`}>
+        <div className="mb-1 h-3 w-full rounded-t bg-blue-500/80">
+          <p className="text-center text-[6px] font-bold leading-[12px] text-white">WE'RE HIRING</p>
+        </div>
+        <div className="flex h-[calc(100%-16px)] gap-1.5">
+          <div className="flex-1 space-y-1 p-1">
+            <div className="h-2.5 w-4/5 rounded bg-white/90" />
+            <div className="h-2 w-full rounded bg-white/40" />
+            <div className="mt-1 space-y-0.5">
+              <div className="h-1.5 w-3/4 rounded bg-white/30" />
+              <div className="h-1.5 w-2/3 rounded bg-white/30" />
+            </div>
+            <div className="mt-1 h-4 w-14 rounded bg-blue-400" />
+          </div>
+          <div className="w-[36%] rounded-lg bg-white/18" />
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'hiring-banner') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1e1145] via-[#6b2fa0] to-[#e85d75] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-white/12 bg-white/5 p-2">
+          <div className="mb-1 h-3.5 w-20 rounded-full bg-white/90">
+            <p className="text-center text-[5.5px] font-bold leading-[14px] text-purple-700">WE'RE HIRING</p>
+          </div>
+          <div className="h-3 w-4/5 rounded bg-white/90" />
+          <div className="mt-1 h-2.5 w-3/5 rounded bg-white/50" />
+          <div className="mt-2 h-4 w-16 rounded-lg bg-white/85" />
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'team-spotlight') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1a3a2a] via-[#2a5a3a] to-[#4a9a6a] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full items-center gap-2">
+          <div className="h-14 w-14 flex-shrink-0 rounded-full bg-white/20 ring-2 ring-white/30" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-2 w-16 rounded bg-emerald-300/70" />
+            <div className="h-3 w-4/5 rounded bg-white/90" />
+            <div className="h-2.5 w-3/5 rounded bg-white/50" />
+            <div className="mt-1 h-4 w-12 rounded bg-emerald-400" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (themeId === 'career-growth') {
+    return (
+      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0f2027] via-[#203a43] to-[#2c5364] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full gap-1.5">
+          <div className="flex-1 space-y-1 p-1">
+            <div className="h-2 w-16 rounded bg-cyan-300/60" />
+            <div className="h-2.5 w-4/5 rounded bg-white/90" />
+            <div className="mt-1 space-y-1">
+              <div className="flex items-center gap-1">
+                <div className="h-3 w-3 rounded-full bg-cyan-400" />
+                <div className="h-2 flex-1 rounded bg-white/35" />
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="h-3 w-3 rounded-full bg-cyan-400" />
+                <div className="h-2 flex-1 rounded bg-white/35" />
+              </div>
+            </div>
+          </div>
+          <div className="w-[36%] rounded-lg bg-white/15" />
         </div>
       </div>
     );
@@ -1497,16 +1627,16 @@ function ThemePreviewLarge({
       safeFeatureLines.length > 0
         ? safeFeatureLines
         : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']
-    ).slice(0, 2);
-    const hasIndustrialFooterEmail = Boolean(safeFooterEmail);
+    ).slice(0, 3);
+    const industrialFooterLine = [safeFooterWebsite, safeFooterEmail].filter(Boolean).join(' | ') || brandName || 'Brand site';
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
-        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}24, transparent 52%)` }} />
-        <div className="absolute inset-x-0 top-0 h-[11.5%] border-b border-white/10" style={{ backgroundColor: `${previewPalette.bgStart}88` }} />
-        <div className="absolute inset-x-0 bottom-0 h-[9.5%]" style={{ backgroundColor: previewPalette.footer }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}20, transparent 52%), radial-gradient(circle at 82% 18%, rgba(255,255,255,0.10), transparent 18%)` }} />
+        <div className="absolute inset-x-0 top-0 h-[12%] border-b border-white/10" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}dd 0%, ${previewPalette.bgEnd}bb 100%)` }} />
+        <div className="absolute inset-x-0 bottom-0 h-[8.5%]" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}ee 0%, ${previewPalette.bgEnd}dd 100%)` }} />
 
-        <div className="absolute left-[3%] top-[3%] flex h-[8.5%] w-[16%] items-center justify-center rounded-xl bg-white/94 p-2 shadow-sm">
+        <div className="absolute left-[3%] top-[2.8%] flex h-[9%] w-[18%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
           {uploadedLogo ? (
             <img src={uploadedLogo} alt="Brand logo" className="h-full w-full object-contain" />
           ) : (
@@ -1514,22 +1644,24 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[13.5%] left-[3.2%] top-[19%] w-[29.5%] rounded-[22px] border border-white/20 bg-white/90 shadow-[0_18px_40px_rgba(0,0,0,0.22)] overflow-hidden">
+        <div className="absolute bottom-[12%] left-[3.2%] top-[18%] w-[32%] rounded-[22px] border border-white/18 bg-white/94 shadow-[0_20px_42px_rgba(0,0,0,0.24)] overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
           {renderHeroZone('absolute inset-0 rounded-[22px]', {
             fit: 'contain',
             imagePaddingClass: 'p-2',
           })}
         </div>
 
-        <div className="absolute bottom-[12.5%] right-[3.4%] top-[19%] flex w-[58.2%] flex-col gap-2.5 rounded-[24px] border border-white/10 bg-slate-950/24 px-[4.5%] py-[4.5%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]">
-          <div className="space-y-1">
+        <div className="absolute bottom-[11.8%] right-[3.2%] top-[18%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.6%] py-[4.8%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(180deg, rgba(3,10,22,0.56), rgba(3,10,22,0.72))' }}>
+          <div className="space-y-1.5">
             {compactHeadlineLines.map((line, index) => (
               <p
                 key={`${line}-${index}`}
                 className="font-black text-white"
                 style={{
-                  fontSize: compactHeadlineLines.length > 3 ? '14px' : '17px',
-                  lineHeight: compactHeadlineLines.length > 3 ? 1.12 : 1.08,
+                  fontSize: compactHeadlineLines.length > 3 ? '15px' : '18px',
+                  lineHeight: compactHeadlineLines.length > 3 ? 1.13 : 1.08,
+                  textShadow: '0 2px 10px rgba(0,0,0,0.34)',
                 }}
               >
                 {line}
@@ -1537,11 +1669,11 @@ function ThemePreviewLarge({
             ))}
           </div>
           {shortTaglineLines.length > 0 && (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 pt-0.5">
               {shortTaglineLines.map((line, index) => (
                 <p
                   key={`${line}-${index}`}
-                  className="text-[9px] font-semibold uppercase tracking-[0.15em]"
+                  className="text-[9px] font-semibold uppercase tracking-[0.18em]"
                   style={{ color: previewPalette.accent }}
                 >
                   {line}
@@ -1549,16 +1681,16 @@ function ThemePreviewLarge({
               ))}
             </div>
           )}
-          <div className="h-1 w-[24%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-          <div className="mt-auto space-y-2">
+          <div className="h-1 w-[18%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="mt-auto space-y-2.5">
             {industrialFeatures.map((line, index) => (
-              <div key={`${line}-${index}`} className="flex items-start gap-2.5">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.support }}>
+              <div key={`${line}-${index}`} className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-slate-950/26 px-3 py-2.5">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.accent }}>
                   <CheckCircle2 className="h-3.5 w-3.5 text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  {fitPreviewText(line, [26, 28, 30], 2).map((chunk, chunkIndex) => (
-                    <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-[1.3] text-white/95">
+                  {fitPreviewText(line, [24, 26, 28], 2).map((chunk, chunkIndex) => (
+                    <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-[1.32] text-white/95">
                       {chunk}
                     </p>
                   ))}
@@ -1568,15 +1700,10 @@ function ThemePreviewLarge({
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 flex h-[9.5%] items-center justify-between gap-4 border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80" style={{ backgroundColor: previewPalette.footer }}>
-          <span className={`${hasIndustrialFooterEmail ? 'max-w-[58%]' : 'max-w-[100%]'} truncate`}>
-            {safeFooterWebsite || brandName || 'Brand site'}
+        <div className="absolute inset-x-0 bottom-0 flex h-[8.5%] items-center justify-center border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80">
+          <span className="max-w-[86%] truncate text-center">
+            {industrialFooterLine}
           </span>
-          {hasIndustrialFooterEmail ? (
-            <span className="max-w-[30%] truncate text-right text-white/65">
-              {safeFooterEmail}
-            </span>
-          ) : null}
         </div>
       </div>
     );
@@ -2236,6 +2363,211 @@ function ThemePreviewLarge({
             </div>
           </div>
         </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Job Posting ──────────────────────────────────────────────────────────────
+  if (themeId === 'job-posting') {
+    const jpHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 2);
+    const jpTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 3);
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
+        <div className="absolute inset-x-0 top-0 flex h-[12%] items-center justify-center" style={{ backgroundColor: previewPalette.accent }}>
+          <p className="text-[12px] font-black tracking-[0.2em] text-white">WE'RE HIRING</p>
+        </div>
+        <div className="absolute left-[5%] top-[3%] z-10">
+          {renderLogoBox('h-[8%] w-[10%] rounded-lg', true)}
+        </div>
+        <div className="absolute bottom-[8%] left-[4%] top-[16%] flex w-[50%] flex-col justify-start gap-2 rounded-2xl px-[3%] py-[3%]" style={{ backgroundColor: `${previewPalette.surface}55` }}>
+          <div className="space-y-1.5 mt-2">
+            {jpHeadlineLines.map((line, index) => (
+              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: jpHeadlineLines.length > 1 ? '18px' : '22px', lineHeight: 1.12 }}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="space-y-1">
+            {(jpTaglineLines.length > 0 ? jpTaglineLines : ['Join our team and make an impact.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/65">{line}</p>
+            ))}
+          </div>
+          {featureLines.length > 0 && (
+            <div className="space-y-1.5 mt-1">
+              {featureLines.slice(0, 4).map((bullet, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                  <p className="text-[10px] text-white/80 leading-tight">{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-auto flex h-7 w-24 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+            Apply Now
+          </div>
+        </div>
+        <div className="absolute bottom-[8%] right-[4%] top-[18%] w-[38%] overflow-hidden rounded-2xl bg-white/88">
+          {renderHeroZone('h-full w-full rounded-2xl', { fit: 'cover', fallbackLabel: 'Office / Team photo' })}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex h-[6%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}aa` }}>
+          <p className="text-[9px] text-white/60">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Hiring Banner ─────────────────────────────────────────────────────────────
+  if (themeId === 'hiring-banner') {
+    const hbHeadlineLines = fitPreviewText(safeHeadline, [16, 18, 20, 22], 2);
+    const hbTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 2);
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.accent} 40%, ${previewPalette.support} 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 50% 40%, ${previewPalette.accent}40, transparent 60%)` }} />
+        <div className="absolute inset-[3%] rounded-3xl border-2 border-white/10" />
+        <div className="absolute left-[4%] top-[4%]">
+          {renderLogoBox('h-[7%] w-[11%] rounded-lg', true)}
+        </div>
+        <div className="absolute inset-x-0 top-[17%] flex justify-center">
+          <div className="rounded-full px-6 py-1.5" style={{ backgroundColor: `${previewPalette.surface}ee` }}>
+            <p className="text-[11px] font-black tracking-[0.25em]" style={{ color: previewPalette.accent }}>WE'RE HIRING</p>
+          </div>
+        </div>
+        <div className="absolute inset-x-[10%] top-[32%] flex flex-col items-center gap-2">
+          <div className="text-center space-y-1.5">
+            {hbHeadlineLines.map((line, index) => (
+              <p key={`${line}-${index}`} className="font-black text-white text-center" style={{ fontSize: hbHeadlineLines.length > 1 ? '22px' : '28px', lineHeight: 1.1 }}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="text-center space-y-1">
+            {(hbTaglineLines.length > 0 ? hbTaglineLines : ['Be part of something extraordinary.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/65 text-center">{line}</p>
+            ))}
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-[14%] flex justify-center">
+          <div className="flex h-8 w-32 items-center justify-center rounded-xl text-[11px] font-bold" style={{ backgroundColor: `${previewPalette.surface}ee`, color: previewPalette.bgStart }}>
+            View Openings
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex h-[7%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}80` }}>
+          <p className="text-[9px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Team Spotlight ────────────────────────────────────────────────────────────
+  if (themeId === 'team-spotlight') {
+    const tsHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 2);
+    const tsTaglineLines = fitPreviewText(safeTagline, [22, 26, 30], 3);
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(160deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
+        <div className="absolute left-[4%] top-[14%] flex h-[72%] w-[40%] items-center justify-center">
+          <div className="relative h-[75%] aspect-square rounded-full overflow-hidden ring-4 ring-white/20" style={{ boxShadow: `0 0 0 4px ${previewPalette.accent}55` }}>
+            {showHero ? (
+              <img src={heroSrc!} alt="Team" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-full" style={{ backgroundColor: `${previewPalette.surface}33` }}>
+                <div className="flex flex-col items-center gap-1 text-white/25">
+                  <ImageIcon className="h-7 w-7" />
+                  <span className="text-[8px]">Team photo</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="absolute right-[4%] top-[4%] bottom-[8%] w-[48%] rounded-2xl px-[3%] py-[3%]" style={{ backgroundColor: `${previewPalette.surface}28` }}>
+          <div className="mb-1">
+            {renderLogoBox('h-[10%] w-[20%] rounded-lg', true)}
+          </div>
+          <p className="text-[9px] font-bold tracking-[0.15em] mb-2" style={{ color: previewPalette.accent }}>JOIN OUR TEAM</p>
+          <div className="space-y-1.5">
+            {tsHeadlineLines.map((line, index) => (
+              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: tsHeadlineLines.length > 1 ? '16px' : '19px', lineHeight: 1.14 }}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="space-y-1 mt-2">
+            {(tsTaglineLines.length > 0 ? tsTaglineLines : ['Great people build great products.', 'Come join us.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/60">{line}</p>
+            ))}
+          </div>
+          {featureLines.length > 0 && (
+            <div className="space-y-1.5 mt-2">
+              {featureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="rounded-lg px-2 py-1.5" style={{ backgroundColor: `${previewPalette.surface}28` }}>
+                  <p className="text-[9px] text-white/75 font-medium">{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="absolute bottom-[8%] left-[3%]">
+            <div className="flex h-6 w-20 items-center justify-center rounded-lg text-[9px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+              Join Us
+            </div>
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 flex h-[6%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}88` }}>
+          <p className="text-[9px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'Company'}</p>
+        </div>
+        {generateCta}
+      </div>
+    );
+  }
+
+  // ── Career Growth ─────────────────────────────────────────────────────────────
+  if (themeId === 'career-growth') {
+    const cgHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 2);
+    const cgTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 2);
+    const benefitDefaults = ['Competitive salary & equity', 'Remote-first flexibility', 'Learning & development', 'Health & wellness'];
+    const benefitItems = featureLines.length > 0 ? featureLines.slice(0, 4) : benefitDefaults;
+    return (
+      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}40 100%)` }} />
+        <div className="absolute left-[5%] top-[4%]">
+          {renderLogoBox('h-[6%] w-[10%] rounded-lg', true)}
+        </div>
+        <p className="absolute left-[5%] top-[13%] text-[9px] font-bold tracking-[0.15em]" style={{ color: previewPalette.accent }}>CAREER OPPORTUNITY</p>
+        <div className="absolute left-[5%] top-[18%] w-[48%] space-y-1.5">
+          {cgHeadlineLines.map((line, index) => (
+            <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: cgHeadlineLines.length > 1 ? '18px' : '22px', lineHeight: 1.12 }}>
+              {line}
+            </p>
+          ))}
+        </div>
+        <div className="absolute left-[5%] top-[34%] w-[48%] space-y-1">
+          {(cgTaglineLines.length > 0 ? cgTaglineLines : ['Build your career with us.']).map((line, index) => (
+            <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/60">{line}</p>
+          ))}
+        </div>
+        <div className="absolute left-[4%] top-[44%] w-[48%] space-y-2">
+          {benefitItems.map((benefit, i) => (
+            <div key={i} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: `${previewPalette.surface}30` }}>
+              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+                {i + 1}
+              </div>
+              <p className="text-[10px] text-white/80 font-medium leading-tight">{benefit}</p>
+            </div>
+          ))}
+        </div>
+        <div className="absolute bottom-[14%] right-[4%] top-[14%] w-[40%] overflow-hidden rounded-2xl bg-white/88">
+          {renderHeroZone('h-full w-full rounded-2xl', { fit: 'cover', fallbackLabel: 'Workplace photo' })}
+        </div>
+        <div className="absolute bottom-[4%] left-[5%]">
+          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+            Explore Roles
+          </div>
+        </div>
+        <p className="absolute bottom-[5%] right-[4%] text-[9px] text-white/45">{footerPreviewLines[0] || safeFooterWebsite || brandName || ''}</p>
         {generateCta}
       </div>
     );

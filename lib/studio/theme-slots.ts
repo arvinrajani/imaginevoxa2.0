@@ -90,6 +90,28 @@ export const THEME_SCHEMAS: Record<string, ThemeSlotSchema> = {
       { id: 'hero', label: 'Editorial Image', x: 3, y: 3, width: 30, height: 94, shape: 'rounded-rect', required: false },
     ],
   },
+  'job-posting': {
+    themeId: 'job-posting',
+    imageSlots: [
+      { id: 'hero', label: 'Office / Team Photo', x: 58, y: 18, width: 38, height: 60, shape: 'rounded-rect', required: false },
+    ],
+  },
+  'hiring-banner': {
+    themeId: 'hiring-banner',
+    imageSlots: [],
+  },
+  'team-spotlight': {
+    themeId: 'team-spotlight',
+    imageSlots: [
+      { id: 'hero', label: 'Team Photo', x: 4, y: 14, width: 40, height: 72, shape: 'circle', required: false },
+    ],
+  },
+  'career-growth': {
+    themeId: 'career-growth',
+    imageSlots: [
+      { id: 'hero', label: 'Workplace Photo', x: 56, y: 14, width: 40, height: 72, shape: 'rounded-rect', required: false },
+    ],
+  },
 };
 
 /** Get image slot definitions for a theme (empty array for alliance-poster which uses its own composer) */

@@ -148,8 +148,8 @@ async function prepareBackgroundPlate(
   const c = deriveColors(palette);
   const base = await sharp(buffer)
     .resize({ width, height, fit: 'cover', position: 'attention' })
-    .modulate({ brightness: 0.82, saturation: 1.06 })
-    .blur(3)
+    .modulate({ brightness: 0.88, saturation: 1.15 })
+    .blur(2.5)
     .png()
     .toBuffer();
 
@@ -159,16 +159,16 @@ async function prepareBackgroundPlate(
     `
       <defs>
         <linearGradient id="themeWash" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.74" />
-          <stop offset="58%" stop-color="${c.bgEnd}" stop-opacity="0.54" />
-          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.20" />
+          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.55" />
+          <stop offset="58%" stop-color="${c.bgEnd}" stop-opacity="0.40" />
+          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.18" />
         </linearGradient>
         <radialGradient id="themeGlow" cx="22%" cy="28%" r="56%">
-          <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.26" />
+          <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.16" />
           <stop offset="100%" stop-color="${c.accent}" stop-opacity="0" />
         </radialGradient>
         <radialGradient id="themeSupport" cx="82%" cy="84%" r="36%">
-          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.18" />
+          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.10" />
           <stop offset="100%" stop-color="${c.support}" stop-opacity="0" />
         </radialGradient>
         <radialGradient id="themeVignette" cx="50%" cy="50%" r="72%">
@@ -200,7 +200,7 @@ function softenThemeCanvas(svgMarkup: string, width: number, height: number) {
       }
 
       fullCanvasRectIndex += 1;
-      const targetOpacity = fullCanvasRectIndex === 1 ? '0.52' : '0.74';
+      const targetOpacity = fullCanvasRectIndex === 1 ? '0.55' : '0.65';
 
       if (/fill-opacity="/.test(rest)) {
         return match.replace(/fill-opacity="([^"]+)"/, (_existingMatch, existingOpacity) => {
@@ -276,54 +276,82 @@ async function prepareLogo(
 function buildCleanBrandSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 32);
-  const headline = wrapText(input.headline || safeBrandName || 'Your Headline', 22).slice(0, 3);
-  const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
+  const headline = fitTextLines(input.headline || safeBrandName || 'Your Headline', [14, 16, 18, 20], 3);
+  const tagline = fitTextLines(input.tagline || '', [26, 30, 34], 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
   const heroImg = images['hero'];
   const footerLine = firstSafeLine(input.footerWebsite, safeBrandName, 42);
-  const headlineFont = headline.length > 2 ? r(w * 0.04) : r(w * 0.046);
+  const headlineFont = headline.length > 2 ? r(w * 0.042) : r(w * 0.050);
+  const headlineStep = headline.length > 2 ? h * 0.072 : h * 0.085;
 
   const logoNode = logo
-    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.05)}" y="${r(h * 0.04)}" width="${r(w * 0.13)}" height="${r(h * 0.09)}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${r(w * 0.06)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
+    ? `<rect x="${r(w * 0.04)}" y="${r(h * 0.025)}" width="${r(w * 0.16)}" height="${r(h * 0.10)}" rx="10" fill="rgba(255,255,255,0.92)" />
+       <image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.047)}" y="${r(h * 0.032)}" width="${r(w * 0.146)}" height="${r(h * 0.086)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.06)}" y="${r(h * 0.09)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.030)}" font-weight="900">${escapeXml(safeBrandName)}</text>`;
 
   const heroNode = heroImg
-    ? `<rect x="${r(w * 0.61)}" y="${r(h * 0.15)}" width="${r(w * 0.31)}" height="${r(h * 0.70)}" rx="24" fill="rgba(255,255,255,0.92)" stroke="${c.muted}" stroke-opacity="0.18" />
-       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.62)}" y="${r(h * 0.17)}" width="${r(w * 0.29)}" height="${r(h * 0.66)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<rect x="${r(w * 0.59)}" y="${r(h * 0.15)}" width="${r(w * 0.37)}" height="${r(h * 0.72)}" rx="20" fill="rgba(255,255,255,0.95)" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.60)}" y="${r(h * 0.16)}" width="${r(w * 0.35)}" height="${r(h * 0.70)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.33 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.30 + i * headlineStep)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900" letter-spacing="-0.5">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.57 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.021)}" font-weight="500">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.56 + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700">${escapeXml(line)}</text>`)
     .join('');
 
-  const ctaY = h * 0.71;
-  const ctaNode = `<rect x="${r(w * 0.06)}" y="${r(ctaY)}" width="${r(w * 0.19)}" height="${r(h * 0.062)}" rx="${r(h * 0.031)}" fill="${c.accent}" />
-    <text x="${r(w * 0.155)}" y="${r(ctaY + h * 0.041)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Brand Focus</text>`;
+  const bulletStartY = h * 0.56 + tagline.length * h * 0.042 + h * 0.03;
+  const bulletNodes = bullets.map((b, i) => {
+    const by = r(bulletStartY + i * h * 0.058);
+    return `<circle cx="${r(w * 0.072)}" cy="${by}" r="5" fill="${c.accent}" />
+      <text x="${r(w * 0.092)}" y="${r(by + 5)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="600">${escapeXml(firstSafeLine(b, '', 50))}</text>`;
+  }).join('');
 
   return svg(w, h, `
-    <rect width="${w}" height="${h}" fill="${c.surface}" />
-    <rect width="${w}" height="${r(h * 0.14)}" fill="${c.headerPanel}" />
-    <rect y="${h - r(h * 0.10)}" width="${w}" height="${r(h * 0.10)}" fill="${c.footer}" />
-    <rect x="${r(w * 0.04)}" y="${r(h * 0.14)}" width="${r(w * 0.92)}" height="2" rx="1" fill="${c.accent}" fill-opacity="0.45" />
+    <defs>
+      <linearGradient id="cbHeader" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.90" />
+        <stop offset="100%" stop-color="${c.bgEnd}" stop-opacity="0.80" />
+      </linearGradient>
+      <linearGradient id="cbFooter" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.92" />
+        <stop offset="100%" stop-color="${c.bgEnd}" stop-opacity="0.88" />
+      </linearGradient>
+    </defs>
+    <!-- Header bar -->
+    <rect width="${w}" height="${r(h * 0.14)}" fill="url(#cbHeader)" />
+    <rect y="${r(h * 0.14)}" width="${w}" height="3" fill="${c.accent}" />
+    <!-- Footer bar -->
+    <rect y="${h - r(h * 0.08)}" width="${w}" height="${r(h * 0.08)}" fill="url(#cbFooter)" />
+    <rect y="${h - r(h * 0.08)}" width="${w}" height="2" fill="${c.accent}" fill-opacity="0.60" />
+    <!-- Left text panel (semi-transparent) -->
+    <rect x="0" y="${r(h * 0.155)}" width="${r(w * 0.56)}" height="${r(h * 0.695)}" fill="${c.bgStart}" fill-opacity="0.50" />
     ${logoNode}
     ${heroNode}
+    <!-- Accent line -->
+    <rect x="${r(w * 0.06)}" y="${r(h * 0.24)}" width="${r(w * 0.08)}" height="4" rx="2" fill="${c.accent}" />
     ${headlineNodes}
     ${taglineNodes}
-    ${ctaNode}
-    <text x="${r(w * 0.06)}" y="${h - r(h * 0.036)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="600">${escapeXml(footerLine)}</text>
+    ${bulletNodes}
+    <!-- Highlight chip -->
+    <rect x="${r(w * 0.06)}" y="${r(h * 0.82)}" width="${r(w * 0.24)}" height="${r(h * 0.058)}" rx="${r(h * 0.029)}" fill="${c.accent}" fill-opacity="0.92" />
+    <text x="${r(w * 0.18)}" y="${r(h * 0.856)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="800" letter-spacing="1.3" text-anchor="middle">BRAND FOCUS</text>
+    <!-- Footer text -->
+    <text x="${r(w * 0.50)}" y="${h - r(h * 0.028)}" fill="#ffffff" fill-opacity="0.85" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="600" text-anchor="middle">${escapeXml(footerLine)}</text>
   `);
 }
 
 function buildBrandStorySvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 32);
-  const headline = wrapText(input.headline || safeBrandName || 'Our Story', 20).slice(0, 3);
-  const tagline = wrapText(input.tagline || '', 32).slice(0, 4);
+  const headline = fitTextLines(input.headline || safeBrandName || 'Our Story', [16, 18, 20, 22], 3);
+  const tagline = fitTextLines(input.tagline || '', [24, 28, 32], 4);
   const heroImg = images['hero'];
-  const headlineFont = headline.length > 2 ? r(w * 0.034) : r(w * 0.04);
+  const headlineFont = headline.length > 2 ? r(w * 0.032) : r(w * 0.040);
+  const headlineStep = headline.length > 2 ? h * 0.060 : h * 0.070;
+  const footerLine = firstSafeLine(input.footerWebsite, safeBrandName, 42);
 
   const cx = r(w * 0.24);
   const cy = r(h * 0.50);
@@ -331,31 +359,35 @@ function buildBrandStorySvg(w: number, h: number, images: Record<string, Prepare
 
   const heroNode = heroImg
     ? `<defs><clipPath id="storyCircle"><circle cx="${cx}" cy="${cy}" r="${radius}" /></clipPath></defs>
-       <circle cx="${cx}" cy="${cy}" r="${radius + 4}" fill="${c.accent}" opacity="0.3" />
+       <circle cx="${cx}" cy="${cy}" r="${radius + 4}" fill="${c.accent}" opacity="0.30" />
        <image href="${escapeXml(heroImg.dataUri)}" x="${cx - radius}" y="${cy - radius}" width="${radius * 2}" height="${radius * 2}" clip-path="url(#storyCircle)" preserveAspectRatio="xMidYMid slice" />`
-    : `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.accent}" opacity="0.15" />`;
+    : `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.accent}" opacity="0.12" stroke="${c.muted}" stroke-opacity="0.15" stroke-width="2" />`;
 
   const logoNode = logo
-    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.52)}" y="${r(h * 0.16)}" width="${r(w * 0.08)}" height="${r(h * 0.08)}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${r(w * 0.52)}" y="${r(h * 0.21)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.02)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.52)}" y="${r(h * 0.10)}" width="${r(w * 0.09)}" height="${r(h * 0.07)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.52)}" y="${r(h * 0.15)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.33 + i * h * 0.065)}" fill="${c.text}" font-family="Georgia,serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.30 + i * headlineStep)}" fill="${c.text}" font-family="Georgia,serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.57 + i * h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="500">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.54 + i * h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500">${escapeXml(line)}</text>`)
     .join('');
 
   return svg(w, h, `
     <defs><linearGradient id="storyGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.surface}" /><stop offset="100%" stop-color="${c.bgEnd}" /></linearGradient></defs>
     <rect width="${w}" height="${h}" fill="url(#storyGrad)" />
     ${heroNode}
+    <rect x="${r(w * 0.50)}" y="${r(h * 0.06)}" width="${r(w * 0.46)}" height="${r(h * 0.82)}" rx="20" fill="${c.surface}" fill-opacity="0.15" />
     ${logoNode}
+    <text x="${r(w * 0.52)}" y="${r(h * 0.22)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="700" letter-spacing="2">OUR STORY</text>
     ${headlineNodes}
     ${taglineNodes}
-    <rect x="${r(w * 0.52)}" y="${r(h * 0.72)}" width="${r(w * 0.14)}" height="${r(h * 0.055)}" rx="${r(h * 0.028)}" fill="${c.accent}" />
-    <text x="${r(w * 0.59)}" y="${r(h * 0.755)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="middle">Story Highlight</text>
+    <rect x="${r(w * 0.52)}" y="${r(h * 0.74)}" width="${r(w * 0.20)}" height="${r(h * 0.055)}" rx="${r(h * 0.028)}" fill="${c.accent}" fill-opacity="0.92" />
+    <text x="${r(w * 0.62)}" y="${r(h * 0.775)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="800" letter-spacing="1.1" text-anchor="middle">STORY HIGHLIGHT</text>
+    <rect x="0" y="${r(h * 0.93)}" width="${w}" height="${r(h * 0.07)}" fill="${c.bgStart}" fill-opacity="0.45" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.975)}" fill="${c.text}" fill-opacity="0.60" font-family="Arial,sans-serif" font-size="${r(w * 0.013)}" font-weight="500" text-anchor="middle">${escapeXml(footerLine)}</text>
   `);
 }
 
@@ -363,69 +395,77 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
-  const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 20).slice(0, 3);
-  const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
-  const bullets = getSafeFeatureBullets(input.featureBullets, 2);
+  const headline = fitTextLines(input.headline || safeBrandName || 'Campaign Headline', [14, 16, 18, 20], 3);
+  const tagline = fitTextLines(input.tagline || '', [26, 30, 34], 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
   const footerWebsite = firstSafeLine(input.footerWebsite, safeBrandName, 46);
   const footerEmail = firstSafeLine(input.footerEmail, '', 34);
+  const footerParts = [footerWebsite, footerEmail].filter(Boolean).join('  |  ') || safeBrandName;
 
-  // Logo box — white card top-left
+  // Logo box — frosted glass card top-left
   const logoBoxX = r(w * 0.03);
   const logoBoxY = r(h * 0.025);
-  const logoBoxW = r(w * 0.155);
-  const logoBoxH = r(h * 0.095);
+  const logoBoxW = r(w * 0.18);
+  const logoBoxH = r(h * 0.11);
   const logoNode = logo
-    ? `<image href="${escapeXml(logo.dataUri)}" x="${logoBoxX + 4}" y="${logoBoxY + 4}" width="${logoBoxW - 8}" height="${logoBoxH - 8}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${logoBoxX + r(logoBoxW / 2)}" y="${logoBoxY + r(logoBoxH * 0.62)}" fill="#1e293b" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="800" text-anchor="middle">${escapeXml(safeBrandName)}</text>`;
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${logoBoxX + 8}" y="${logoBoxY + 6}" width="${logoBoxW - 16}" height="${logoBoxH - 12}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${logoBoxX + r(logoBoxW / 2)}" y="${logoBoxY + r(logoBoxH * 0.64)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="900" text-anchor="middle">${escapeXml(safeBrandName)}</text>`;
 
-  // Hero card — white background with product image inside
+  // Hero card — product showcase with subtle shadow
   const heroCardX = r(w * 0.03);
-  const heroCardY = r(h * 0.18);
-  const heroCardW = r(w * 0.305);
+  const heroCardY = r(h * 0.17);
+  const heroCardW = r(w * 0.34);
   const heroCardH = r(h * 0.68);
   const heroNode = heroImg
-    ? `<rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="18" fill="rgba(255,255,255,0.96)" />
-       <image href="${escapeXml(heroImg.dataUri)}" x="${heroCardX + 6}" y="${heroCardY + 6}" width="${heroCardW - 12}" height="${heroCardH - 12}" preserveAspectRatio="xMidYMid meet" />`
-    : `<rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="18" fill="${c.surface}" fill-opacity="0.10" stroke="${c.muted}" stroke-opacity="0.25" />`;
+    ? `<rect x="${heroCardX + 4}" y="${heroCardY + 4}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(0,0,0,0.15)" />
+       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(255,255,255,0.95)" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${heroCardX + 10}" y="${heroCardY + 10}" width="${heroCardW - 20}" height="${heroCardH - 20}" preserveAspectRatio="xMidYMid meet" />`
+    : `<rect x="${heroCardX + 4}" y="${heroCardY + 4}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(0,0,0,0.12)" />
+       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(255,255,255,0.14)" stroke="${c.muted}" stroke-opacity="0.22" />
+       <text x="${heroCardX + r(heroCardW / 2)}" y="${heroCardY + r(heroCardH / 2)}" fill="rgba(255,255,255,0.72)" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">PRODUCT VISUAL</text>`;
 
-  // Right info panel — semi-opaque for text readability over background
-  const infoX = r(w * 0.375);
-  const infoY = r(h * 0.18);
-  const infoW = r(w * 0.595);
-  const infoH = r(h * 0.675);
+  // Right side — headline and bullet region (no opaque panel, text directly on background)
+  const textX = r(w * 0.42);
+  const headlineFontSize = headline.length >= 3 ? r(w * 0.042) : r(w * 0.050);
+  const headlineStep = headline.length >= 3 ? h * 0.072 : h * 0.085;
+  const headlineY = h * 0.20;
 
-  const headlineFontSize = headline.length >= 3 ? r(w * 0.035) : r(w * 0.04);
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.14 + i * h * 0.067)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.5">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${textX}" y="${r(headlineY + i * headlineStep)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.5">
+      <tspan fill="#ffffff" filter="url(#textShadow)">${escapeXml(line)}</tspan>
+    </text>`)
     .join('');
 
+  const taglineY = headlineY + headline.length * headlineStep + h * 0.01;
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.39 + i * h * 0.038)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" letter-spacing="1">${escapeXml(line.toUpperCase())}</text>`)
+    .map((line, i) => `<text x="${textX}" y="${r(taglineY + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700" letter-spacing="1.5">${escapeXml(line.toUpperCase())}</text>`)
     .join('');
 
+  // Bullet points with professional checkmark boxes
+  const bulletStartY = taglineY + tagline.length * h * 0.042 + h * 0.05;
   const bulletNodesMarkup = bullets
     .map((b, i) => {
-      const boxSize = r(w * 0.034);
-      const boxX = r(infoX + infoW * 0.06);
-      const baseY = r(infoY + infoH * 0.56 + i * h * 0.115);
-      const wrapped = wrapText(b, 28).slice(0, 2);
-      const checkStroke = Math.max(3, Math.round(boxSize * 0.14));
+      const boxSize = r(w * 0.030);
+      const baseY = r(bulletStartY + i * h * 0.105);
+      const wrapped = wrapText(b, 30).slice(0, 2);
+      const checkStroke = Math.max(2.5, Math.round(boxSize * 0.15));
       const checkPath = [
-        `M ${boxX + Math.round(boxSize * 0.24)} ${baseY + Math.round(boxSize * 0.54)}`,
-        `L ${boxX + Math.round(boxSize * 0.42)} ${baseY + Math.round(boxSize * 0.72)}`,
-        `L ${boxX + Math.round(boxSize * 0.78)} ${baseY + Math.round(boxSize * 0.28)}`,
+        `M ${textX + Math.round(boxSize * 0.22)} ${baseY + Math.round(boxSize * 0.52)}`,
+        `L ${textX + Math.round(boxSize * 0.42)} ${baseY + Math.round(boxSize * 0.72)}`,
+        `L ${textX + Math.round(boxSize * 0.78)} ${baseY + Math.round(boxSize * 0.26)}`,
       ].join(' ');
 
-      const textX = r(infoX + infoW * 0.06 + boxSize + r(w * 0.014));
+      const labelX = textX + boxSize + r(w * 0.016);
       const textNodes = wrapped
         .map((line, lineIndex) => {
-          const lineY = baseY + Math.round(boxSize * 0.68) + lineIndex * Math.round(h * 0.034);
-          return `<text x="${textX}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="600">${escapeXml(line)}</text>`;
+          const lineY = baseY + Math.round(boxSize * 0.60) + lineIndex * Math.round(h * 0.030);
+          return `<text x="${labelX}" y="${lineY}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="700">${escapeXml(line)}</text>`;
         })
         .join('');
 
       return `
-        <rect x="${boxX}" y="${baseY}" width="${boxSize}" height="${boxSize}" rx="${Math.max(8, Math.round(boxSize * 0.24))}" fill="${c.support}" />
+        <rect x="${textX - r(w * 0.015)}" y="${baseY - r(h * 0.018)}" width="${r(w * 0.47)}" height="${r(h * 0.085)}" rx="18" fill="rgba(6,16,30,0.34)" stroke="rgba(255,255,255,0.08)" />
+        <rect x="${textX}" y="${baseY}" width="${boxSize}" height="${boxSize}" rx="${Math.max(6, Math.round(boxSize * 0.20))}" fill="${c.accent}" />
         <path d="${checkPath}" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${checkStroke}" stroke-linecap="round" stroke-linejoin="round" />
         ${textNodes}
       `;
@@ -434,29 +474,44 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
 
   return svg(w, h, `
     <defs>
-      <linearGradient id="indGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="${c.bgStart}" />
-        <stop offset="55%" stop-color="${c.bgEnd}" />
-        <stop offset="100%" stop-color="${c.bgStart}" />
+      <filter id="textShadow" x="-5%" y="-5%" width="110%" height="110%">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.6)" />
+      </filter>
+      <linearGradient id="indTopBar" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.92" />
+        <stop offset="100%" stop-color="${c.bgEnd}" stop-opacity="0.80" />
       </linearGradient>
-      <linearGradient id="indInfoGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.55" />
-        <stop offset="100%" stop-color="${c.bgStart}" stop-opacity="0.40" />
+      <linearGradient id="indFooter" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.95" />
+        <stop offset="100%" stop-color="${c.bgEnd}" stop-opacity="0.90" />
+      </linearGradient>
+      <linearGradient id="indTextPanel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.50" />
+        <stop offset="100%" stop-color="${c.bgStart}" stop-opacity="0.70" />
       </linearGradient>
     </defs>
-    <rect width="${w}" height="${h}" fill="url(#indGrad)" />
-    <rect width="${w}" height="${r(h * 0.125)}" fill="${c.bgStart}" fill-opacity="0.68" />
-    <rect y="${h - r(h * 0.095)}" width="${w}" height="${r(h * 0.095)}" fill="${c.footer}" />
-    <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="10" fill="rgba(255,255,255,0.96)" />
+    <!-- Header bar -->
+    <rect width="${w}" height="${r(h * 0.14)}" fill="url(#indTopBar)" />
+    <rect y="${r(h * 0.14)}" width="${w}" height="3" fill="${c.accent}" />
+    <!-- Logo card -->
+    <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="12" fill="rgba(255,255,255,0.95)" />
     ${logoNode}
+    <!-- Footer bar -->
+    <rect y="${h - r(h * 0.085)}" width="${w}" height="${r(h * 0.085)}" fill="url(#indFooter)" />
+    <rect y="${h - r(h * 0.085)}" width="${w}" height="2" fill="${c.accent}" />
+    <text x="${r(w * 0.50)}" y="${h - r(h * 0.030)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="600" text-anchor="middle" fill-opacity="0.90">${escapeXml(footerParts)}</text>
+    <!-- Right side text panel (semi-transparent) -->
+    <rect x="${r(w * 0.39)}" y="${r(h * 0.155)}" width="${r(w * 0.585)}" height="${r(h * 0.695)}" rx="18" fill="url(#indTextPanel)" />
+    <!-- Product hero -->
     ${heroNode}
-    <rect x="${infoX}" y="${infoY}" width="${infoW}" height="${infoH}" rx="20" fill="url(#indInfoGrad)" stroke="${c.muted}" stroke-opacity="0.22" stroke-width="1" />
+    <!-- Headline -->
     ${headlineNodes}
+    <!-- Accent line -->
+    <rect x="${textX}" y="${r(taglineY - h * 0.018)}" width="${r(w * 0.12)}" height="4" rx="2" fill="${c.accent}" />
+    <!-- Tagline -->
     ${taglineNodes}
-    <rect x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.49)}" width="${r(infoW * 0.28)}" height="3" rx="2" fill="${c.accent}" />
+    <!-- Bullet points -->
     ${bulletNodesMarkup}
-    <text x="${r(w * 0.05)}" y="${h - r(h * 0.038)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="600" fill-opacity="0.85">${escapeXml(footerWebsite)}</text>
-    ${footerEmail ? `<text x="${w - r(w * 0.05)}" y="${h - r(h * 0.038)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="600" text-anchor="end" fill-opacity="0.75">${escapeXml(footerEmail)}</text>` : ''}
   `);
 }
 
@@ -490,7 +545,9 @@ function buildProductHeroSvg(w: number, h: number, images: Record<string, Prepar
     ${headline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.315 + i * headlineStep)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900" letter-spacing="-0.5">${escapeXml(line)}</text>`).join('')}
     ${tagline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.55 + i * h * 0.040)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${taglineFont}" font-weight="500">${escapeXml(line)}</text>`).join('')}
     <rect x="${r(w * 0.06)}" y="${r(h * 0.726)}" width="${r(w * 0.225)}" height="${r(h * 0.067)}" rx="${r(h * 0.034)}" fill="${c.accent}" />
-    <text x="${r(w * 0.173)}" y="${r(h * 0.770)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Product Focus</text>
+    <text x="${r(w * 0.173)}" y="${r(h * 0.770)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Product Focus</text>
+    <rect x="0" y="${r(h * 0.92)}" width="${w}" height="${r(h * 0.08)}" fill="${c.footer || c.bgStart}" fill-opacity="0.50" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.970)}" fill="${c.text}" fill-opacity="0.55" font-family="Arial,sans-serif" font-size="${r(w * 0.013)}" font-weight="500" text-anchor="middle">${escapeXml(firstSafeLine(input.footerWebsite, safeBrandName, 42))}</text>
   `);
 }
 
@@ -537,7 +594,7 @@ function buildKnowledgeVisualSvg(w: number, h: number, images: Record<string, Pr
     <rect width="${w}" height="${h}" fill="${c.bgStart}" />
     <rect x="${r(w * 0.04)}" y="${r(h * 0.08)}" width="${r(w * 0.44)}" height="${r(h * 0.84)}" rx="18" fill="${c.surface}" fill-opacity="0.05" stroke="${c.muted}" stroke-opacity="0.10" />
     ${heroNode}
-    <rect x="${r(w * 0.52)}" y="${r(h * 0.08)}" width="${r(w * 0.42)}" height="${r(h * 0.84)}" rx="18" fill="${c.accent}" fill-opacity="0.35" stroke="${c.accent}" stroke-opacity="0.40" />
+    <rect x="${r(w * 0.52)}" y="${r(h * 0.08)}" width="${r(w * 0.42)}" height="${r(h * 0.84)}" rx="18" fill="${c.accent}" fill-opacity="0.55" stroke="${c.accent}" stroke-opacity="0.50" />
     ${logoNode}
     <rect x="${r(w * 0.54)}" y="${r(h * 0.16)}" width="${r(w * 0.10)}" height="4" rx="2" fill="${c.accent}" fill-opacity="0.70" />
     ${headlineNodes}
@@ -610,7 +667,7 @@ function buildProofStackSvg(w: number, h: number, _images: Record<string, Prepar
       const cy = r(h * (0.08 + i * 0.30));
       const text = fitTextLines(bullets[i] || `Proof point ${i + 1}`, [20, 22, 24], 3);
       return `<g>
-        <rect x="${r(w * 0.04)}" y="${cy}" width="${r(w * 0.46)}" height="${r(h * 0.24)}" rx="14" fill="${pc.bg}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.3" />
+        <rect x="${r(w * 0.04)}" y="${cy}" width="${r(w * 0.46)}" height="${r(h * 0.24)}" rx="14" fill="${pc.bg}" fill-opacity="0.45" stroke="${c.muted}" stroke-opacity="0.4" />
         <rect x="${r(w * 0.07)}" y="${r(h * (0.08 + i * 0.30) + h * 0.05)}" width="${r(w * 0.06)}" height="${r(w * 0.06)}" rx="8" fill="${pc.accent}" />
         ${text.map((line, idx) => `<text x="${r(w * 0.16)}" y="${r(cy + h * 0.09 + idx * h * 0.04)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="700">${escapeXml(line)}</text>`).join('')}
       </g>`;
@@ -691,7 +748,7 @@ function buildSectorCollageSvg(w: number, h: number, images: Record<string, Prep
       ? `<image href="${escapeXml(img.dataUri)}" x="${px}" y="${py}" width="${pw}" height="${ph}" preserveAspectRatio="xMidYMid slice" clip-path="url(#panel${i}Clip)" />`
       : '';
     return `<defs><clipPath id="panel${i}Clip"><rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="12" /></clipPath></defs>
-      <rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="12" fill="${c.surface}" fill-opacity="0.12" />
+      <rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="12" fill="${c.surface}" fill-opacity="0.35" />
       ${imgNode}
       <rect x="${px}" y="${py + ph - r(h * 0.11)}" width="${pw}" height="${r(h * 0.11)}" fill="${c.bgStart}" fill-opacity="0.72" clip-path="url(#panel${i}Clip)" />
       ${caption.map((line, idx) => `<text x="${px + 18}" y="${py + ph - r(h * 0.06) + idx * r(h * 0.03)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700">${escapeXml(line)}</text>`).join('')}`;
@@ -739,14 +796,14 @@ function buildOfferCardSvg(w: number, h: number, images: Record<string, Prepared
   return svg(w, h, `
     <defs><linearGradient id="offerGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="50%" stop-color="${c.accent}" /><stop offset="100%" stop-color="${c.support}" /></linearGradient></defs>
     <rect width="${w}" height="${h}" fill="url(#offerGrad)" />
-    <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.50)}" height="${r(h * 0.92)}" rx="14" fill="${c.surface}" fill-opacity="0.06" />
+    <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.50)}" height="${r(h * 0.92)}" rx="14" fill="${c.surface}" fill-opacity="0.30" />
     <rect x="${r(w * 0.08)}" y="${r(h * 0.22)}" width="${r(w * 0.12)}" height="${r(h * 0.04)}" rx="${r(h * 0.02)}" fill="${c.support}" />
     <text x="${r(w * 0.14)}" y="${r(h * 0.246)}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.0115)}" font-weight="800" text-anchor="middle">SPECIAL OFFER</text>
     ${headlineNodes}
     ${tagline.map((line, i) => `<text x="${r(w * 0.08)}" y="${r(h * 0.60 + i * h * 0.035)}" fill="${c.support}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="700">${escapeXml(line)}</text>`).join('')}
     <rect x="${r(w * 0.08)}" y="${r(h * 0.68)}" width="${r(w * 0.20)}" height="${r(h * 0.06)}" rx="12" fill="${c.surface}" fill-opacity="0.95" />
     <text x="${r(w * 0.18)}" y="${r(h * 0.72)}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="middle">Offer Focus</text>
-    <rect x="${r(w * 0.58)}" y="${r(h * 0.04)}" width="${r(w * 0.38)}" height="${r(h * 0.92)}" rx="14" fill="${c.surface}" fill-opacity="0.15" />
+    <rect x="${r(w * 0.58)}" y="${r(h * 0.04)}" width="${r(w * 0.38)}" height="${r(h * 0.92)}" rx="14" fill="${c.surface}" fill-opacity="0.35" />
     ${heroNode}
   `);
 }
@@ -776,7 +833,7 @@ function buildComparisonBoardSvg(w: number, h: number, images: Record<string, Pr
     const img = images[p.id];
     const panelBullets = p.id === 'panel-left' ? leftBullets : rightBullets;
     const imgNode = img
-      ? `<rect x="${px + 18}" y="${py + 48}" width="${pw - 36}" height="${r(h * 0.30)}" rx="18" fill="${c.surface}" fill-opacity="0.12" />
+      ? `<rect x="${px + 18}" y="${py + 48}" width="${pw - 36}" height="${r(h * 0.30)}" rx="18" fill="${c.surface}" fill-opacity="0.30" />
          <image href="${escapeXml(img.dataUri)}" x="${px + 24}" y="${py + r(h * 0.08)}" width="${pw - 48}" height="${r(h * 0.28)}" preserveAspectRatio="xMidYMid meet" />`
       : '';
     return `<g>
@@ -860,11 +917,207 @@ function buildGuidedAutoSvg(w: number, h: number, images: Record<string, Prepare
     <rect width="${w}" height="${h}" fill="url(#autoGrad)" />
     <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.46)}" height="${r(h * 0.92)}" rx="18" fill="${c.accent}" fill-opacity="0.25" />
     ${heroNode}
-    <rect x="${r(w * 0.54)}" y="${r(h * 0.04)}" width="${r(w * 0.42)}" height="${r(h * 0.92)}" rx="18" fill="${c.surface}" fill-opacity="0.08" stroke="${c.muted}" stroke-opacity="0.12" />
+    <rect x="${r(w * 0.54)}" y="${r(h * 0.04)}" width="${r(w * 0.42)}" height="${r(h * 0.92)}" rx="18" fill="${c.surface}" fill-opacity="0.30" stroke="${c.muted}" stroke-opacity="0.25" />
     ${headlineNodes}
     ${taglineNodes}
     <rect x="${r(w * 0.56)}" y="${r(h * 0.68)}" width="${r(w * 0.14)}" height="${r(h * 0.055)}" rx="8" fill="${c.accent}" />
     <text x="${r(w * 0.63)}" y="${r(h * 0.715)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="700" text-anchor="middle">Preview</text>
+  `);
+}
+
+// ── Hiring Themes ────────────────────────────────────────────────────────────
+
+function buildJobPostingSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
+  const c = deriveColors(input.palette);
+  const headline = fitTextLines(input.headline || 'Open Position', [18, 20, 22, 24], 2);
+  const tagline = fitTextLines(input.tagline || '', [28, 32, 36], 3);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
+  const heroImg = images['hero'];
+  const headlineFont = headline.length > 1 ? r(w * 0.038) : r(w * 0.044);
+
+  const logoNode = logo
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.05)}" y="${r(h * 0.04)}" width="${r(w * 0.10)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.10)}" y="${r(h * 0.08)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="800" text-anchor="middle">${escapeXml(input.brandName || 'Company')}</text>`;
+
+  const heroNode = heroImg
+    ? `<defs><clipPath id="jpHeroClip"><rect x="${r(w * 0.58)}" y="${r(h * 0.18)}" width="${r(w * 0.38)}" height="${r(h * 0.60)}" rx="16" /></clipPath></defs>
+       <rect x="${r(w * 0.58)}" y="${r(h * 0.18)}" width="${r(w * 0.38)}" height="${r(h * 0.60)}" rx="16" fill="rgba(255,255,255,0.92)" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.58)}" y="${r(h * 0.18)}" width="${r(w * 0.38)}" height="${r(h * 0.60)}" clip-path="url(#jpHeroClip)" preserveAspectRatio="xMidYMid slice" />`
+    : `<rect x="${r(w * 0.58)}" y="${r(h * 0.18)}" width="${r(w * 0.38)}" height="${r(h * 0.60)}" rx="16" fill="${c.surface}" fill-opacity="0.18" stroke="${c.muted}" stroke-opacity="0.15" />`;
+
+  const headlineNodes = headline
+    .map((line, i) => `<text x="${r(w * 0.05)}" y="${r(h * 0.28 + i * h * 0.08)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
+    .join('');
+
+  const taglineNodes = tagline
+    .map((line, i) => `<text x="${r(w * 0.05)}" y="${r(h * 0.46 + i * h * 0.038)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="500">${escapeXml(line)}</text>`)
+    .join('');
+
+  const bulletNodes = bullets
+    .map((b, i) => `<circle cx="${r(w * 0.06)}" cy="${r(h * 0.60 + i * h * 0.065)}" r="${r(w * 0.006)}" fill="${c.accent}" />
+      <text x="${r(w * 0.08)}" y="${r(h * 0.608 + i * h * 0.065)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="500">${escapeXml(b)}</text>`)
+    .join('');
+
+  return svg(w, h, `
+    <defs><linearGradient id="jpGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="100%" stop-color="${c.bgEnd}" /></linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#jpGrad)" />
+    <rect x="0" y="0" width="${w}" height="${r(h * 0.12)}" fill="${c.accent}" fill-opacity="0.88" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.08)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.024)}" font-weight="900" text-anchor="middle" letter-spacing="3">WE'RE HIRING</text>
+    ${logoNode}
+    <rect x="${r(w * 0.04)}" y="${r(h * 0.16)}" width="${r(w * 0.50)}" height="${r(h * 0.72)}" rx="18" fill="${c.surface}" fill-opacity="0.35" />
+    ${headlineNodes}
+    ${taglineNodes}
+    ${bulletNodes}
+    ${heroNode}
+    <rect x="${r(w * 0.05)}" y="${r(h * 0.86)}" width="${r(w * 0.18)}" height="${r(h * 0.06)}" rx="8" fill="${c.accent}" />
+    <text x="${r(w * 0.14)}" y="${r(h * 0.898)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="700" text-anchor="middle">Apply Now</text>
+    <rect x="0" y="${r(h * 0.94)}" width="${w}" height="${r(h * 0.06)}" fill="${c.bgStart}" fill-opacity="0.65" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.978)}" fill="${c.text}" fill-opacity="0.72" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="500" text-anchor="middle">${escapeXml(input.footerWebsite || input.brandName || '')}</text>
+  `);
+}
+
+function buildHiringBannerSvg(w: number, h: number, _images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
+  const c = deriveColors(input.palette);
+  const headline = fitTextLines(input.headline || 'Join Our Team', [16, 18, 20, 22], 2);
+  const tagline = fitTextLines(input.tagline || '', [28, 32, 36], 2);
+  const headlineFont = headline.length > 1 ? r(w * 0.048) : r(w * 0.058);
+
+  const logoNode = logo
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.11)}" height="${r(h * 0.07)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.095)}" y="${r(h * 0.085)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="800" text-anchor="middle">${escapeXml(input.brandName || 'Company')}</text>`;
+
+  const headlineNodes = headline
+    .map((line, i) => `<text x="${r(w * 0.50)}" y="${r(h * 0.46 + i * h * 0.11)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900" text-anchor="middle">${escapeXml(line)}</text>`)
+    .join('');
+
+  const taglineNodes = tagline
+    .map((line, i) => `<text x="${r(w * 0.50)}" y="${r(h * 0.67 + i * h * 0.04)}" fill="${c.text}" fill-opacity="0.75" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500" text-anchor="middle">${escapeXml(line)}</text>`)
+    .join('');
+
+  return svg(w, h, `
+    <defs>
+      <linearGradient id="hbGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="40%" stop-color="${c.accent}" /><stop offset="100%" stop-color="${c.support}" /></linearGradient>
+      <radialGradient id="hbGlow" cx="0.5" cy="0.4" r="0.5"><stop offset="0%" stop-color="${c.accent}" stop-opacity="0.30" /><stop offset="100%" stop-color="transparent" /></radialGradient>
+    </defs>
+    <rect width="${w}" height="${h}" fill="url(#hbGrad)" />
+    <rect width="${w}" height="${h}" fill="url(#hbGlow)" />
+    <rect x="${r(w * 0.03)}" y="${r(h * 0.03)}" width="${r(w * 0.94)}" height="${r(h * 0.94)}" rx="24" fill="transparent" stroke="${c.text}" stroke-opacity="0.12" stroke-width="2" />
+    ${logoNode}
+    <rect x="${r(w * 0.30)}" y="${r(h * 0.17)}" width="${r(w * 0.40)}" height="${r(h * 0.065)}" rx="${r(h * 0.033)}" fill="${c.surface}" fill-opacity="0.92" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.216)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="900" text-anchor="middle" letter-spacing="4">WE'RE HIRING</text>
+    ${headlineNodes}
+    ${taglineNodes}
+    <rect x="${r(w * 0.34)}" y="${r(h * 0.80)}" width="${r(w * 0.32)}" height="${r(h * 0.07)}" rx="12" fill="${c.surface}" fill-opacity="0.95" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.845)}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">View Openings</text>
+    ${logoNode}
+    <rect x="0" y="${r(h * 0.93)}" width="${w}" height="${r(h * 0.07)}" fill="${c.bgStart}" fill-opacity="0.50" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.975)}" fill="${c.text}" fill-opacity="0.65" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="500" text-anchor="middle">${escapeXml(input.footerWebsite || input.brandName || '')}</text>
+  `);
+}
+
+function buildTeamSpotlightSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
+  const c = deriveColors(input.palette);
+  const headline = fitTextLines(input.headline || 'Meet the Team', [18, 20, 22], 2);
+  const tagline = fitTextLines(input.tagline || '', [22, 26, 30], 3);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
+  const heroImg = images['hero'];
+  const headlineFont = headline.length > 1 ? r(w * 0.036) : r(w * 0.042);
+
+  const cx = r(w * 0.24);
+  const cy = r(h * 0.50);
+  const radius = r(w * 0.18);
+
+  const heroNode = heroImg
+    ? `<defs><clipPath id="tsCircle"><circle cx="${cx}" cy="${cy}" r="${radius}" /></clipPath></defs>
+       <circle cx="${cx}" cy="${cy}" r="${radius + 3}" fill="${c.accent}" fill-opacity="0.35" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${cx - radius}" y="${cy - radius}" width="${radius * 2}" height="${radius * 2}" clip-path="url(#tsCircle)" preserveAspectRatio="xMidYMid slice" />`
+    : `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.surface}" fill-opacity="0.22" stroke="${c.muted}" stroke-opacity="0.20" stroke-width="2" />`;
+
+  const logoNode = logo
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.52)}" y="${r(h * 0.06)}" width="${r(w * 0.10)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
+    : '';
+
+  const headlineNodes = headline
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.22 + i * h * 0.08)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
+    .join('');
+
+  const taglineNodes = tagline
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.40 + i * h * 0.038)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="500">${escapeXml(line)}</text>`)
+    .join('');
+
+  const bulletNodes = bullets
+    .map((b, i) => `<rect x="${r(w * 0.52)}" y="${r(h * 0.56 + i * h * 0.075)}" width="${r(w * 0.42)}" height="${r(h * 0.055)}" rx="10" fill="${c.surface}" fill-opacity="0.28" />
+      <text x="${r(w * 0.55)}" y="${r(h * 0.594 + i * h * 0.075)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="600">${escapeXml(b)}</text>`)
+    .join('');
+
+  return svg(w, h, `
+    <defs><linearGradient id="tsGrad" x1="0" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="100%" stop-color="${c.bgEnd}" /></linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#tsGrad)" />
+    <rect x="${r(w * 0.48)}" y="${r(h * 0.04)}" width="${r(w * 0.48)}" height="${r(h * 0.88)}" rx="20" fill="${c.surface}" fill-opacity="0.18" />
+    ${heroNode}
+    ${logoNode}
+    <text x="${r(w * 0.52)}" y="${r(h * 0.16)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.013)}" font-weight="800" letter-spacing="2">JOIN OUR TEAM</text>
+    ${headlineNodes}
+    ${taglineNodes}
+    ${bulletNodes}
+    <rect x="${r(w * 0.52)}" y="${r(h * 0.85)}" width="${r(w * 0.18)}" height="${r(h * 0.055)}" rx="8" fill="${c.accent}" />
+    <text x="${r(w * 0.61)}" y="${r(h * 0.884)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="middle">Join Us</text>
+    <rect x="0" y="${r(h * 0.94)}" width="${w}" height="${r(h * 0.06)}" fill="${c.bgStart}" fill-opacity="0.55" />
+    <text x="${r(w * 0.50)}" y="${r(h * 0.978)}" fill="${c.text}" fill-opacity="0.68" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="500" text-anchor="middle">${escapeXml(input.footerWebsite || input.brandName || '')}</text>
+  `);
+}
+
+function buildCareerGrowthSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
+  const c = deriveColors(input.palette);
+  const headline = fitTextLines(input.headline || 'Grow With Us', [18, 20, 22, 24], 2);
+  const tagline = fitTextLines(input.tagline || '', [24, 28, 32], 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
+  const heroImg = images['hero'];
+  const headlineFont = headline.length > 1 ? r(w * 0.036) : r(w * 0.044);
+
+  const logoNode = logo
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.05)}" y="${r(h * 0.04)}" width="${r(w * 0.10)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.10)}" y="${r(h * 0.08)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="800" text-anchor="middle">${escapeXml(input.brandName || 'Company')}</text>`;
+
+  const heroNode = heroImg
+    ? `<defs><clipPath id="cgHeroClip"><rect x="${r(w * 0.56)}" y="${r(h * 0.14)}" width="${r(w * 0.40)}" height="${r(h * 0.72)}" rx="18" /></clipPath></defs>
+       <rect x="${r(w * 0.56)}" y="${r(h * 0.14)}" width="${r(w * 0.40)}" height="${r(h * 0.72)}" rx="18" fill="rgba(255,255,255,0.88)" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.56)}" y="${r(h * 0.14)}" width="${r(w * 0.40)}" height="${r(h * 0.72)}" clip-path="url(#cgHeroClip)" preserveAspectRatio="xMidYMid slice" />`
+    : `<rect x="${r(w * 0.56)}" y="${r(h * 0.14)}" width="${r(w * 0.40)}" height="${r(h * 0.72)}" rx="18" fill="${c.surface}" fill-opacity="0.15" stroke="${c.muted}" stroke-opacity="0.15" />`;
+
+  const headlineNodes = headline
+    .map((line, i) => `<text x="${r(w * 0.05)}" y="${r(h * 0.22 + i * h * 0.08)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
+    .join('');
+
+  const taglineNodes = tagline
+    .map((line, i) => `<text x="${r(w * 0.05)}" y="${r(h * 0.40 + i * h * 0.038)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="500">${escapeXml(line)}</text>`)
+    .join('');
+
+  // Benefit cards with number badges
+  const benefitDefaults = ['Competitive salary & equity', 'Remote-first flexibility', 'Learning & development budget', 'Health & wellness benefits'];
+  const benefitItems = bullets.length > 0 ? bullets : benefitDefaults;
+  const benefitNodes = benefitItems
+    .map((b, i) => {
+      const yPos = h * 0.50 + i * h * 0.095;
+      return `<rect x="${r(w * 0.04)}" y="${r(yPos)}" width="${r(w * 0.48)}" height="${r(h * 0.072)}" rx="12" fill="${c.surface}" fill-opacity="0.30" />
+        <circle cx="${r(w * 0.075)}" cy="${r(yPos + h * 0.036)}" r="${r(w * 0.018)}" fill="${c.accent}" />
+        <text x="${r(w * 0.075)}" y="${r(yPos + h * 0.044)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="700" text-anchor="middle">${i + 1}</text>
+        <text x="${r(w * 0.11)}" y="${r(yPos + h * 0.045)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="600">${escapeXml(b)}</text>`;
+    })
+    .join('');
+
+  return svg(w, h, `
+    <defs><linearGradient id="cgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="60%" stop-color="${c.bgEnd}" /><stop offset="100%" stop-color="${c.accent}" stop-opacity="0.40" /></linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#cgGrad)" />
+    ${logoNode}
+    <text x="${r(w * 0.05)}" y="${r(h * 0.14)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.013)}" font-weight="800" letter-spacing="2">CAREER OPPORTUNITY</text>
+    ${headlineNodes}
+    ${taglineNodes}
+    ${benefitNodes}
+    ${heroNode}
+    <rect x="${r(w * 0.05)}" y="${r(h * 0.90)}" width="${r(w * 0.18)}" height="${r(h * 0.055)}" rx="8" fill="${c.accent}" />
+    <text x="${r(w * 0.14)}" y="${r(h * 0.935)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="middle">Explore Roles</text>
+    <text x="${r(w * 0.95)}" y="${r(h * 0.96)}" fill="${c.text}" fill-opacity="0.55" font-family="Arial,sans-serif" font-size="${r(w * 0.011)}" font-weight="500" text-anchor="end">${escapeXml(input.footerWebsite || input.brandName || '')}</text>
   `);
 }
 
@@ -902,6 +1155,10 @@ const THEME_BUILDERS: Record<string, SvgBuilder> = {
   'comparison-board': buildComparisonBoardSvg,
   'premium-editorial': buildPremiumEditorialSvg,
   'guided-auto': buildGuidedAutoSvg,
+  'job-posting': buildJobPostingSvg,
+  'hiring-banner': buildHiringBannerSvg,
+  'team-spotlight': buildTeamSpotlightSvg,
+  'career-growth': buildCareerGrowthSvg,
 };
 
 // ── Main composer ────────────────────────────────────────────────────────────

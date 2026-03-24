@@ -321,6 +321,26 @@ function buildThemeDirective(themeId: string) {
       direction:
         'BACKGROUND PLATE — PREMIUM EDITORIAL: Generate a luxurious, magazine-quality backdrop. The SVG overlay places a LEFT editorial image panel (3%-33% width, full height), headline text on the RIGHT (30% height), an accent line, tagline below, and an editorial label. Your job: create a rich, dark, sophisticated background using brand colors in their most premium register. Think Rolex, Porsche, or luxury magazine — every visual element whispers quality. LEFT SIDE: deep shadows with a narrow strip of dramatic side light where the editorial image panel sits — creating a stage-lit, gallery feel. RIGHT SIDE: a deep, rich gradient in the darkest brand color — almost black but with color depth, ensuring white editorial text reads with maximum contrast. Subtle material richness: fine grain texture, deep vignette, very slight warm glow at the image panel border. No text, no panels, no lines, no UI.',
     },
+    'job-posting': {
+      label: 'Job Posting',
+      direction:
+        'BACKGROUND PLATE — JOB POSTING: Generate a professional, corporate-quality backdrop for a recruitment visual. The SVG overlay places a brand-colored "WE\'RE HIRING" header bar at top, a LEFT text column (5%-52%) with role title, description, and requirement bullets, a RIGHT image panel (58%-96%, 18%-78%) for an office/team photo, an "Apply Now" button at bottom-left, and a footer. Your job: create a clean, modern, trustworthy workplace environment background using brand colors. Think LinkedIn recruitment ad, corporate career page, or professional job board feature. LEFT SIDE: a subtle brand-tinted gradient, slightly darker, giving the text column depth without clutter. RIGHT SIDE: lighter and warmer — suggesting an office environment, workspace, or professional setting that makes the image panel feel naturally placed. The mood: professional, welcoming, opportunity-forward. Use brand colors confidently but in their corporate register — not too playful, not too dark. No text, no cards, no UI elements.',
+    },
+    'hiring-banner': {
+      label: 'Hiring Banner',
+      direction:
+        'BACKGROUND PLATE — HIRING BANNER: Generate a bold, energetic, talent-attraction backdrop. The SVG overlay places a logo at top-left, a "WE\'RE HIRING" pill badge at center-top, a LARGE role title in the center, a tagline below, a "View Openings" CTA button, and a border frame. Your job: fill the canvas with a confident, vibrant gradient using brand colors at high saturation — think tech company career page hero, hiring campaign billboard, or modern recruitment poster. Visual approach: a bold diagonal or radial gradient sweep in the brand palette with a subtle radial glow at center (where the headline sits) drawing focus. Add very subtle geometric patterns or abstract shapes at low opacity — hexagons, dots, or flowing lines — suggesting innovation and growth. The energy: ambitious, modern, dynamic — not corporate-stale. Strong brand color usage, high energy, optimistic. No text, no badges, no UI.',
+    },
+    'team-spotlight': {
+      label: 'Team Spotlight',
+      direction:
+        'BACKGROUND PLATE — TEAM SPOTLIGHT: Generate a warm, human, culture-forward backdrop. The SVG overlay places a large circular team photo on the LEFT (centered at 24%/50%, 18% radius), a RIGHT text panel (48%-96%) with "JOIN OUR TEAM" label, headline, tagline, value cards, and a "Join Us" CTA button. Your job: create a warm, inviting background that feels like a real workplace — approachable, vibrant, team-oriented. Think Google careers page, Notion team page, or Spotify culture blog. LEFT SIDE: warm brand-colored ambient light from the left, suggesting natural office lighting or an outdoor team gathering. A subtle warm glow where the circular photo sits creates a welcoming frame. RIGHT SIDE: slightly darker and quieter — a rich but calm brand-colored gradient for text readability. Overall mood: collaborative, human, growth-minded. Brand colors in their warmest register — think sunset office hours, team lunch light, collaborative energy. No text, no circles, no UI.',
+    },
+    'career-growth': {
+      label: 'Career Growth',
+      direction:
+        'BACKGROUND PLATE — CAREER GROWTH: Generate a professional, aspirational, growth-themed backdrop. The SVG overlay places a "CAREER OPPORTUNITY" label at top, logo, headline, and tagline on the LEFT (5%-52%), numbered benefit/perk cards stacked below (4%-52%), a RIGHT image panel (56%-96%, 14%-86%) for a workplace photo, and an "Explore Roles" CTA. Your job: create an upward-looking, aspirational background using brand colors. Think LinkedIn\'s career sections, premium job board feature, or corporate growth report cover. LEFT SIDE: a clean brand gradient with subtle depth — a gentle progression from a deeper brand tone at bottom to a lighter one at top, subtly suggesting upward growth. RIGHT SIDE: warmer and slightly brighter — suggesting an open, bright workspace environment for the image panel. Include a very subtle abstract upward element: soft diagonal light sweeps, ascending dots at low opacity, or gentle ascending lines — suggesting career trajectory and growth. The mood: professional ambition, real opportunity, forward momentum. No text, no cards, no numbered elements, no UI.',
+    },
   };
 
   return themeMap[themeId] || themeMap['guided-auto'];
@@ -390,6 +410,26 @@ function buildVariationDirective(nonce: number, themeId: string) {
       'Background atmosphere: rich editorial darkness in brand colors with subtle material textures and dramatic side light.',
       'Background atmosphere: sophisticated dark brand-colored gradient with restrained luxury warmth.',
     ],
+    'job-posting': [
+      'Variation: modern open-plan office — clean workstations, natural light through tall windows, brand-colored accent walls. Professional and inviting.',
+      'Variation: corporate campus exterior — glass building facade, landscaped walkway, brand-colored sky at golden hour. Premium employer brand.',
+      'Variation: collaborative workspace — meeting room glass walls, whiteboards, warm overhead lighting, brand palette in furnishings. Dynamic workplace.',
+    ],
+    'hiring-banner': [
+      'Variation: bold geometric burst — brand-colored angular shapes radiating from center, high-saturation gradient, dynamic energy. Modern tech recruitment feel.',
+      'Variation: abstract flowing waves — brand-colored curves and gradients flowing diagonally, subtle dot pattern overlay. Innovation and movement.',
+      'Variation: confident radial spotlight — deep brand gradient edges, bright accent glow at center, subtle hexagon pattern. Focus and opportunity.',
+    ],
+    'team-spotlight': [
+      'Variation: sunny office atrium — warm natural light from skylights, green plants, brand-colored furniture accents. Welcoming team environment.',
+      'Variation: outdoor team gathering — park or terrace setting, warm golden-hour light, brand colors in ambient elements. Human and approachable.',
+      'Variation: creative workspace — colorful brand-toned walls, casual seating, warm collaborative lighting. Culture-forward and vibrant.',
+    ],
+    'career-growth': [
+      'Variation: ascending cityscape at dawn — skyline with upward perspective, brand-colored sky gradients, subtle ascending light rays. Growth and ambition.',
+      'Variation: modern office stairway — upward-looking perspective, brand-colored accent lighting along rails, clean architectural lines. Career progression.',
+      'Variation: bright open workspace — large windows with city view, ascending light from the horizon, brand palette in warm furnishings. Opportunity ahead.',
+    ],
     default: [
       'Background atmosphere: professional corporate gradient using brand colors with balanced tones.',
       'Background atmosphere: clean modern surface with brand-colored ambient lighting.',
@@ -423,6 +463,7 @@ const ALLOWED_THEMES = new Set([
   'clean-brand', 'industrial-campaign', 'datasheet-frame', 'proof-stack',
   'launch-banner', 'sector-collage', 'brand-story', 'offer-card',
   'comparison-board', 'premium-editorial',
+  'job-posting', 'hiring-banner', 'team-spotlight', 'career-growth',
 ]);
 
 const ALLOWED_TONES = new Set([
@@ -1513,23 +1554,31 @@ FINAL QUALITY FALLBACK (MANDATORY):
         })
       );
 
-      finalPngBuffer = await composeThemeImage({
-        width: canvas.width,
-        height: canvas.height,
-        baseImageBuffer: basePngBuffer,
-        themeId,
-        slotImageBuffers,
-        primaryLogoBuffer,
-        headline: composedHeadline,
-        tagline: composedTagline,
-        brandName: composedBrandName,
-        footerWebsite: composedFooterWebsite,
-        footerEmail: composedFooterEmail,
-        palette: effectiveBrandColors,
-        featureBullets: composedFeatureBullets,
-        partnerName,
-      });
-      logoApplied = Boolean(primaryLogoBuffer);
+      try {
+        console.log(`[theme-compose] Composing theme "${themeId}" with ${Object.keys(slotImageBuffers).length} slot(s), logo=${Boolean(primaryLogoBuffer)}, headline="${composedHeadline?.slice(0, 40)}", bullets=${composedFeatureBullets.length}`);
+        finalPngBuffer = await composeThemeImage({
+          width: canvas.width,
+          height: canvas.height,
+          baseImageBuffer: basePngBuffer,
+          themeId,
+          slotImageBuffers,
+          primaryLogoBuffer,
+          headline: composedHeadline,
+          tagline: composedTagline,
+          brandName: composedBrandName,
+          footerWebsite: composedFooterWebsite,
+          footerEmail: composedFooterEmail,
+          palette: effectiveBrandColors,
+          featureBullets: composedFeatureBullets,
+          partnerName,
+        });
+        console.log(`[theme-compose] Composition succeeded for "${themeId}", output size=${finalPngBuffer.length}`);
+        logoApplied = Boolean(primaryLogoBuffer);
+      } catch (composeError) {
+        console.error(`[theme-compose] FAILED for "${themeId}":`, composeError);
+        // Fall through — finalPngBuffer stays as basePngBuffer, user gets base image
+        // This prevents a 500 error but still delivers something
+      }
     }
 
     if (finalPngBuffer !== basePngBuffer) {

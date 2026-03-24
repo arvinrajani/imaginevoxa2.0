@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { createClient } from '@/lib/supabase/client';
 import { useWorkspace } from '@/lib/context/workspace-context';
+import { useBillingSnapshot } from '@/lib/billing/use-billing-snapshot';
 
 const tones = [
   { id: 'professional', label: 'Professional', description: 'Business-appropriate and polished' },
@@ -288,11 +289,14 @@ export default function GeneratePage() {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [brandIntelligence, setBrandIntelligence] = useState<BrandIntelligence | null>(null);
   
-  // User data
+  // User data — credits come from shared billing snapshot
+  const billingQuery = useBillingSnapshot();
+  const billingData = billingQuery.data;
+  const userPlan: UserPlan = (billingData?.plan as UserPlan) || 'starter';
+  const creditsRemaining = billingData?.creditsRemaining ?? 25;
+  const creditsTotal = billingData?.creditsTotal ?? 25;
+
   const [loading, setLoading] = useState(true);
-  const [userPlan, setUserPlan] = useState<UserPlan>('starter');
-  const [creditsRemaining, setCreditsRemaining] = useState(25);
-  const [creditsTotal, setCreditsTotal] = useState(25);
   const [linkedinConnected, setLinkedinConnected] = useState(false);
   const [orgAppConnected, setOrgAppConnected] = useState(false);
   const [userName, setUserName] = useState('');
@@ -468,10 +472,6 @@ export default function GeneratePage() {
       const profile = profileRows?.[0] ?? null;
 
       setUserName(profile?.full_name || user.email?.split('@')[0] || 'User');
-      
-      // Get user plan from database
-      const userPlanFromDb: UserPlan = 'pro';
-      const effectivePlan: UserPlan = userPlanFromDb;
 
       const { data: linkedinRows } = await supabase
         .from('linkedin_connections')
@@ -482,7 +482,7 @@ export default function GeneratePage() {
 
       setLinkedinConnected(!!linkedinConn);
       setOrgAppConnected(!!linkedinConn?.org_access_token);
-      
+
       // Set member URN and organizations
       if (linkedinConn) {
         const memberUrnValue = linkedinConn.member_urn || linkedinConn.linkedin_member_urn || '';
@@ -494,21 +494,7 @@ export default function GeneratePage() {
         }
       }
 
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const { data: posts } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfMonth.toISOString());
-
-      const postsThisMonth = posts?.length || 0;
-      const total = PLAN_LIMITS[effectivePlan].credits;
-      
-      setUserPlan(effectivePlan);
-      setCreditsTotal(total);
-      setCreditsRemaining(Math.max(0, total - postsThisMonth));
+      // Credits now come from shared useBillingSnapshot hook — no manual counting needed
       setLoading(false);
     }
 
@@ -566,7 +552,7 @@ export default function GeneratePage() {
     };
   }, [selectedBrand?.id, selectedBrand?.industry]);
 
-  const canPostToLinkedIn = PLAN_LIMITS[userPlan].canPostToLinkedIn;
+  const canPostToLinkedIn = PLAN_LIMITS[userPlan]?.canPostToLinkedIn ?? false;
   const canGenerateImages = userPlan !== 'starter';
   const hookSuggestions = useMemo(() => buildHookSuggestions(draftContent), [draftContent]);
   const hashtagSuggestions = useMemo(() => buildHashtagSuggestions(draftContent), [draftContent]);
@@ -887,8 +873,9 @@ export default function GeneratePage() {
       });
       setDraftContent(generatedContent);
       setSelectedHashtags([]);
-      
-      setCreditsRemaining(prev => Math.max(0, prev - 1));
+
+      // Credits auto-refresh via useBillingSnapshot realtime subscription
+      void billingQuery.refetch();
     } catch (error) {
       console.error('Generation error:', error);
       setPublishError(error instanceof Error ? error.message : 'Generation failed. Please try again.');
@@ -1080,7 +1067,7 @@ export default function GeneratePage() {
             You have used all your credits!
           </h2>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            You have created {creditsTotal} posts this month on the {PLAN_LIMITS[userPlan].name} plan.
+            You have created {creditsTotal} posts this month on the {billingData?.planName || PLAN_LIMITS[userPlan]?.name || 'Free'} plan.
             Upgrade to Pro or Pro+ for more posts and direct LinkedIn publishing.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
