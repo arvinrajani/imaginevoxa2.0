@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { resolveOAuthRedirectUri } from "@/lib/auth/oauth-origin";
 import crypto from "crypto";
 
 export async function GET(request: Request) {
@@ -19,11 +20,18 @@ export async function GET(request: Request) {
       target === "organization"
         ? process.env.LINKEDIN_ORG_CLIENT_ID
         : process.env.LINKEDIN_CLIENT_ID;
-    const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
     const redirectUri =
       target === "organization"
-        ? process.env.LINKEDIN_ORG_REDIRECT_URI || `${baseUrl}/api/linkedin/callback`
-        : process.env.LINKEDIN_REDIRECT_URI || `${baseUrl}/api/linkedin/callback`;
+        ? resolveOAuthRedirectUri(request, {
+            configuredRedirectUri: process.env.LINKEDIN_ORG_REDIRECT_URI,
+            configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
+            fallbackPath: "/api/linkedin/callback",
+          })
+        : resolveOAuthRedirectUri(request, {
+            configuredRedirectUri: process.env.LINKEDIN_REDIRECT_URI,
+            configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
+            fallbackPath: "/api/linkedin/callback",
+          });
     const scopes =
       target === "organization"
         ? process.env.LINKEDIN_ORG_SCOPES ||
@@ -31,10 +39,16 @@ export async function GET(request: Request) {
         : process.env.LINKEDIN_SCOPES ||
           "openid profile email w_member_social r_organization_social";
 
-    if (!clientId || !redirectUri) {
-      return NextResponse.redirect(
-        new URL("/app/linkedin?error=LinkedIn+not+configured", request.url)
+    if (!clientId) {
+      const url = new URL("/app/linkedin", request.url);
+      url.searchParams.set("error", "LinkedIn not configured");
+      url.searchParams.set(
+        "error_description",
+        target === "organization"
+          ? "Missing LINKEDIN_ORG_CLIENT_ID on this deployment."
+          : "Missing LINKEDIN_CLIENT_ID on this deployment."
       );
+      return NextResponse.redirect(url);
     }
 
     const state = crypto.randomUUID();

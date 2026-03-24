@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
+import {
+  buildMetaSetupRedirect,
+  resolveMetaOAuthConfig,
+} from "@/lib/social/meta-oauth-config";
 import crypto from "crypto";
-
-const SCOPE_ALIASES: Record<string, string> = {
-  instagram_business_basic: "instagram_basic",
-  instagram_business_content_publish: "instagram_content_publish",
-  instagram_content_publishing: "instagram_content_publish",
-  instagram_business_content_publishing: "instagram_content_publish",
-};
 
 export async function GET(request: Request) {
   try {
@@ -24,27 +21,14 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const intent = searchParams.get("intent") || "facebook";
+    const config = resolveMetaOAuthConfig(request);
 
-    const appId = process.env.META_APP_ID?.trim();
-    const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
-    const redirectUri =
-      process.env.META_REDIRECT_URI?.trim() || `${baseUrl}/api/meta/callback`;
-    const rawScopes =
-      process.env.META_SCOPES?.trim() ||
-      "pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish,business_management";
-    const scopes = Array.from(
-      new Set(
-        rawScopes
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter(Boolean)
-          .map((scope) => SCOPE_ALIASES[scope] || scope)
-      )
-    ).join(",");
-
-    if (!appId || !redirectUri) {
+    if (!config.appId) {
       return NextResponse.redirect(
-        new URL("/app/meta?error=Meta+OAuth+not+configured", request.url)
+        buildMetaSetupRedirect(request, {
+          missing: config.startMissing,
+          redirectUri: config.redirectUri,
+        })
       );
     }
 
@@ -70,7 +54,7 @@ export async function GET(request: Request) {
       secure: isProd,
       sameSite: "lax",
     });
-    cookieStore.set("meta_oauth_redirect", redirectUri, {
+    cookieStore.set("meta_oauth_redirect", config.redirectUri, {
       httpOnly: true,
       maxAge: 60 * 10,
       path: "/",
@@ -86,10 +70,10 @@ export async function GET(request: Request) {
     });
 
     const params = new URLSearchParams({
-      client_id: appId,
-      redirect_uri: redirectUri,
+      client_id: config.appId,
+      redirect_uri: config.redirectUri,
       state,
-      scope: scopes,
+      scope: config.scopes,
       response_type: "code",
       auth_type: "rerequest",
       display: "popup",

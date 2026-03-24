@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  buildMetaSetupRedirect,
+  resolveMetaOAuthConfig,
+} from "@/lib/social/meta-oauth-config";
 
 type MetaTokenResponse = {
   access_token: string;
@@ -121,33 +125,29 @@ export async function GET(request: Request) {
     );
   }
 
-  const appId = process.env.META_APP_ID?.trim();
-  const appSecret = process.env.META_APP_SECRET?.trim();
-  const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
-  const redirectUri =
-    storedRedirect ||
-    process.env.META_REDIRECT_URI?.trim() ||
-    `${baseUrl}/api/meta/callback`;
+  const config = resolveMetaOAuthConfig(request, storedRedirect);
 
-  if (!appId || !appSecret || !redirectUri) {
+  if (!config.appId || !config.appSecret) {
     clearOauthCookies();
     return NextResponse.redirect(
-      new URL("/app/meta?error=Meta+OAuth+not+configured", request.url)
+      buildMetaSetupRedirect(request, {
+        missing: config.callbackMissing,
+        redirectUri: config.redirectUri,
+      })
     );
   }
 
   const requestedScopes = parseScopes(
-    process.env.META_SCOPES?.trim() ||
-    "pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish"
+    config.scopes
   );
   const grantedScopes = parseScopes(grantedScopesParam);
   const scopes = grantedScopes.length > 0 ? grantedScopes : requestedScopes;
 
   try {
     const shortTokenUrl = new URL("https://graph.facebook.com/v22.0/oauth/access_token");
-    shortTokenUrl.searchParams.set("client_id", appId);
-    shortTokenUrl.searchParams.set("client_secret", appSecret);
-    shortTokenUrl.searchParams.set("redirect_uri", redirectUri);
+    shortTokenUrl.searchParams.set("client_id", config.appId);
+    shortTokenUrl.searchParams.set("client_secret", config.appSecret);
+    shortTokenUrl.searchParams.set("redirect_uri", config.redirectUri);
     shortTokenUrl.searchParams.set("code", code);
 
     const shortToken = await fetchMetaJson<MetaTokenResponse>(shortTokenUrl.toString());
@@ -158,8 +158,8 @@ export async function GET(request: Request) {
     try {
       const longTokenUrl = new URL("https://graph.facebook.com/v22.0/oauth/access_token");
       longTokenUrl.searchParams.set("grant_type", "fb_exchange_token");
-      longTokenUrl.searchParams.set("client_id", appId);
-      longTokenUrl.searchParams.set("client_secret", appSecret);
+      longTokenUrl.searchParams.set("client_id", config.appId);
+      longTokenUrl.searchParams.set("client_secret", config.appSecret);
       longTokenUrl.searchParams.set("fb_exchange_token", shortToken.access_token);
       const longToken = await fetchMetaJson<MetaTokenResponse>(longTokenUrl.toString());
       if (longToken.access_token) {

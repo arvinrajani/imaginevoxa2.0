@@ -44,6 +44,7 @@ export default function MetaPage() {
   const [savingDefaults, setSavingDefaults] = useState<"facebook" | "instagram" | null>(null);
   const [connection, setConnection] = useState<MetaConnection | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runtimeOrigin, setRuntimeOrigin] = useState<string | null>(null);
 
   const fetchConnection = async () => {
     setLoading(true);
@@ -73,6 +74,12 @@ export default function MetaPage() {
 
   useEffect(() => {
     void fetchConnection();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRuntimeOrigin(window.location.origin);
+    }
   }, []);
 
   const connect = (intent: "facebook" | "instagram") => {
@@ -136,6 +143,29 @@ export default function MetaPage() {
   const tokenDaysLeft = tokenExpiresAt
     ? Math.max(0, Math.ceil((tokenExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null;
+  const searchError = searchParams.get("error");
+  const searchErrorDescription = searchParams.get("error_description");
+  const isMetaSetupError =
+    searchError === "meta_oauth_not_configured" ||
+    searchError === "Meta OAuth not configured";
+  const missingMetaKeys = (searchParams.get("missing") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const setupKeysToShow =
+    missingMetaKeys.length > 0
+      ? missingMetaKeys
+      : ["META_APP_ID", "META_APP_SECRET"];
+  const callbackUri =
+    searchParams.get("callback_uri") ||
+    (runtimeOrigin ? `${runtimeOrigin}/api/meta/callback` : null);
+  let callbackHost: string | null = null;
+  try {
+    callbackHost = callbackUri ? new URL(callbackUri).hostname : null;
+  } catch {
+    callbackHost = null;
+  }
+  const isPreviewLikeHost = Boolean(callbackHost && callbackHost.endsWith(".vercel.app"));
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8 space-y-6">
@@ -225,12 +255,94 @@ export default function MetaPage() {
         </div>
       )}
 
-      {searchParams.get("error") && searchParams.get("error") !== "no_instagram_linked" && (
-        <div className="rounded-xl border border-red-200/50 bg-red-50/20 px-5 py-4 flex items-center gap-3">
-          <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700">
-            {decodeURIComponent(searchParams.get("error") || "Meta connection failed")}
-          </p>
+      {isMetaSetupError && (
+        <div className="rounded-xl border border-red-200/50 bg-red-50/20 px-5 py-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                Meta OAuth is not configured on this deployment
+              </p>
+              <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                This is a deployment configuration problem. Add the missing Meta environment
+                variables in Vercel, then redeploy before trying to connect Facebook or Instagram
+                again.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-red-200/60 bg-white/80 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-red-700">
+                Missing Env Vars
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {setupKeysToShow.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded-md border border-red-200 bg-red-50 px-2 py-1 font-mono text-[11px] font-semibold text-red-800"
+                  >
+                    {key}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-red-700/90">
+                Recommended for production too: <span className="font-mono">APP_BASE_URL</span>.
+                Optional if you want a fixed callback: <span className="font-mono">META_REDIRECT_URI</span>.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200/70 bg-white/80 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Callback URL To Allow In Meta
+              </p>
+              <p className="mt-2 break-all rounded-md bg-slate-950 px-2.5 py-2 font-mono text-[11px] text-slate-100">
+                {callbackUri || "Unable to determine callback URL"}
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                Add this exact URL to your Meta app&apos;s Valid OAuth Redirect URIs.
+              </p>
+            </div>
+          </div>
+
+          {isPreviewLikeHost && (
+            <div className="rounded-lg border border-amber-200/60 bg-amber-50/70 px-3 py-3">
+              <p className="text-xs font-semibold text-amber-800">
+                Vercel preview domain detected
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-amber-700">
+                OAuth is more reliable on a stable production or custom domain. Preview URLs can
+                change and break Meta redirect URI validation even after env vars are added.
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Fix Steps
+            </p>
+            <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-slate-700">
+              <p>1. Add the Meta env vars in your Vercel project settings.</p>
+              <p>2. Add the callback URL above inside Meta for Developers.</p>
+              <p>3. Redeploy, then reconnect Facebook or Instagram from this page.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {searchError && searchError !== "no_instagram_linked" && !isMetaSetupError && (
+        <div className="rounded-xl border border-red-200/50 bg-red-50/20 px-5 py-4 flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-red-700">
+              {decodeURIComponent(searchError || "Meta connection failed")}
+            </p>
+            {searchErrorDescription && (
+              <p className="mt-1 text-xs leading-relaxed text-red-600">
+                {decodeURIComponent(searchErrorDescription)}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -255,7 +367,7 @@ export default function MetaPage() {
           {/* ── Facebook Card ── */}
           <div className="rounded-2xl border border-slate-200/60 bg-white overflow-hidden flex flex-col">
             {/* Card header */}
-            <div className="px-5 py-4 border-b border-slate-100/80 bg-gradient-to-r from-[#1877F2]/5 to-transparent#1877F2]/10">
+            <div className="px-5 py-4 border-b border-slate-100/80 bg-gradient-to-r from-[#1877F2]/5 to-transparent">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#1877F2] flex items-center justify-center shadow-sm">

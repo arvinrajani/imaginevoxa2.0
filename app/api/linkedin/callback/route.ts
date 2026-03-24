@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveOAuthRedirectUri } from "@/lib/auth/oauth-origin";
 
 type LinkedInTokenResponse = {
   access_token: string;
@@ -69,15 +70,44 @@ export async function GET(request: Request) {
     target === "organization"
       ? process.env.LINKEDIN_ORG_CLIENT_SECRET
       : process.env.LINKEDIN_CLIENT_SECRET;
-  const redirectUri =
+  const resolvedRedirect =
     target === "organization"
-      ? process.env.LINKEDIN_ORG_REDIRECT_URI
-      : process.env.LINKEDIN_REDIRECT_URI;
-  const resolvedRedirect = storedRedirect || redirectUri;
+      ? resolveOAuthRedirectUri(request, {
+          storedRedirectUri: storedRedirect,
+          configuredRedirectUri: process.env.LINKEDIN_ORG_REDIRECT_URI,
+          configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
+          fallbackPath: "/api/linkedin/callback",
+        })
+      : resolveOAuthRedirectUri(request, {
+          storedRedirectUri: storedRedirect,
+          configuredRedirectUri: process.env.LINKEDIN_REDIRECT_URI,
+          configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
+          fallbackPath: "/api/linkedin/callback",
+        });
 
-  if (!clientId || !clientSecret || !resolvedRedirect) {
+  if (!clientId || !clientSecret) {
+    const url = new URL("/app/linkedin", request.url);
+    url.searchParams.set("error", "LinkedIn not configured");
+    url.searchParams.set(
+      "error_description",
+      [
+        !clientId
+          ? target === "organization"
+            ? "Missing LINKEDIN_ORG_CLIENT_ID."
+            : "Missing LINKEDIN_CLIENT_ID."
+          : null,
+        !clientSecret
+          ? target === "organization"
+            ? "Missing LINKEDIN_ORG_CLIENT_SECRET."
+            : "Missing LINKEDIN_CLIENT_SECRET."
+          : null,
+        `Callback URL in use: ${resolvedRedirect}`,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
     return NextResponse.redirect(
-      new URL("/app/linkedin?error=LinkedIn+not+configured", request.url)
+      url
     );
   }
 
@@ -138,7 +168,7 @@ export async function GET(request: Request) {
         memberUrn = `urn:li:person:${userinfo.sub}`;
       }
     }
-  } catch (error) {
+  } catch {
     // Silent fail, will try alternative method
   }
 
@@ -158,7 +188,7 @@ export async function GET(request: Request) {
           memberUrn = `urn:li:person:${profile.id}`;
         }
       }
-    } catch (error) {
+    } catch {
       // Silent fail
     }
   }
@@ -175,7 +205,7 @@ export async function GET(request: Request) {
           memberUrn = `urn:li:person:${parsed.sub}`;
         }
       }
-    } catch (decodeError) {
+    } catch {
       // Ignore decode errors
     }
   }
@@ -283,7 +313,7 @@ export async function GET(request: Request) {
       .eq("table_schema", "public")
       .eq("table_name", "linkedin_connections");
     columnSet = toColumnSet(columnRows as { column_name: string }[]);
-  } catch (schemaError) {
+  } catch {
     columnSet = null;
   }
 
