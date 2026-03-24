@@ -210,14 +210,21 @@ export async function GET(request: Request) {
     }
   }
 
+  const scopeList = tokenData.scope?.split(" ").filter(Boolean) || ["w_member_social"];
+
   if (!memberUrn) {
+    const scopeDebug = scopeList.length > 0 ? scopeList.join(" ") : "none";
     return NextResponse.redirect(
-      new URL("/app/linkedin?error=Could+not+get+LinkedIn+profile", request.url)
+      new URL(
+        `/app/linkedin?error=Could+not+get+LinkedIn+profile&error_description=${encodeError(
+          `LinkedIn did not return a member identifier. Granted scopes: ${scopeDebug}. Ensure the LinkedIn app has Sign In with LinkedIn using OpenID Connect enabled and LINKEDIN_SCOPES includes openid profile w_member_social.`
+        )}`,
+        request.url
+      )
     );
   }
 
   const memberId = memberUrn.split(":").pop() || "";
-  const scopeList = tokenData.scope?.split(" ").filter(Boolean) || ["w_member_social"];
 
   // Try to get organizations, but don't fail if we can't
   let orgs: { id: string; urn: string; name: string }[] = [];

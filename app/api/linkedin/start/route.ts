@@ -28,15 +28,17 @@ function sanitizeLinkedInScopes(
     .filter(Boolean);
   const allowedScopes = new Set(defaults);
 
-  const scopes = Array.from(
-    new Set(
-      requestedScopes.filter(
-        (scope) => allowedScopes.has(scope) && !DISALLOWED_LINKEDIN_SCOPES.has(scope)
-      )
-    )
+  const scopes = new Set(
+    defaults.filter((scope) => !DISALLOWED_LINKEDIN_SCOPES.has(scope))
   );
 
-  return scopes.length > 0 ? scopes.join(" ") : defaults.join(" ");
+  for (const scope of requestedScopes) {
+    if (allowedScopes.has(scope) && !DISALLOWED_LINKEDIN_SCOPES.has(scope)) {
+      scopes.add(scope);
+    }
+  }
+
+  return Array.from(scopes).join(" ");
 }
 
 export async function GET(request: Request) {
