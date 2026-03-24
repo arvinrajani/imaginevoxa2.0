@@ -250,7 +250,8 @@ const WEAK_FEATURE_PATTERNS = [
   /visit (our|the) website/i,
   /contact us/i,
   /click /i,
-  /^https?:\/\//i,
+  /https?:\/\//i,
+  /\S+@\S+\.[a-zA-Z]{2,}/,
 ];
 
 function isWeakFeatureLine(value: string) {
@@ -1512,10 +1513,10 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[14%] left-[3.2%] top-[18%] w-[31%] rounded-[22px] border border-white/10 bg-white/5 shadow-[0_18px_40px_rgba(0,0,0,0.14)]">
-          {renderHeroZone('absolute inset-0 rounded-[22px] bg-white/[0.03]', {
+        <div className="absolute bottom-[14%] left-[3.2%] top-[18%] w-[31%] rounded-[22px] border border-white/20 bg-white/90 shadow-[0_18px_40px_rgba(0,0,0,0.22)] overflow-hidden">
+          {renderHeroZone('absolute inset-0 rounded-[22px]', {
             fit: 'contain',
-            imagePaddingClass: 'p-4',
+            imagePaddingClass: 'p-2',
           })}
         </div>
 
@@ -1711,7 +1712,7 @@ function ThemePreviewLarge({
               </p>
             ))}
           </div>
-          <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+          <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
             Brand Focus
           </div>
         </div>
@@ -1765,59 +1766,11 @@ function ThemePreviewLarge({
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+            <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
               Story Highlight
             </div>
             <div className="h-1.5 w-16 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
           </div>
-        </div>
-        {generateCta}
-      </div>
-    );
-  }
-
-  // ── Industrial Campaign ──────────────────────────────────────────────────────
-  if ((themeId as string) === 'industrial-campaign') {
-    const benefits = featureLines.length > 0 ? featureLines : ['Post proof points appear here'];
-    return (
-      <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
-        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}33 100%)` }} />
-        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 22% 52%, ${previewPalette.accent}40, transparent 55%)` }} />
-        <div className="absolute inset-x-0 top-0 flex h-[15%] items-center justify-between border-b border-white/10 px-[4%]" style={{ backgroundColor: `${previewPalette.headerPanel}cc` }}>
-          {renderLogoBox('h-[62%] w-[13%] rounded bg-white/90 p-1')}
-          {(allianceHeaderLogos[0] || partnerName) && (
-            <div className="flex h-[62%] w-[14%] items-center justify-center rounded px-2" style={{ backgroundColor: `${previewPalette.surface}44` }}>
-              {allianceHeaderLogos[0] ? (
-                <img src={allianceHeaderLogos[0].url} alt="Partner" className="h-full w-full object-contain" />
-              ) : (
-                <span className="text-[8px] font-semibold text-white/80">{partnerName}</span>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="absolute bottom-[12%] left-[3%] top-[18%] w-[37%] rounded-xl border border-white/10" style={{ backgroundColor: `${previewPalette.surface}15` }}>
-          {renderHeroZone('absolute inset-0 rounded-xl')}
-        </div>
-        <div className="absolute bottom-[12%] right-[3%] top-[18%] flex w-[56%] flex-col justify-center gap-3 pl-3">
-          <div className="rounded px-1 py-0.5" style={{ backgroundColor: `${previewPalette.text}e6` }}>
-            <p className="text-[11px] font-bold leading-tight" style={{ color: previewPalette.bgStart }}>{activeHeadlineText || 'Campaign Headline'}</p>
-          </div>
-          <div className="rounded px-1 py-0.5" style={{ backgroundColor: previewPalette.accent }}>
-            <p className="text-[10px] font-bold leading-tight" style={{ color: previewPalette.bgStart }}>{activeTaglineText || 'Tagline here'}</p>
-          </div>
-          <div className="mt-1 space-y-2.5">
-            {benefits.slice(0, 4).map((b, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>✓</div>
-                <p className="text-[10px] font-semibold leading-tight text-white/90 flex-1">{b}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center justify-center gap-4 border-t border-white/10 text-[10px] font-semibold text-white/80" style={{ backgroundColor: previewPalette.footer }}>
-          <span>{footerWebsite || 'www.yoursite.com'}</span>
-          <span className="text-white/40">|</span>
-          <span>{footerEmail || 'info@yoursite.com'}</span>
         </div>
         {generateCta}
       </div>
@@ -1852,13 +1805,12 @@ function ThemePreviewLarge({
               {line}
             </p>
           ))}
-          <div className="mt-2 flex h-8 w-32 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+          <div className="mt-2 flex h-8 w-32 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
             Product Spotlight
           </div>
         </div>
-        <div className="absolute bottom-[12%] right-[5%] top-[14%] w-[34%] rounded-[26px] border border-slate-200/80" style={{ backgroundColor: `${previewPalette.surface}66` }}>
-          <div className="absolute left-1/2 top-[18%] h-[48%] w-[72%] -translate-x-1/2 rounded-full opacity-60" style={{ backgroundColor: `${previewPalette.accent}33` }} />
-          {renderHeroZone('absolute inset-[7%] rounded-[22px]')}
+        <div className="absolute bottom-[12%] right-[5%] top-[14%] w-[34%] rounded-[26px] border border-slate-200 bg-white/92 shadow-lg">
+          {renderHeroZone('absolute inset-[5%] rounded-[20px]', { fit: 'contain', imagePaddingClass: 'p-2' })}
         </div>
         {generateCta}
       </div>
@@ -1871,10 +1823,10 @@ function ThemePreviewLarge({
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
         <div className="absolute inset-[4%] grid grid-cols-[1.1fr_0.9fr] gap-[3%]">
-          <div className="rounded-xl border border-white/10 overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}15` }}>
-            {renderHeroZone('h-full w-full rounded-xl')}
+          <div className="rounded-xl border border-white/20 overflow-hidden bg-white/88">
+            {renderHeroZone('h-full w-full rounded-xl', { fit: 'contain', imagePaddingClass: 'p-2' })}
           </div>
-          <div className="flex flex-col justify-center gap-2.5 rounded-xl p-4" style={{ border: `1px solid ${previewPalette.accent}55`, backgroundColor: `${previewPalette.accent}18` }}>
+          <div className="flex flex-col justify-center gap-2.5 rounded-xl p-4" style={{ border: `1px solid ${previewPalette.accent}88`, backgroundColor: `${previewPalette.accent}40` }}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>{brandName || 'Brand'}</p>
             {knowledgeHeadlineLines.map((line, index) => (
               <p
@@ -1896,7 +1848,7 @@ function ThemePreviewLarge({
             <div className="mt-2 space-y-2">
               {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Key proof point', 'Operational benefit', 'Control detail']).slice(0, 3).map((line, index) => (
                 <div key={`${line}-${index}`} className="flex items-start gap-2">
-                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black" style={{ backgroundColor: previewPalette.support, color: previewPalette.bgStart }}>
+                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
                     {index + 1}
                   </div>
                   <div className="flex-1">
@@ -1909,7 +1861,7 @@ function ThemePreviewLarge({
                 </div>
               ))}
             </div>
-            <div className="mt-1 flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.surface}44`, color: previewPalette.text }}>
+            <div className="mt-1 flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
               Knowledge Brief
             </div>
           </div>
@@ -1926,7 +1878,7 @@ function ThemePreviewLarge({
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}33 100%)` }} />
         <div className="absolute inset-[4%] grid grid-cols-[0.9fr_1.1fr] gap-[3%]">
           <div className="rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: previewPalette.bgStart }}>
-            {renderHeroZone('h-full w-full rounded-xl')}
+            {renderHeroZone('h-full w-full rounded-xl', { fit: 'contain', imagePaddingClass: 'p-2' })}
           </div>
           <div className="flex flex-col gap-[4%]">
             <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
@@ -2002,7 +1954,7 @@ function ThemePreviewLarge({
                 </p>
               ))}
             </div>
-            <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+            <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
               Proof Snapshot
             </div>
           </div>
@@ -2146,8 +2098,8 @@ function ThemePreviewLarge({
               Offer Spotlight
             </div>
           </div>
-          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}33` }}>
-            {renderHeroZone('h-full w-full rounded-xl')}
+          <div className="rounded-xl overflow-hidden bg-white/92">
+            {renderHeroZone('h-full w-full rounded-xl', { fit: 'contain', imagePaddingClass: 'p-2' })}
           </div>
         </div>
         {generateCta}
@@ -2275,7 +2227,7 @@ function ThemePreviewLarge({
             </div>
             <div className="mt-auto flex items-center justify-between">
               <p className="text-[10px] font-semibold text-white/45">{brandName || 'Brand editorial'}</p>
-              <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.bgStart }}>
+              <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
                 Editorial Feature
               </div>
             </div>
@@ -2308,7 +2260,7 @@ function ThemePreviewLarge({
               </p>
             ))}
           </div>
-          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
             Theme Preview
           </div>
         </div>
@@ -4837,12 +4789,12 @@ export function ImageCreator({
                         </Button>
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+                    <div className={`overflow-hidden rounded-lg border border-slate-200 ${isPdfPageLike(previewedPdfImage) ? 'bg-white' : 'bg-slate-50'}`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={previewedPdfImage.signed_url}
                         alt={previewedPdfImage.title}
-                        className={`w-full ${isPdfPageLike(previewedPdfImage) ? 'h-64 object-contain object-top bg-white p-2' : 'h-56 object-contain bg-slate-950 p-3'}`}
+                        className={`w-full ${isPdfPageLike(previewedPdfImage) ? 'h-64 object-contain object-top p-2' : 'h-64 object-contain p-4'}`}
                       />
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -4900,12 +4852,12 @@ export function ImageCreator({
                           className="w-full text-left"
                           onFocus={() => setPreviewedPdfImageId(img.id)}
                         >
-                          <div className={`relative aspect-[4/3] overflow-hidden ${isPdfPageLike(img) ? 'bg-white' : 'bg-slate-100'}`}>
+                          <div className="relative aspect-[4/3] overflow-hidden bg-white">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={img.signed_url}
                               alt={img.title}
-                              className={`h-full w-full transition-transform group-hover:scale-[1.03] ${isPdfPageLike(img) ? 'object-contain object-top p-1.5' : 'object-cover'}`}
+                              className={`h-full w-full transition-transform group-hover:scale-[1.03] object-contain ${isPdfPageLike(img) ? 'object-top p-1.5' : 'p-2'}`}
                               onError={(e) => {
                                 const target = e.currentTarget;
                                 target.style.display = 'none';

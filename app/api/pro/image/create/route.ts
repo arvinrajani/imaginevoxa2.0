@@ -85,7 +85,8 @@ const WEAK_FEATURE_PATTERNS = [
   /visit (our|the) website/i,
   /contact us/i,
   /click /i,
-  /^https?:\/\//i,
+  /https?:\/\//i,
+  /\S+@\S+\.[a-zA-Z]{2,}/,
 ];
 
 function isWeakFeatureLine(value: string) {
@@ -246,9 +247,9 @@ function deriveSceneBrief(options: {
 }
 
 function buildThemeDirective(themeId: string) {
-  // Each direction describes the EXACT structural layout that the SVG overlay will
-  // composite on top. The AI must generate a background plate that supports this
-  // fixed structure — not improvise a different layout.
+  // Each direction describes both the structural layout AND the specific visual atmosphere
+  // the AI must generate. The AI output is a background plate — the SVG overlay composites
+  // all text, logos, panels, and layout chrome on top of it.
   const themeMap: Record<string, { label: string; direction: string }> = {
     'guided-auto': {
       label: 'AI Guided',
@@ -258,67 +259,67 @@ function buildThemeDirective(themeId: string) {
     'alliance-poster': {
       label: 'Alliance Poster',
       direction:
-        'LAYOUT CONTRACT: The final image has a dark header band (top 15%), a LEFT hero bay (3%-40% width, 18%-88% height) for a product/hero image, a RIGHT information lane (44%-96% width) for headlines, bullet points, and logos, and a footer strip (bottom 10%). Generate ONLY a premium atmospheric background plate using the brand colors as the dominant tones — industrial, electrification, or infrastructure context. Do NOT render any text, logos, panels, bullets, or UI. Keep the left side clean for a hero cutout and the right side visually quiet for text overlay.',
+        'BACKGROUND PLATE — ALLIANCE POSTER: Generate a premium atmospheric backdrop. The SVG overlay will add a dark header band (top 15%), a LEFT product card (3%-40% width, 18%-88% height), a RIGHT text/bullets lane (44%-96%), and a footer. Your job: fill the canvas with a rich, dramatic industrial or infrastructure scene using the brand colors as dominant tones. LEFT SIDE should be visually interesting but not cluttered — machinery silhouettes, energy arcs, metallic surfaces — so the product card floats cleanly on top. RIGHT SIDE should be darker and calmer, a deep brand-colored gradient or soft texture that makes white text pop. Think Siemens or ABB campaign photography. No text, no logos, no UI of any kind.',
     },
     'product-hero': {
       label: 'Product Hero',
       direction:
-        'LAYOUT CONTRACT: The final image has a centered circular product showcase (centered at 50% width, 39% height, ~19% radius), a headline below it at 72% height, a tagline at 79% height, and a centered product-focus label zone at 84% height. A small logo card sits at top-left. Generate a clean, premium background plate using the brand colors for surfaces and lighting that makes a circular product cutout pop. Keep the center clear for the product circle. Do NOT render any text, circles, labels, or UI elements.',
+        'BACKGROUND PLATE — PRODUCT HERO: Generate a clean, premium studio-quality background. The SVG overlay places a circular product showcase in the CENTER (50% width, 39% height, ~19% radius), a headline below at 72% height, and a logo card at top-left. Your job: create a surface-and-light background that makes a circular cutout product image POP. Use the brand colors for the surface — think premium automotive showroom floor, clean exhibition pedestal, or high-end product launch set. A subtle radial gradient glow centered at 50%/40% in an accent brand color adds drama. The background should be clean enough that any product drops in and immediately looks prestigious. No text, no circles drawn in advance, no UI.',
     },
     'knowledge-visual': {
       label: 'Knowledge-Led',
       direction:
-        'LAYOUT CONTRACT: The final image has a LEFT reference panel (4%-56% width, full height) for a data/reference image and a RIGHT dark info panel (58%-96% width) for headline text and tagline. Generate a dark, technical-feeling background plate using the brand colors as dominant tones. Keep the left half clean for an overlaid reference image and the right half dark enough for light text. Do NOT render any text, panels, or UI elements.',
+        'BACKGROUND PLATE — KNOWLEDGE VISUAL: Generate a dark, technical, intelligence-rich backdrop. The SVG overlay places a reference image panel on the LEFT (4%-56% width, full height) and a text/info panel on the RIGHT (58%-96%). Your job: create a deep, confident background using brand colors. LEFT SIDE: dark but visually rich — subtle technical grid lines, circuit traces, blueprint-style depth, data visualization silhouettes, or engineering detail. RIGHT SIDE: darker and quieter so white text overlays stay readable — use a deep brand-colored gradient. The overall mood: a serious analytical brief, a McKinsey-style intelligence deck, or a technology white paper cover. No text, no panels, no UI.',
     },
     'clean-brand': {
       label: 'Clean Brand',
       direction:
-        'LAYOUT CONTRACT: The final image has a light background using the brand colors, a top header bar with logo (top 14%), a LEFT text zone (6% from left) for large headline and tagline, a RIGHT hero image panel (60%-96% width, 16%-88% height), a subtle brand-focus chip at 68% height, and a light footer (bottom 10%). Generate a subtle, minimal, clean background plate — mostly light with gentle brand-colored accents. Do NOT render any text, logos, chips, or UI elements.',
+        'BACKGROUND PLATE — CLEAN BRAND: Generate a light, minimal, brand-forward backdrop. The SVG overlay adds a header bar (top 14%), a LEFT headline/text column (6%-55%), a RIGHT hero image panel (60%-96%, 16%-88%), and a footer (bottom 10%). Your job: create a crisp, airy background — think high-end brand identity, Apple-style clarity, or premium editorial minimalism. Use the brand colors as LIGHT, DESATURATED surfaces rather than dark tones. A subtle gradient from brand-light to near-white, with one refined brand-colored element (a soft wash, a gentle arc, a light geometric accent) creating visual interest without noise. The RIGHT side should be clean enough for a product image card to sit naturally on top. No text, no cards, no UI.',
     },
     'industrial-campaign': {
       label: 'Industrial Campaign',
       direction:
-        'LAYOUT CONTRACT: The final image has a dark header band (top 15%) with a logo card, a LEFT hero bay (3%-40% width, 18%-88% height) for a product/hero image, a RIGHT info zone (44%-96% width) for headlines, accent bar, and bullet points with checkmarks, and a dark footer (bottom 10%). Generate a premium industrial/electrification atmospheric background plate using the brand colors as dominant surfaces. Do NOT render any text, logos, panels, bullets, or UI.',
+        'BACKGROUND PLATE — INDUSTRIAL CAMPAIGN: Generate a dramatic, powerful industrial atmosphere. The SVG overlay places a dark header band (top 15%), a LEFT product hero card (3%-40% width, 18%-88% height), a RIGHT text/features zone (44%-96%), and a dark footer. Your job: fill the canvas with a richly atmospheric industrial/electrification environment using the brand palette as the DOMINANT color tone. Specific visual content to generate: metallic panel surfaces, high-voltage equipment silhouettes, factory floor depth with directional industrial lighting, electrical conduit, circuit breaker panels, energy infrastructure, or power distribution equipment — all tinted with the brand colors. LIGHTING: dramatic — overhead industrial spotlights casting hard shadows, edge-lit metallic surfaces, deep shadows in corners. LEFT SIDE should be visually complex and rich (the product card floats on top). RIGHT SIDE should be darker and smoother — a deep brand-colored gradient moving from mid-depth on left to deep shadow on right, keeping the zone legible for white text overlay. The mood is: high-stakes industrial power, engineering precision, Siemens or Schneider Electric campaign quality. No text, no panels, no logos, no UI.',
     },
     'datasheet-frame': {
       label: 'Datasheet Frame',
       direction:
-        'LAYOUT CONTRACT: The final image has a LEFT dark product panel (4%-46% width, full height) for a product image, a TOP-RIGHT info card (50%-96% width, 4%-29% height) with logo and headline, and FOUR spec-block cards in a 2×2 grid on the right (50%-96% width, 34%-92% height). Background uses the brand colors for a clean, technical, brochure-style plate. Do NOT render any text, cards, grids, or UI elements.',
+        'BACKGROUND PLATE — DATASHEET FRAME: Generate a clean, technical, brochure-quality backdrop. The SVG overlay places a LEFT product panel (4%-46% width, full height), a TOP-RIGHT info card (50%-96% width, 4%-29% height), and a 2×2 spec-card grid on the right (50%-96%, 34%-92%). Your job: create a professional technical surface using brand colors — think product catalog, engineering brochure, or premium data sheet. LEFT SIDE: a deep brand-colored panel or subtle dark gradient for the product to sit in front of. RIGHT SIDE: light, clean, almost neutral — like white paper with subtle brand-colored accents — so the spec cards read clearly. Overall: precise, well-organized, catalog-quality. No text, no cards, no grid lines, no UI.',
     },
     'proof-stack': {
       label: 'Proof Stack',
       direction:
-        'LAYOUT CONTRACT: The final image has THREE stacked proof cards on the LEFT (4%-50% width, evenly spaced from top) with colored accent squares, and a LARGE dark info panel on the RIGHT (52%-96% width, 8%-92% height) for headline, tagline, and a proof label. Background uses the brand colors for a clean, trust-building plate. Do NOT render any text, cards, panels, or UI elements.',
+        'BACKGROUND PLATE — PROOF STACK: Generate a credibility-rich, trustworthy backdrop. The SVG overlay places THREE stacked proof cards on the LEFT (4%-50% width) and a large RIGHT info panel (52%-96%, 8%-92%). Your job: create a clean, corporate, confidence-building background using brand colors. Think professional services firm, B2B SaaS dashboard, or enterprise brand identity. LEFT SIDE: subtle brand-colored texture or soft geometric pattern — light enough for the proof cards to sit naturally on top. RIGHT SIDE: a deep, solid brand-colored panel — the darkest brand color or a rich gradient, creating authority and contrast. A subtle dividing element between left and right (a thin brand-colored line or soft shadow) adds structure. No text, no cards, no UI.',
     },
     'launch-banner': {
       label: 'Launch Banner',
       direction:
-        'LAYOUT CONTRACT: The final image has a vibrant gradient background using the brand colors, a pill-shaped logo badge at top-left, an accent badge at top-right, a LARGE bold headline in the center-left (8% from left, 35%-45% height), a tagline below it, and a launch-update label at bottom-right. Generate a rich, energetic gradient background plate with launch/announcement energy using brand colors as the dominant palette. Do NOT render any text, badges, labels, or UI elements.',
+        'BACKGROUND PLATE — LAUNCH BANNER: Generate an energetic, announcement-ready backdrop. The SVG overlay places a logo badge at top-left, an accent badge at top-right, a LARGE headline in the center-left (8% from left, 35%-45% height), and a launch label at bottom-right. Your job: create a vibrant, kinetic background using brand colors as a bold gradient sweep. Think product launch, conference keynote, or announcement campaign. Visual elements: dynamic diagonal light sweeps or color waves in brand palette, subtle motion blur streaks suggesting momentum, a soft radial burst at the center-left (where the headline sits) drawing the eye. The energy should feel: anticipation, reveal, excitement — not garish or cheesy. Bold use of brand colors, high saturation, strong luminosity. No text, no badges, no UI.',
     },
     'sector-collage': {
       label: 'Sector Collage',
       direction:
-        'LAYOUT CONTRACT: The final image has a dark gradient background using the brand colors, a dark header band (top 16%) with a logo card and centered headline, THREE equal image panels side by side (3%/35%/67% x positions, 19%-68% height, each 30% wide), and sector label text at 78% height. Generate a dark, premium gradient background plate using brand colors. Do NOT render any text, panels, tiles, or UI elements.',
+        'BACKGROUND PLATE — SECTOR COLLAGE: Generate a deep, multi-layered industry backdrop. The SVG overlay places a header band (top 16%) with logo and centered headline, THREE equal image panels side by side (3%/35%/67% x positions, 19%-68% height, 30% wide each), and sector labels at 78% height. Your job: create a rich, dark gradient background using brand colors that gives visual depth and context without competing with the three image panels. Think trade show booth backdrop or sector overview brochure. HEADER ZONE (top 16%): consistent dark brand color. PANEL ZONE (19%-68%): slightly lighter — the panels will sit on top but the background should suggest industry and depth. FOOTER ZONE (bottom 30%): smooth gradient back to the darker brand tone. Subtle atmospheric elements: industrial silhouettes, infrastructure depth, technical texture at very low opacity. No text, no panels, no UI.',
     },
     'brand-story': {
       label: 'Brand Story',
       direction:
-        'LAYOUT CONTRACT: The final image has a warm background using the brand colors, a LARGE circular portrait/story image on the LEFT (centered at 24% width, 50% height), a small logo on the RIGHT at 52% width / 18% height, a serif headline at 34% height on the right, a tagline below it, and a story-highlight label at 72% height. Generate a warm, elegant, story-telling background plate tinted with brand colors. Do NOT render any text, circles, logos, labels, or UI elements.',
+        'BACKGROUND PLATE — BRAND STORY: Generate a warm, editorial, human-centric backdrop. The SVG overlay places a large circular portrait on the LEFT (centered at 24% width, 50% height), a logo on the RIGHT (52% width, 18% height), a serif headline, and a story-highlight label. Your job: create an inviting, warm background that feels personal and editorial. Think Mailchimp, Notion, or a premium lifestyle brand — human, approachable, trustworthy. Color approach: use the brand palette in its warmest, lightest register — soft gradients, warm ambient light from the LEFT side where the portrait sits, cooler and quieter on the RIGHT for the text column. A subtle organic texture (soft bokeh, blurred foliage, paper-like surface, gentle light leak) adds depth without distraction. No text, no circles, no logos, no UI.',
     },
     'offer-card': {
       label: 'Offer Card',
       direction:
-        'LAYOUT CONTRACT: The final image has a rich gradient background using the brand colors, a LEFT info zone (4%-54% width) with an accent badge, large headline, tagline, and an offer-focus label, and a RIGHT product panel (58%-96% width, full height) for a product/service image. Generate a vibrant, professional, brand-forward spotlight background plate using brand colors. Do NOT render any text, badges, labels, panels, or UI elements.',
+        'BACKGROUND PLATE — OFFER CARD: Generate a bold, vibrant, product-spotlight backdrop. The SVG overlay places a LEFT info zone (4%-54% width) with badge, headline, and tagline, and a RIGHT product panel (58%-96%, full height). Your job: create a high-energy background using brand colors as a rich gradient sweep — left zone should be confident and slightly darker for text readability, right zone should create a natural spotlight stage for the product. Think: flagship product launch, premium e-commerce hero, or event sponsorship billboard. A diagonal or radial gradient transition from the left brand tone to a warmer/lighter accent on the right creates the spotlight effect. The energy: confident, premium, commercial without being cheap. No text, no badges, no panels, no UI.',
     },
     'comparison-board': {
       label: 'Comparison Board',
       direction:
-        'LAYOUT CONTRACT: The final image has a light background using the brand colors, a top bar with logo and headline, and TWO equal side-by-side panels (LEFT at 4%-48% width and RIGHT at 52%-96% width, both 18%-92% height) for comparing options. Generate a clean, neutral background plate using brand colors suitable for analytical comparison layouts. Do NOT render any text, panels, cards, or UI elements.',
+        'BACKGROUND PLATE — COMPARISON BOARD: Generate a clean, analytical, professional backdrop. The SVG overlay places a top bar with logo and headline, a LEFT comparison panel (4%-48% width, 18%-92% height), and a RIGHT comparison panel (52%-96%, 18%-92%). Your job: create a neutral, well-structured background using brand colors that supports analytical side-by-side content. Think McKinsey slide, enterprise proposal deck, or product comparison page. The background should be LIGHT and ORDERLY: a very subtle two-tone split (left side fractionally lighter, right side fractionally more brand-colored) suggests the dual-panel structure without drawing attention away from it. Minimal visual noise — no textures, no atmospheric elements — just a refined, clean surface with subtle brand color identity. No text, no panels, no cards, no UI.',
     },
     'premium-editorial': {
       label: 'Premium Editorial',
       direction:
-        'LAYOUT CONTRACT: The final image has a luxurious dark gradient background using the brand colors, a LEFT editorial image panel (3%-33% width, full height), headline text on the right at 30% height, an accent line, tagline text below, and an editorial-feature label at bottom-right. Generate a rich, magazine-quality dark gradient background plate using brand colors for luxury finishing. Do NOT render any text, panels, lines, labels, or UI elements.',
+        'BACKGROUND PLATE — PREMIUM EDITORIAL: Generate a luxurious, magazine-quality backdrop. The SVG overlay places a LEFT editorial image panel (3%-33% width, full height), headline text on the RIGHT (30% height), an accent line, tagline below, and an editorial label. Your job: create a rich, dark, sophisticated background using brand colors in their most premium register. Think Rolex, Porsche, or luxury magazine — every visual element whispers quality. LEFT SIDE: deep shadows with a narrow strip of dramatic side light where the editorial image panel sits — creating a stage-lit, gallery feel. RIGHT SIDE: a deep, rich gradient in the darkest brand color — almost black but with color depth, ensuring white editorial text reads with maximum contrast. Subtle material richness: fine grain texture, deep vignette, very slight warm glow at the image panel border. No text, no panels, no lines, no UI.',
     },
   };
 
@@ -330,39 +331,39 @@ function buildVariationDirective(nonce: number, themeId: string) {
   // The layout is fixed by the theme's SVG overlay and must not be altered.
   const themedRecipes: Record<string, string[]> = {
     'alliance-poster': [
-      'Background atmosphere: industrial factory floor with dramatic overhead lighting and metallic surfaces, tinted with brand colors.',
-      'Background atmosphere: electrification infrastructure with high-voltage energy, surfaces reflecting brand color palette.',
-      'Background atmosphere: modern automation facility with clean engineering surfaces and directional light in brand color tones.',
+      'Variation: industrial switchgear hall — rows of electrical panels, brand-colored indicator lights, dramatic ceiling-mounted floods casting hard shadows. Deep brand-dark atmosphere.',
+      'Variation: outdoor power transmission — high-voltage pylons receding into distance, brand-colored sky at dusk, ground-level infrastructure. Epic scale, brand palette dominates.',
+      'Variation: control room environment — technical operator consoles, screens with colored data displays, brand-toned ambient light from multiple sources. Premium engineering mood.',
     ],
     'product-hero': [
-      'Background atmosphere: clean studio surface with soft gradient lighting in brand colors and subtle reflections.',
-      'Background atmosphere: premium showroom with warm directional key light, surfaces tinted with brand palette.',
-      'Background atmosphere: minimal pedestal setup with edge-lit highlights using brand colors.',
+      'Variation: studio pedestal on a deep brand-colored surface — soft gradient light from above-left, subtle reflection beneath, dark vignette around edges. Clean and dramatic.',
+      'Variation: premium exhibition stand — white or brand-colored table surface, warm key light from one side, soft fill from the other. Product launch event feel.',
+      'Variation: minimal tech surface — dark glass or brushed metal surface, brand-colored edge lighting, soft bokeh background. High-end electronics catalog quality.',
     ],
     'knowledge-visual': [
-      'Background atmosphere: dark technical workspace with subtle grid lines and brand-colored data accents.',
-      'Background atmosphere: deep research environment in brand color tones with soft ambient glow.',
-      'Background atmosphere: dark editorial surface with technical diagram-style patterns in brand colors.',
+      'Variation: data center corridor — server rack rows receding in perspective, brand-colored indicator glow, dark ambient with precision lighting. Technical authority.',
+      'Variation: research workspace — dark desk surface, technical instruments, brand-colored light from a monitor glow, deep shadow zones. Analytical and intelligent.',
+      'Variation: engineering blueprint surface — dark background with brand-colored technical grid lines and dimension marks at very low opacity. Pure technical depth.',
     ],
     'industrial-campaign': [
-      'Background atmosphere: heavy machinery environment with dramatic spotlights and brand-colored metallic textures.',
-      'Background atmosphere: high-voltage infrastructure with brand-colored arc accents and industrial depth.',
-      'Background atmosphere: automated production line with premium engineering surfaces in brand color tones.',
+      'Variation: electrical substation at dusk — transformer equipment, insulator strings, brand-colored sky, foreground switchgear detail. Infrastructure scale and drama.',
+      'Variation: manufacturing control panel — close-up of industrial control equipment, circuit breakers, LED indicators, brand-colored metallic surfaces. Technical precision.',
+      'Variation: power distribution facility — interior of a switchgear room, brand-palette metal cabinets, overhead industrial lighting creating long shadows and metallic highlights.',
     ],
     'datasheet-frame': [
-      'Background atmosphere: clean technical surface with subtle engineering grid lines tinted with brand colors.',
-      'Background atmosphere: light studio tinted with brand colors, precise catalog-quality even lighting.',
-      'Background atmosphere: neutral technical environment with brand-colored blueprint-style accents.',
+      'Variation: clean product photography set — white-to-brand-color gradient surface, precise catalog lighting, minimal reflection. Professional technical catalog look.',
+      'Variation: engineering lab surface — light neutral background, precise instrument-quality shadows, brand-colored accents in the corners. Datasheet precision.',
+      'Variation: technical brochure surface — very light brand-tinted background, subtle grid texture at low opacity, professional document quality.',
     ],
     'proof-stack': [
-      'Background atmosphere: clean corporate environment with confidence-building lighting in brand color tones.',
-      'Background atmosphere: light analytical workspace with soft brand-colored ambient light.',
-      'Background atmosphere: premium B2B setting with brand-colored clean surfaces.',
+      'Variation: corporate boardroom backdrop — blurred conference table foreground, brand-colored ambient light from tall windows, serious and credible.',
+      'Variation: clean office environment — neutral background with brand-colored accent wall on one side, soft ambient corporate lighting. Professional services quality.',
+      'Variation: B2B technology setting — dark brand-colored right panel, light neutral left panel, subtle environmental depth suggesting enterprise context.',
     ],
     'launch-banner': [
-      'Background atmosphere: energetic gradient in brand colors with particle effects and launch energy.',
-      'Background atmosphere: bold brand-color sweep with dynamic light streaks suggesting reveal and momentum.',
-      'Background atmosphere: dramatic spotlight effect with vibrant brand-colored gradient and celebration energy.',
+      'Variation: announcement burst — bold radial light explosion at center-left, brand colors in high saturation, diagonal light sweeps from upper-right. Pure launch energy.',
+      'Variation: dynamic motion sweep — long horizontal brand-colored light streaks with speed blur, deep shadow at edges, focal glow at center. Momentum and reveal.',
+      'Variation: celebration gradient — rich brand-color sweep from deep to bright, subtle particle/confetti texture at very low opacity, premium reveal energy.',
     ],
     'sector-collage': [
       'Background atmosphere: deep gradient in brand colors with subtle infrastructure silhouettes in the distance.',
@@ -1057,6 +1058,14 @@ ${isAlliancePoster ? `ALLIANCE POSTER BACKGROUND RULES:
 - Make the backdrop sharp, high contrast, and poster-friendly rather than generic lifestyle photography.
 ` : ''}
 
+${(hasThemeComposition || isAlliancePoster) && referenceImageUrl ? `HERO PRODUCT CONTEXT (the user has selected a product/reference image for the hero slot):
+- A product or reference image has been selected and will be placed in the theme's hero zone by the SVG overlay.
+- Your background plate must visually COMPLEMENT and CELEBRATE this product — not compete with it.
+- Design the atmosphere, lighting, and environment to make the product feel at home and prestigious.
+- The product sits in the LEFT hero zone — create background texture and lighting that gives it context and weight.
+- The RIGHT zone (text area) must remain dark and atmospheric so white text reads clearly over it.
+- Match the industrial, technical, or environmental character of the product type described in the post context above.
+` : ''}
 SCENE CONSTRUCTION (MANDATORY):
 - ${sceneBrief}
 - Every image needs a clear HERO ELEMENT (the main visual subject) and SUPPORTING CONTEXT (environment, props, or secondary elements that reinforce the story).
