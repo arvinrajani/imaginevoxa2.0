@@ -400,73 +400,100 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const bullets = getSafeFeatureBullets(input.featureBullets, 3);
   const footerWebsite = firstSafeLine(input.footerWebsite, safeBrandName, 46);
   const footerEmail = firstSafeLine(input.footerEmail, '', 34);
-  const footerParts = [footerWebsite, footerEmail].filter(Boolean).join('  |  ') || safeBrandName;
+  const footerLeft = footerWebsite || safeBrandName;
+  const footerRight = footerEmail || '';
 
   // Logo box — frosted glass card top-left
   const logoBoxX = r(w * 0.03);
-  const logoBoxY = r(h * 0.025);
-  const logoBoxW = r(w * 0.18);
-  const logoBoxH = r(h * 0.11);
+  const logoBoxY = r(h * 0.028);
+  const logoBoxW = r(w * 0.19);
+  const logoBoxH = r(h * 0.10);
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${logoBoxX + 8}" y="${logoBoxY + 6}" width="${logoBoxW - 16}" height="${logoBoxH - 12}" preserveAspectRatio="xMidYMid meet" />`
     : `<text x="${logoBoxX + r(logoBoxW / 2)}" y="${logoBoxY + r(logoBoxH * 0.64)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="900" text-anchor="middle">${escapeXml(safeBrandName)}</text>`;
 
   // Hero card — product showcase with subtle shadow
-  const heroCardX = r(w * 0.03);
-  const heroCardY = r(h * 0.17);
-  const heroCardW = r(w * 0.34);
-  const heroCardH = r(h * 0.68);
+  const heroCardX = r(w * 0.035);
+  const heroCardY = r(h * 0.19);
+  const heroCardW = r(w * 0.31);
+  const heroCardH = r(h * 0.62);
   const heroNode = heroImg
-    ? `<rect x="${heroCardX + 4}" y="${heroCardY + 4}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(0,0,0,0.15)" />
-       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(255,255,255,0.95)" />
-       <image href="${escapeXml(heroImg.dataUri)}" x="${heroCardX + 10}" y="${heroCardY + 10}" width="${heroCardW - 20}" height="${heroCardH - 20}" preserveAspectRatio="xMidYMid meet" />`
-    : `<rect x="${heroCardX + 4}" y="${heroCardY + 4}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(0,0,0,0.12)" />
-       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="16" fill="rgba(255,255,255,0.14)" stroke="${c.muted}" stroke-opacity="0.22" />
-       <text x="${heroCardX + r(heroCardW / 2)}" y="${heroCardY + r(heroCardH / 2)}" fill="rgba(255,255,255,0.72)" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">PRODUCT VISUAL</text>`;
+    ? `<ellipse cx="${heroCardX + r(heroCardW * 0.48)}" cy="${heroCardY + heroCardH - r(h * 0.015)}" rx="${r(heroCardW * 0.38)}" ry="${r(h * 0.035)}" fill="rgba(7,16,34,0.34)" />
+       <rect x="${heroCardX + 6}" y="${heroCardY + 8}" width="${heroCardW}" height="${heroCardH}" rx="24" fill="rgba(0,0,0,0.18)" />
+       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="24" fill="rgba(245,249,255,0.94)" stroke="rgba(255,255,255,0.55)" stroke-width="2" />
+       <rect x="${heroCardX + 12}" y="${heroCardY + 12}" width="${heroCardW - 24}" height="${heroCardH - 24}" rx="20" fill="url(#heroShellGlow)" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${heroCardX + 18}" y="${heroCardY + 16}" width="${heroCardW - 36}" height="${heroCardH - 34}" preserveAspectRatio="xMidYMid meet" />`
+    : `<ellipse cx="${heroCardX + r(heroCardW * 0.48)}" cy="${heroCardY + heroCardH - r(h * 0.015)}" rx="${r(heroCardW * 0.34)}" ry="${r(h * 0.032)}" fill="rgba(7,16,34,0.28)" />
+       <rect x="${heroCardX + 6}" y="${heroCardY + 8}" width="${heroCardW}" height="${heroCardH}" rx="24" fill="rgba(0,0,0,0.14)" />
+       <rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="24" fill="rgba(255,255,255,0.10)" stroke="${c.muted}" stroke-opacity="0.28" />
+       <text x="${heroCardX + r(heroCardW / 2)}" y="${heroCardY + r(heroCardH * 0.52)}" fill="rgba(255,255,255,0.78)" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">PRODUCT VISUAL</text>`;
 
   // Right side — headline and bullet region (no opaque panel, text directly on background)
-  const textX = r(w * 0.42);
-  const headlineFontSize = headline.length >= 3 ? r(w * 0.042) : r(w * 0.050);
-  const headlineStep = headline.length >= 3 ? h * 0.072 : h * 0.085;
-  const headlineY = h * 0.20;
+  const textPanelX = r(w * 0.405);
+  const textPanelY = r(h * 0.19);
+  const textPanelW = r(w * 0.56);
+  const textPanelH = r(h * 0.62);
+  const textX = r(w * 0.455);
+  const headlineFontSize = headline.length >= 3 ? r(w * 0.041) : r(w * 0.050);
+  const headlineStep = headline.length >= 3 ? h * 0.072 : h * 0.086;
+  const headlineY = h * 0.245;
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${textX}" y="${r(headlineY + i * headlineStep)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.5">
+    .map((line, i) => `<text x="${textX}" y="${r(headlineY + i * headlineStep)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.8">
       <tspan fill="#ffffff" filter="url(#textShadow)">${escapeXml(line)}</tspan>
     </text>`)
     .join('');
 
-  const taglineY = headlineY + headline.length * headlineStep + h * 0.01;
+  const taglineY = headlineY + headline.length * headlineStep + h * 0.005;
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${textX}" y="${r(taglineY + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700" letter-spacing="1.5">${escapeXml(line.toUpperCase())}</text>`)
+    .map((line, i) => `<text x="${textX}" y="${r(taglineY + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="700" letter-spacing="1.7">${escapeXml(line.toUpperCase())}</text>`)
+    .join('');
+
+  const accentRails = [0, 1, 2]
+    .map((i) => {
+      const y = r(h * (0.205 + i * 0.018));
+      return `<line x1="${r(w * 0.45)}" y1="${y}" x2="${r(w * 0.935)}" y2="${y}" stroke="rgba(255,255,255,0.10)" stroke-width="1.5" />`;
+    })
+    .join('');
+
+  const energyLines = [0, 1, 2, 3]
+    .map((i) => {
+      const y = r(h * (0.28 + i * 0.082));
+      return `<path d="M ${r(w * 0.18)} ${y} C ${r(w * 0.33)} ${y - 12}, ${r(w * 0.56)} ${y + 10}, ${r(w * 0.90)} ${y - 4}" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="${i === 0 ? 3 : 2}" stroke-linecap="round" />`;
+    })
     .join('');
 
   // Bullet points with professional checkmark boxes
-  const bulletStartY = taglineY + tagline.length * h * 0.042 + h * 0.05;
+  const bulletStartY = taglineY + tagline.length * h * 0.042 + h * 0.065;
   const bulletNodesMarkup = bullets
     .map((b, i) => {
       const boxSize = r(w * 0.030);
-      const baseY = r(bulletStartY + i * h * 0.105);
-      const wrapped = wrapText(b, 30).slice(0, 2);
+      const baseY = r(bulletStartY + i * h * 0.108);
+      const wrapped = wrapText(b, 31).slice(0, 2);
       const checkStroke = Math.max(2.5, Math.round(boxSize * 0.15));
       const checkPath = [
         `M ${textX + Math.round(boxSize * 0.22)} ${baseY + Math.round(boxSize * 0.52)}`,
         `L ${textX + Math.round(boxSize * 0.42)} ${baseY + Math.round(boxSize * 0.72)}`,
-        `L ${textX + Math.round(boxSize * 0.78)} ${baseY + Math.round(boxSize * 0.26)}`,
+        `L ${textX + Math.round(boxSize * 0.80)} ${baseY + Math.round(boxSize * 0.24)}`,
       ].join(' ');
 
+      const cardX = textX - r(w * 0.018);
+      const cardY = baseY - r(h * 0.020);
+      const cardW = r(w * 0.46);
+      const cardH = r(h * 0.095);
       const labelX = textX + boxSize + r(w * 0.016);
       const textNodes = wrapped
         .map((line, lineIndex) => {
-          const lineY = baseY + Math.round(boxSize * 0.60) + lineIndex * Math.round(h * 0.030);
+          const lineY = baseY + Math.round(boxSize * 0.58) + lineIndex * Math.round(h * 0.030);
           return `<text x="${labelX}" y="${lineY}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="700">${escapeXml(line)}</text>`;
         })
         .join('');
 
       return `
-        <rect x="${textX - r(w * 0.015)}" y="${baseY - r(h * 0.018)}" width="${r(w * 0.47)}" height="${r(h * 0.085)}" rx="18" fill="rgba(6,16,30,0.34)" stroke="rgba(255,255,255,0.08)" />
-        <rect x="${textX}" y="${baseY}" width="${boxSize}" height="${boxSize}" rx="${Math.max(6, Math.round(boxSize * 0.20))}" fill="${c.accent}" />
-        <path d="${checkPath}" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${checkStroke}" stroke-linecap="round" stroke-linejoin="round" />
+        <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="20" fill="rgba(6,16,30,0.36)" stroke="rgba(255,255,255,0.10)" />
+        <rect x="${cardX}" y="${cardY}" width="${r(w * 0.010)}" height="${cardH}" rx="5" fill="${c.accent}" fill-opacity="0.88" />
+        <rect x="${textX}" y="${baseY}" width="${boxSize}" height="${boxSize}" rx="${Math.max(7, Math.round(boxSize * 0.22))}" fill="${c.accent}" />
+        <path d="${checkPath}" fill="none" stroke="rgba(255,255,255,0.96)" stroke-width="${checkStroke}" stroke-linecap="round" stroke-linejoin="round" />
         ${textNodes}
       `;
     })
@@ -485,32 +512,48 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
         <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.95" />
         <stop offset="100%" stop-color="${c.bgEnd}" stop-opacity="0.90" />
       </linearGradient>
-      <linearGradient id="indTextPanel" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.50" />
-        <stop offset="100%" stop-color="${c.bgStart}" stop-opacity="0.70" />
+      <linearGradient id="indTextPanel" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.48" />
+        <stop offset="100%" stop-color="#061019" stop-opacity="0.78" />
       </linearGradient>
+      <linearGradient id="heroShellGlow" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(255,255,255,0.18)" />
+        <stop offset="100%" stop-color="rgba(255,255,255,0.02)" />
+      </linearGradient>
+      <radialGradient id="indHeroGlow" cx="26%" cy="48%" r="34%">
+        <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.18" />
+        <stop offset="100%" stop-color="${c.accent}" stop-opacity="0" />
+      </radialGradient>
+      <radialGradient id="indRightGlow" cx="78%" cy="24%" r="28%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+      </radialGradient>
     </defs>
-    <!-- Header bar -->
+    <rect width="${w}" height="${h}" fill="rgba(2,8,20,0.02)" />
     <rect width="${w}" height="${r(h * 0.14)}" fill="url(#indTopBar)" />
     <rect y="${r(h * 0.14)}" width="${w}" height="3" fill="${c.accent}" />
-    <!-- Logo card -->
+    <rect x="${r(w * 0.24)}" y="${r(h * 0.050)}" width="${r(w * 0.012)}" height="${r(h * 0.072)}" transform="skewX(-18)" fill="rgba(255,255,255,0.22)" />
+    <rect x="${r(w * 0.26)}" y="${r(h * 0.050)}" width="${r(w * 0.008)}" height="${r(h * 0.072)}" transform="skewX(-18)" fill="${c.accent}" fill-opacity="0.92" />
+    <rect x="${r(w * 0.76)}" y="${r(h * 0.028)}" width="${r(w * 0.012)}" height="${r(h * 0.082)}" transform="skewX(-18)" fill="rgba(255,255,255,0.20)" />
+    <rect x="${r(w * 0.78)}" y="${r(h * 0.028)}" width="${r(w * 0.008)}" height="${r(h * 0.082)}" transform="skewX(-18)" fill="${c.accent}" fill-opacity="0.95" />
+    <rect x="${r(w * 0.91)}" y="${r(h * 0.028)}" width="${r(w * 0.012)}" height="${r(h * 0.082)}" transform="skewX(-18)" fill="rgba(255,255,255,0.20)" />
+    <rect x="${r(w * 0.93)}" y="${r(h * 0.028)}" width="${r(w * 0.008)}" height="${r(h * 0.082)}" transform="skewX(-18)" fill="${c.accent}" fill-opacity="0.95" />
     <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="12" fill="rgba(255,255,255,0.95)" />
     ${logoNode}
-    <!-- Footer bar -->
+    <rect x="0" y="${r(h * 0.17)}" width="${w}" height="${r(h * 0.68)}" fill="url(#indHeroGlow)" />
+    <rect x="0" y="${r(h * 0.17)}" width="${w}" height="${r(h * 0.68)}" fill="url(#indRightGlow)" />
+    ${energyLines}
+    ${accentRails}
     <rect y="${h - r(h * 0.085)}" width="${w}" height="${r(h * 0.085)}" fill="url(#indFooter)" />
     <rect y="${h - r(h * 0.085)}" width="${w}" height="2" fill="${c.accent}" />
-    <text x="${r(w * 0.50)}" y="${h - r(h * 0.030)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="600" text-anchor="middle" fill-opacity="0.90">${escapeXml(footerParts)}</text>
-    <!-- Right side text panel (semi-transparent) -->
-    <rect x="${r(w * 0.39)}" y="${r(h * 0.155)}" width="${r(w * 0.585)}" height="${r(h * 0.695)}" rx="18" fill="url(#indTextPanel)" />
-    <!-- Product hero -->
+    <text x="${r(w * 0.05)}" y="${h - r(h * 0.030)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" fill-opacity="0.88">${escapeXml(footerLeft)}</text>
+    ${footerRight ? `<text x="${r(w * 0.95)}" y="${h - r(h * 0.030)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="end" fill-opacity="0.88">${escapeXml(footerRight)}</text>` : ''}
+    <rect x="${textPanelX}" y="${textPanelY}" width="${textPanelW}" height="${textPanelH}" rx="24" fill="url(#indTextPanel)" stroke="rgba(255,255,255,0.10)" />
+    <rect x="${textPanelX}" y="${textPanelY}" width="${r(w * 0.010)}" height="${textPanelH}" rx="5" fill="${c.accent}" fill-opacity="0.75" />
     ${heroNode}
-    <!-- Headline -->
     ${headlineNodes}
-    <!-- Accent line -->
-    <rect x="${textX}" y="${r(taglineY - h * 0.018)}" width="${r(w * 0.12)}" height="4" rx="2" fill="${c.accent}" />
-    <!-- Tagline -->
+    <rect x="${textX}" y="${r(taglineY - h * 0.024)}" width="${r(w * 0.13)}" height="4" rx="2" fill="${c.accent}" />
     ${taglineNodes}
-    <!-- Bullet points -->
     ${bulletNodesMarkup}
   `);
 }

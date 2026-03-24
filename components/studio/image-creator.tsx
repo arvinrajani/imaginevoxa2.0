@@ -1628,13 +1628,40 @@ function ThemePreviewLarge({
         ? safeFeatureLines
         : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']
     ).slice(0, 3);
-    const industrialFooterLine = [safeFooterWebsite, safeFooterEmail].filter(Boolean).join(' | ') || brandName || 'Brand site';
+    const industrialFooterLeft = safeFooterWebsite || brandName || 'Brand site';
+    const industrialFooterRight = safeFooterEmail || '';
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
-        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}20, transparent 52%), radial-gradient(circle at 82% 18%, rgba(255,255,255,0.10), transparent 18%)` }} />
-        <div className="absolute inset-x-0 top-0 h-[12%] border-b border-white/10" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}dd 0%, ${previewPalette.bgEnd}bb 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}22, transparent 50%), radial-gradient(circle at 82% 18%, rgba(255,255,255,0.12), transparent 16%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 26%, transparent 100%)' }} />
+        <div className="absolute inset-x-0 top-0 h-[14%] border-b border-white/10" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}dd 0%, ${previewPalette.bgEnd}bb 100%)` }} />
         <div className="absolute inset-x-0 bottom-0 h-[8.5%]" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}ee 0%, ${previewPalette.bgEnd}dd 100%)` }} />
+        <div className="absolute left-[24%] top-[4.8%] h-[7.2%] w-[1.1%] -skew-x-[18deg] bg-white/25" />
+        <div className="absolute left-[26%] top-[4.8%] h-[7.2%] w-[0.7%] -skew-x-[18deg]" style={{ backgroundColor: previewPalette.accent }} />
+        <div className="absolute right-[22%] top-[3.2%] h-[8.4%] w-[1.2%] -skew-x-[18deg] bg-white/20" />
+        <div className="absolute right-[19.5%] top-[3.2%] h-[8.4%] w-[0.8%] -skew-x-[18deg]" style={{ backgroundColor: previewPalette.accent }} />
+        <div className="absolute right-[9.5%] top-[3.2%] h-[8.4%] w-[1.2%] -skew-x-[18deg] bg-white/20" />
+        <div className="absolute right-[7%] top-[3.2%] h-[8.4%] w-[0.8%] -skew-x-[18deg]" style={{ backgroundColor: previewPalette.accent }} />
+        {[0, 1, 2].map((index) => (
+          <div
+            key={`industrial-rail-${index}`}
+            className="absolute right-[6.5%] h-[1px] bg-white/12"
+            style={{ left: '45%', top: `${20.5 + index * 1.8}%` }}
+          />
+        ))}
+        {[0, 1, 2, 3].map((index) => (
+          <div
+            key={`industrial-flow-${index}`}
+            className="absolute rounded-full bg-white/10 blur-[0.5px]"
+            style={{
+              left: `${18 + index * 4}%`,
+              top: `${28 + index * 8.2}%`,
+              width: `${54 - index * 2}%`,
+              height: '2px',
+            }}
+          />
+        ))}
 
         <div className="absolute left-[3%] top-[2.8%] flex h-[9%] w-[18%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
           {uploadedLogo ? (
@@ -1644,15 +1671,17 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[12%] left-[3.2%] top-[18%] w-[32%] rounded-[22px] border border-white/18 bg-white/94 shadow-[0_20px_42px_rgba(0,0,0,0.24)] overflow-hidden">
+        <div className="absolute bottom-[12%] left-[3.5%] top-[19%] w-[31%] overflow-hidden rounded-[24px] border border-white/18 bg-white/94 shadow-[0_22px_48px_rgba(0,0,0,0.24)]">
+          <div className="absolute bottom-[1.5%] left-[14%] right-[14%] h-[7%] rounded-full bg-slate-950/20 blur-sm" />
           <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
           {renderHeroZone('absolute inset-0 rounded-[22px]', {
             fit: 'contain',
-            imagePaddingClass: 'p-2',
+            imagePaddingClass: 'p-3',
           })}
         </div>
 
-        <div className="absolute bottom-[11.8%] right-[3.2%] top-[18%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.6%] py-[4.8%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(180deg, rgba(3,10,22,0.56), rgba(3,10,22,0.72))' }}>
+        <div className="absolute bottom-[12%] right-[3.2%] top-[19%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.8%] py-[5.2%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(135deg, rgba(7,18,36,0.48), rgba(4,11,24,0.78))' }}>
+          <div className="absolute inset-y-0 left-0 w-[1.6%] rounded-l-[24px]" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
           <div className="space-y-1.5">
             {compactHeadlineLines.map((line, index) => (
               <p
@@ -1681,10 +1710,11 @@ function ThemePreviewLarge({
               ))}
             </div>
           )}
-          <div className="h-1 w-[18%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="h-1 w-[20%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
           <div className="mt-auto space-y-2.5">
             {industrialFeatures.map((line, index) => (
-              <div key={`${line}-${index}`} className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-slate-950/26 px-3 py-2.5">
+              <div key={`${line}-${index}`} className="relative flex items-start gap-3 rounded-[20px] border border-white/10 bg-slate-950/30 px-3 py-2.5">
+                <div className="absolute inset-y-0 left-0 w-[1.4%] rounded-l-[20px]" style={{ backgroundColor: `${previewPalette.accent}dd` }} />
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.accent }}>
                   <CheckCircle2 className="h-3.5 w-3.5 text-white" />
                 </div>
@@ -1700,10 +1730,9 @@ function ThemePreviewLarge({
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 flex h-[8.5%] items-center justify-center border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80">
-          <span className="max-w-[86%] truncate text-center">
-            {industrialFooterLine}
-          </span>
+        <div className="absolute inset-x-0 bottom-0 flex h-[8.5%] items-center justify-between border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80">
+          <span className="max-w-[42%] truncate text-left">{industrialFooterLeft}</span>
+          {industrialFooterRight ? <span className="max-w-[42%] truncate text-right">{industrialFooterRight}</span> : <span />}
         </div>
       </div>
     );

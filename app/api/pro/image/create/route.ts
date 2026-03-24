@@ -246,6 +246,79 @@ function deriveSceneBrief(options: {
   return `${matched} Keep the scene concrete and identifiable, never abstract-only. ${options.brandName ? `Reflect ${options.brandName} brand personality.` : ''} ${options.productName ? `Highlight product context: ${options.productName}.` : ''}`.trim();
 }
 
+function describeThemeShape(shape: 'rect' | 'circle' | 'rounded-rect') {
+  switch (shape) {
+    case 'circle':
+      return 'circular';
+    case 'rounded-rect':
+      return 'rounded-rect';
+    default:
+      return 'rectangular';
+  }
+}
+
+function buildThemeSlotGuidance(themeId: string) {
+  const schema = THEME_SCHEMAS[themeId];
+  if (!schema?.imageSlots?.length) return '';
+
+  return schema.imageSlots
+    .map((slot) => {
+      const right = slot.x + slot.width;
+      const bottom = slot.y + slot.height;
+      return `- Slot "${slot.label}" (${slot.id}) is a ${describeThemeShape(slot.shape)} image zone spanning ${slot.x}%-${right}% width and ${slot.y}%-${bottom}% height.`;
+    })
+    .join('\n');
+}
+
+function buildThemeSelectionGuidance(options: {
+  themeId: string;
+  slotImages: Record<string, string>;
+  referenceImageUrl?: string | null;
+  referenceAsHero?: boolean;
+}) {
+  const schema = THEME_SCHEMAS[options.themeId];
+  const selectedSlotLines =
+    schema?.imageSlots
+      ?.filter((slot) => Boolean(options.slotImages[slot.id]))
+      .map((slot) => `- The user selected an image for "${slot.label}" (${slot.id}). Treat it as visual truth for subject matter, materials, and scene context.`) || [];
+
+  const lines = [
+    options.referenceImageUrl
+      ? `- A direct reference image is supplied${options.referenceAsHero ? ' and should be treated as the primary hero/product truth' : ''}.`
+      : null,
+    ...selectedSlotLines,
+    (options.referenceImageUrl || selectedSlotLines.length)
+      ? `- These selected images are not optional. Use them to anchor the product family, silhouette, materials, environment, and lighting language.`
+      : null,
+    (options.referenceImageUrl || selectedSlotLines.length)
+      ? `- A structured theme overlay may place the selected asset into a slot later, so do NOT create a second isolated pasted cutout floating elsewhere in the background plate.`
+      : null,
+    (options.referenceImageUrl || selectedSlotLines.length)
+      ? `- Instead, design around the selection: matching reflections, supporting props, environmental context, enlarged abstracted details, atmospheric lighting, and scene cues that make the chosen asset feel intentionally art-directed.`
+      : null,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
+function collectUniqueImageSources(...groups: Array<Array<string | null | undefined> | null | undefined>) {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue;
+
+    for (const raw of group) {
+      const value = typeof raw === 'string' ? raw.trim() : '';
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      ordered.push(value);
+    }
+  }
+
+  return ordered;
+}
+
 function buildThemeDirective(themeId: string) {
   // Each direction describes both the structural layout AND the specific visual atmosphere
   // the AI must generate. The AI output is a background plate — the SVG overlay composites
@@ -279,7 +352,7 @@ function buildThemeDirective(themeId: string) {
     'industrial-campaign': {
       label: 'Industrial Campaign',
       direction:
-        'BACKGROUND PLATE — INDUSTRIAL CAMPAIGN: Generate a dramatic, powerful industrial atmosphere. The SVG overlay places a dark header band (top 15%), a LEFT product hero card (3%-40% width, 18%-88% height), a RIGHT text/features zone (44%-96%), and a dark footer. Your job: fill the canvas with a richly atmospheric industrial/electrification environment using the brand palette as the DOMINANT color tone. Specific visual content to generate: metallic panel surfaces, high-voltage equipment silhouettes, factory floor depth with directional industrial lighting, electrical conduit, circuit breaker panels, energy infrastructure, or power distribution equipment — all tinted with the brand colors. LIGHTING: dramatic — overhead industrial spotlights casting hard shadows, edge-lit metallic surfaces, deep shadows in corners. LEFT SIDE should be visually complex and rich (the product card floats on top). RIGHT SIDE should be darker and smoother — a deep brand-colored gradient moving from mid-depth on left to deep shadow on right, keeping the zone legible for white text overlay. The mood is: high-stakes industrial power, engineering precision, Siemens or Schneider Electric campaign quality. No text, no panels, no logos, no UI.',
+        'BACKGROUND PLATE — INDUSTRIAL CAMPAIGN: Generate a dramatic, premium electrification campaign atmosphere. The SVG overlay places a dark header band (top 15%), a LEFT product hero card (3%-40% width, 18%-88% height), a RIGHT text/features zone (44%-96%), and a dark footer. Your job: build a richly layered industrial world using the brand palette as the DOMINANT color tone. Reference look: premium power-quality campaign art with a luminous city/plant backdrop, transmission towers or grid infrastructure silhouettes, high-voltage line geometry, metallic reflections, atmospheric depth, and engineered light streaks. Specific visual ingredients to mix with restraint: power-distribution equipment, control panels, substation structures, factory silhouettes, cable trays, electrical glow lines, reflective floor/platform surfaces, and distant city or plant lights. LIGHTING: dramatic and directional — bright electrical highlights, crisp metallic edges, deep shadows, and one or two focused light blooms. LEFT SIDE should feel like a prestige hero bay where a product can sit confidently. RIGHT SIDE should be darker, smoother, and more text-safe, but still enriched with subtle grid lines, energy traces, and industrial depth. Avoid flat blue emptiness. Avoid generic blur. The mood is high-stakes industrial engineering, premium campaign photography, and enterprise power-systems credibility. No text, no panels, no logos, no UI.',
     },
     'datasheet-frame': {
       label: 'Datasheet Frame',
@@ -978,6 +1051,16 @@ export async function POST(request: Request) {
     const selectedTheme = buildThemeDirective(themeId);
     const variationDirective = buildVariationDirective(generationNonce, themeId);
     const variationSalt = `${generationNonce}-${Date.now().toString(36).slice(-6)}`;
+    const themeSlotGuidance = hasThemeComposition ? buildThemeSlotGuidance(themeId) : '';
+    const themeSelectionGuidance =
+      hasThemeComposition || isAlliancePoster
+        ? buildThemeSelectionGuidance({
+            themeId,
+            slotImages,
+            referenceImageUrl,
+            referenceAsHero,
+          })
+        : '';
 
     const imagePrompt = `
 You are an elite creative director and visual designer who has art-directed campaigns for Fortune 500 brands. You specialize in LinkedIn visual content that stops the scroll and drives engagement.
@@ -999,6 +1082,20 @@ THEME FIDELITY — CRITICAL (THIS OVERRIDES ALL OTHER COMPOSITION RULES):
 - Fill the frame with rich, detailed visual content — this image will be cropped into the theme's hero slot.
 - Use brand colors in the scene (lighting, surfaces, materials, environment) so the AI content harmonizes with the theme overlay colors.
 - This is a LinkedIn post visual system, not an ecommerce ad or landing-page banner. Avoid retail "shop now" aesthetics, coupon energy, or hard-sell web ad styling.
+${hasThemeComposition || isAlliancePoster ? `
+- Treat the selected theme as an ART DIRECTION SYSTEM, not a generic template. The background plate should feel custom-built for that theme's structure.
+- Create premium atmosphere, depth, and lighting that makes the final composed poster feel intentional, not like a stock image with a template dropped on top.
+- Preserve a clear relationship between the likely hero zone and the likely text-safe zone: one side may carry richer environmental detail, while the text side stays calmer, deeper, and easier to read over.
+- Avoid flat dead gradients, empty color washes, or generic blurred nothingness. The plate must have richness, texture, and believable visual storytelling.
+` : ''}
+
+${themeSlotGuidance ? `THEME SLOT MAP:
+${themeSlotGuidance}
+` : ''}
+
+${themeSelectionGuidance ? `SELECTED VISUAL ASSET GUIDANCE:
+${themeSelectionGuidance}
+` : ''}
 
 ${safeBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
 BRAND IDENTITY — #1 PRIORITY (READ THIS FIRST)
@@ -1204,9 +1301,35 @@ ${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, 
         ? await resolveImageBufferFromSource(referenceImageUrl)
         : null;
 
-    // For themed images: the SVG overlay handles logo + slot images, so we only
-    // feed reference images into the AI when there is NO theme composition.
-    // For themed images, reference images are routed into the hero slot instead.
+    // For themed images, auto-route the selected reference into the theme slots so
+    // posters do not come out blank when the user picked a visual but did not map
+    // every slot manually.
+    if (hasThemeComposition && referenceImageUrl) {
+      const themeSlots = THEME_SCHEMAS[themeId]?.imageSlots || [];
+      const heroSlot = themeSlots.find((slot) => slot.id === 'hero');
+      if (heroSlot) {
+        if (!slotImages['hero']) {
+          slotImages['hero'] = referenceImageUrl;
+        }
+      } else {
+        for (const slot of themeSlots) {
+          if (!slotImages[slot.id]) {
+            slotImages[slot.id] = referenceImageUrl;
+          }
+        }
+      }
+    }
+
+    const themedReferenceSources =
+      hasThemeComposition || isAlliancePoster
+        ? collectUniqueImageSources(
+            referenceImageUrl ? [referenceImageUrl] : [],
+            Object.values(slotImages)
+          ).slice(0, 3)
+        : [];
+
+    // For non-themed images, the AI needs the reference/logo directly because no
+    // theme composition pass will structure the final creative.
     if (!hasThemeComposition && !isAlliancePoster) {
       // Resolve logo buffer for baking into the AI image (non-themed only)
       if (hasLogo && effectiveLogoPlacement !== 'none') {
@@ -1230,32 +1353,30 @@ ${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, 
           referenceImages.push({ buffer: refPng, filename: 'reference.png', role: 'reference' });
         }
       }
-    }
+    } else {
+      for (const [index, source] of themedReferenceSources.entries()) {
+        const refBuffer = await resolveImageBufferFromSource(source);
+        if (!refBuffer) continue;
 
-    // For themed images, auto-route the selected reference into the theme slots so
-    // posters do not come out blank when the user picked a visual but did not map
-    // every slot manually.
-    if (hasThemeComposition && referenceImageUrl) {
-      const themeSlots = THEME_SCHEMAS[themeId]?.imageSlots || [];
-      const heroSlot = themeSlots.find((slot) => slot.id === 'hero');
-      if (heroSlot) {
-        if (!slotImages['hero']) {
-          slotImages['hero'] = referenceImageUrl;
-        }
-      } else {
-        for (const slot of themeSlots) {
-          if (!slotImages[slot.id]) {
-            slotImages[slot.id] = referenceImageUrl;
-          }
-        }
+        const refPng = await sharp(refBuffer)
+          .resize({
+            width: index === 0 ? 1400 : 1100,
+            height: index === 0 ? 1400 : 1100,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .png()
+          .toBuffer();
+
+        referenceImages.push({
+          buffer: refPng,
+          filename: `theme-reference-${index + 1}.png`,
+          role: index === 0 ? 'reference' : `reference-support-${index + 1}`,
+        });
       }
     }
 
-    const useEditEndpoint =
-      !isAlliancePoster &&
-      !hasThemeComposition &&
-      referenceImages.length > 0 &&
-      model.startsWith('gpt-image');
+    const useEditEndpoint = referenceImages.length > 0 && model.startsWith('gpt-image');
 
     // Augment prompt with logo/reference instructions for the edit endpoint
     let editPrompt = imagePrompt;
@@ -1290,7 +1411,15 @@ DO NOT:
         : '';
 
       const refInstruction = hasImageRef
-        ? `\n\nREFERENCE / PRODUCT IMAGE (MUST USE):
+        ? hasThemeComposition || isAlliancePoster
+          ? `\n\nSELECTED VISUAL REFERENCES (MANDATORY):
+- I have provided one or more user-selected reference images. These are the user's actual chosen product/scene assets.
+- Treat them as visual truth for the product family, silhouette, materials, detailing, proportions, finish quality, and environment language.
+- Build the BACKGROUND PLATE around these selections so the final composed theme feels custom-designed from the user's choices.
+- If the structured theme overlay later places the chosen asset into a hero slot, do NOT create a second isolated pasted cutout elsewhere in the frame.
+- Instead, echo the selection through supporting environmental context: matching reflections, close-up product detailing, relevant supporting hardware, atmospheric lighting, texture language, and realistic surrounding scene cues.
+- The final result must feel like a premium campaign background art-directed from these exact selected assets, not a generic stock concept.`
+          : `\n\nREFERENCE / PRODUCT IMAGE (MUST USE):
 - I have provided a reference or product image. You MUST incorporate the visual subject, product, or scene from this reference prominently in the generated image.
 - The generated image should clearly feature and showcase the referenced subject as a key visual element.
 - Match the reference's colors, style, and characteristics faithfully while integrating it into a professional, polished composition.
@@ -1298,7 +1427,13 @@ DO NOT:
         : '';
 
       // Build the final edit prompt with logo as highest priority
-      editPrompt = imagePrompt + logoInstruction + refInstruction + `\n\nFINAL PRIORITY ORDER: 1) Reproduce the logo exactly and prominently. 2) Match the visual style and scene description. 3) Integrate reference images naturally.`;
+      editPrompt =
+        imagePrompt +
+        logoInstruction +
+        refInstruction +
+        (hasThemeComposition || isAlliancePoster
+          ? `\n\nFINAL PRIORITY ORDER: 1) Honor the selected reference assets as the product/scene truth. 2) Build a premium theme-native background plate around them. 3) Keep the composition clean for the later overlay system.`
+          : `\n\nFINAL PRIORITY ORDER: 1) Reproduce the logo exactly and prominently. 2) Match the visual style and scene description. 3) Integrate reference images naturally.`);
     }
 
     let base64: string;
