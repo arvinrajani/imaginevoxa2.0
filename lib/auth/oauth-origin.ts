@@ -58,17 +58,18 @@ export function resolveOAuthBaseUrl(
 export function resolveOAuthRedirectUri(
   request: Request,
   options: {
-    fallbackPath: string;
+    fallbackPath?: string | null;
     configuredRedirectUri?: string | null;
     storedRedirectUri?: string | null;
     configuredBaseUrl?: string | null;
   }
 ) {
   const baseUrl = resolveOAuthBaseUrl(request, options.configuredBaseUrl);
-  const fallbackPath = options.fallbackPath.startsWith("/")
-    ? options.fallbackPath
-    : `/${options.fallbackPath}`;
-  const fallback = `${baseUrl}${fallbackPath}`;
+  const fallbackPath = options.fallbackPath?.trim() || "";
+  const fallback =
+    !fallbackPath || fallbackPath === "/"
+      ? baseUrl
+      : `${baseUrl}${fallbackPath.startsWith("/") ? fallbackPath : `/${fallbackPath}`}`;
   const candidate =
     options.storedRedirectUri?.trim() || options.configuredRedirectUri?.trim();
 

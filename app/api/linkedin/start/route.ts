@@ -4,6 +4,41 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { resolveOAuthRedirectUri } from "@/lib/auth/oauth-origin";
 import crypto from "crypto";
 
+const DEFAULT_PERSONAL_SCOPES = ["openid", "profile", "w_member_social"];
+const DEFAULT_ORGANIZATION_SCOPES = [
+  "openid",
+  "profile",
+  "w_member_social",
+  "r_organization_social",
+  "w_organization_social",
+];
+const DISALLOWED_LINKEDIN_SCOPES = new Set([
+  "email",
+  "r_emailaddress",
+  "r_liteprofile",
+]);
+
+function sanitizeLinkedInScopes(
+  value: string | undefined,
+  defaults: string[]
+) {
+  const requestedScopes = (value || defaults.join(" "))
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+  const allowedScopes = new Set(defaults);
+
+  const scopes = Array.from(
+    new Set(
+      requestedScopes.filter(
+        (scope) => allowedScopes.has(scope) && !DISALLOWED_LINKEDIN_SCOPES.has(scope)
+      )
+    )
+  );
+
+  return scopes.length > 0 ? scopes.join(" ") : defaults.join(" ");
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -25,19 +60,23 @@ export async function GET(request: Request) {
         ? resolveOAuthRedirectUri(request, {
             configuredRedirectUri: process.env.LINKEDIN_ORG_REDIRECT_URI,
             configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
-            fallbackPath: "/api/linkedin/callback",
+            fallbackPath: "",
           })
         : resolveOAuthRedirectUri(request, {
             configuredRedirectUri: process.env.LINKEDIN_REDIRECT_URI,
             configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
-            fallbackPath: "/api/linkedin/callback",
+            fallbackPath: "",
           });
     const scopes =
       target === "organization"
-        ? process.env.LINKEDIN_ORG_SCOPES ||
-          "openid profile email w_member_social r_organization_social w_organization_social"
-        : process.env.LINKEDIN_SCOPES ||
-          "openid profile email w_member_social r_organization_social";
+        ? sanitizeLinkedInScopes(
+            process.env.LINKEDIN_ORG_SCOPES,
+            DEFAULT_ORGANIZATION_SCOPES
+          )
+        : sanitizeLinkedInScopes(
+            process.env.LINKEDIN_SCOPES,
+            DEFAULT_PERSONAL_SCOPES
+          );
 
     if (!clientId) {
       const url = new URL("/app/linkedin", request.url);

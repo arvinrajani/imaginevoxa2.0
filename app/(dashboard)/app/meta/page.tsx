@@ -158,7 +158,7 @@ export default function MetaPage() {
       : ["META_APP_ID", "META_APP_SECRET"];
   const callbackUri =
     searchParams.get("callback_uri") ||
-    (runtimeOrigin ? `${runtimeOrigin}/api/meta/callback` : null);
+    runtimeOrigin;
   let callbackHost: string | null = null;
   try {
     callbackHost = callbackUri ? new URL(callbackUri).hostname : null;
@@ -300,7 +300,8 @@ export default function MetaPage() {
                 {callbackUri || "Unable to determine callback URL"}
               </p>
               <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-                Add this exact URL to your Meta app&apos;s Valid OAuth Redirect URIs.
+                Add this exact URL to your Meta app&apos;s Valid OAuth Redirect URIs. The app
+                forwards the provider response to the internal callback automatically.
               </p>
             </div>
           </div>
@@ -323,7 +324,7 @@ export default function MetaPage() {
             </p>
             <div className="mt-2 space-y-1.5 text-[12px] leading-relaxed text-slate-700">
               <p>1. Add the Meta env vars in your Vercel project settings.</p>
-              <p>2. Add the callback URL above inside Meta for Developers.</p>
+              <p>2. Add the exact redirect URL above inside Meta for Developers.</p>
               <p>3. Redeploy, then reconnect Facebook or Instagram from this page.</p>
             </div>
           </div>

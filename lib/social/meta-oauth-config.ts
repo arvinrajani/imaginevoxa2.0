@@ -30,7 +30,7 @@ export function resolveMetaOAuthConfig(
     storedRedirectUri: storedRedirect,
     configuredRedirectUri: process.env.META_REDIRECT_URI?.trim(),
     configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
-    fallbackPath: "/api/meta/callback",
+    fallbackPath: "",
   });
   const rawScopes = process.env.META_SCOPES?.trim() || DEFAULT_META_SCOPES;
   const scopes = Array.from(

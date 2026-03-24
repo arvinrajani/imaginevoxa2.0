@@ -76,13 +76,13 @@ export async function GET(request: Request) {
           storedRedirectUri: storedRedirect,
           configuredRedirectUri: process.env.LINKEDIN_ORG_REDIRECT_URI,
           configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
-          fallbackPath: "/api/linkedin/callback",
+          fallbackPath: "",
         })
       : resolveOAuthRedirectUri(request, {
           storedRedirectUri: storedRedirect,
           configuredRedirectUri: process.env.LINKEDIN_REDIRECT_URI,
           configuredBaseUrl: process.env.APP_BASE_URL?.trim(),
-          fallbackPath: "/api/linkedin/callback",
+          fallbackPath: "",
         });
 
   if (!clientId || !clientSecret) {
