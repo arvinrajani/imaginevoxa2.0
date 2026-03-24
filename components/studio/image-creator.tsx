@@ -145,7 +145,7 @@ function sanitizeVisualText(value: string | null | undefined, maxLength = 160) {
 }
 
 function wrapPreviewText(value: string | null | undefined, maxChars: number, maxLines = 2) {
-  const cleaned = sanitizeVisualText(value, maxChars * Math.max(2, maxLines));
+  const cleaned = sanitizeVisualText(value, Math.max(160, maxChars * Math.max(2, maxLines) * 4));
   if (!cleaned) return [];
 
   const words = cleaned.split(/\s+/);
@@ -168,6 +168,27 @@ function wrapPreviewText(value: string | null | undefined, maxChars: number, max
   }
 
   return lines.slice(0, maxLines);
+}
+
+function fitPreviewText(value: string | null | undefined, widths: number[], maxLines = 2) {
+  if (!Array.isArray(widths) || widths.length === 0) return [];
+
+  const cleaned = sanitizeVisualText(
+    value,
+    Math.max(...widths, 16) * Math.max(2, maxLines) * 4
+  );
+  if (!cleaned) return [];
+
+  let fallback: string[] = [];
+  for (const width of widths) {
+    const lines = wrapPreviewText(cleaned, width, maxLines);
+    fallback = lines;
+    if (lines.join(' ').trim().length >= cleaned.length) {
+      return lines;
+    }
+  }
+
+  return fallback;
 }
 
 function normalizeHexColor(value: string | null | undefined) {
@@ -545,10 +566,10 @@ const THEME_OPTIONS: ThemeOption[] = [
     id: 'offer-card',
     label: 'Offer Card',
     category: 'Sales',
-    description: 'Clear sales-focused card for offers, bundles, service promos, or CTA-led creatives.',
-    summary: 'Best for direct response posts where the offer, package, or service should be immediately clear.',
+    description: 'Clear spotlight card for offers, bundles, service promos, or package-focused post creatives.',
+    summary: 'Best for LinkedIn posts where the offer, package, or service should be immediately clear without looking like a web ad.',
     promptHint:
-      'Describe the offer, promotion, or service highlight and whether the image should feel urgent, premium, or conversion-focused.',
+      'Describe the offer, promotion, or service highlight and whether the image should feel urgent, premium, or brand-forward.',
     recommendedTone: 'bold',
     recommendedStyle: 'text-overlay',
     recommendedLogoPlacement: 'overlay',
@@ -1019,6 +1040,22 @@ function ThemePreviewLarge({
   const safeFooterEmail = sanitizeVisualText(footerEmail || '', 48);
   const visionLines = wrapPreviewText(customPrompt || '', 34, 4);
   const headlineLines = wrapPreviewText(safeHeadline, 28, 2);
+  const standardHeadlineLines = fitPreviewText(safeHeadline, [20, 22, 24, 26], 3);
+  const compactHeadlineLines = fitPreviewText(safeHeadline, [16, 18, 20, 22], 4);
+  const supportingTaglineLines = fitPreviewText(safeTagline, [22, 26, 30, 34], 3);
+  const shortTaglineLines = fitPreviewText(safeTagline, [20, 24, 28], 2);
+  const productHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 3);
+  const productTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 3);
+  const knowledgeHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 3);
+  const knowledgeTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 3);
+  const datasheetHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 2);
+  const datasheetTaglineLines = fitPreviewText(safeTagline, [22, 26, 30], 2);
+  const proofHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 2);
+  const proofTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 3);
+  const launchHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 3);
+  const launchTaglineLines = fitPreviewText(safeTagline, [22, 26, 30], 2);
+  const footerLine = [safeFooterWebsite, safeFooterEmail].filter(Boolean).join(' | ');
+  const footerPreviewLines = fitPreviewText(footerLine, [30, 34, 38, 42], 2);
   const allianceTaglineLines = wrapPreviewText(safeTagline || partnerName || '', 24, 2);
   const hasAllianceHeaderContent =
     allianceHeaderLogos.length > 0 || Boolean((partnerName || '').trim() || (partnerTagline || '').trim());
@@ -1048,10 +1085,10 @@ function ThemePreviewLarge({
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`}>
         {uploadedLogo ? (
-          <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-1" />
+          <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-1.5 drop-shadow-sm" />
         ) : (
           <span
-            className={`text-[8px] font-bold text-center leading-tight px-1 ${light ? 'text-white/80' : 'text-slate-600'}`}
+            className={`px-1.5 text-center text-[9px] font-bold leading-tight ${light ? 'text-white/85' : 'text-slate-600'}`}
           >
             {brandName || 'Brand'}
           </span>
@@ -1162,6 +1199,10 @@ function ThemePreviewLarge({
   }
 
   if ((themeId as string) === 'alliance-poster') {
+    const allianceHeadlineLines = fitPreviewText(safeHeadline, [22, 24, 26], 2);
+    const allianceFeatureLines = (
+      safeFeatureLines.length > 0 ? safeFeatureLines : ['Product proof points appear here']
+    ).slice(0, 5);
     return (
       <div className={`${previewAspectClass} overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div
@@ -1209,7 +1250,7 @@ function ThemePreviewLarge({
 
           <div className="absolute left-[24%] right-[25%] top-[4.2%] text-center">
             <div className="space-y-1">
-              {headlineLines.map((line, index) => (
+              {allianceHeadlineLines.map((line, index) => (
                 <p key={`${line}-${index}`} className="text-[19px] font-semibold italic leading-tight text-white drop-shadow-sm">
                   {line}
                 </p>
@@ -1239,23 +1280,26 @@ function ThemePreviewLarge({
           </div>
 
           <div className="absolute right-[4%] top-[28%] w-[41%] space-y-2.5">
-            {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Product proof points appear here']).slice(0, 6).map((line, index) => (
+            {allianceFeatureLines.map((line, index) => (
               <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full bg-slate-950/[28%] px-4 py-2.5">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg font-black text-white shadow"
-                  style={{ backgroundColor: previewPalette.support }}
-                >
-                  ✓
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg shadow" style={{ backgroundColor: previewPalette.support }}>
+                  <CheckCircle2 className="h-4 w-4 text-white" />
                 </div>
-                <p className="text-[12px] font-semibold italic leading-tight text-white">{line}</p>
+                <div className="flex-1">
+                  {fitPreviewText(line, [22, 24, 26], 2).map((chunk, chunkIndex) => (
+                    <p key={`${chunk}-${chunkIndex}`} className="text-[12px] font-semibold italic leading-tight text-white">
+                      {chunk}
+                    </p>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="absolute inset-x-[6%] bottom-[2.4%] flex items-center justify-center gap-4 text-[12px] font-semibold tracking-wide text-white">
-            <span>{safeFooterWebsite || 'www.yoursite.com'}</span>
-            <span className="text-white/70">|</span>
-            <span>{safeFooterEmail || 'info@yoursite.com'}</span>
+          <div className="absolute inset-x-[6%] bottom-[2.2%] flex flex-col items-center justify-center gap-0.5 text-[11px] font-semibold tracking-wide text-white">
+            {(footerPreviewLines.length > 0 ? footerPreviewLines : ['www.yoursite.com | info@yoursite.com']).map((line, index) => (
+              <span key={`${line}-${index}`}>{line}</span>
+            ))}
           </div>
         </div>
       </div>
@@ -1263,6 +1307,11 @@ function ThemePreviewLarge({
   }
 
   if ((themeId as string) === 'industrial-campaign') {
+    const industrialFeatures = (
+      safeFeatureLines.length > 0
+        ? safeFeatureLines
+        : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']
+    ).slice(0, 3);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
@@ -1270,7 +1319,7 @@ function ThemePreviewLarge({
         <div className="absolute inset-x-0 top-0 h-[12%] border-b border-white/10" style={{ backgroundColor: `${previewPalette.bgStart}88` }} />
         <div className="absolute inset-x-0 bottom-0 h-[10%]" style={{ backgroundColor: previewPalette.footer }} />
 
-        <div className="absolute left-[3%] top-[3%] flex h-[8%] w-[14%] items-center justify-center rounded-xl bg-white/92 p-2">
+        <div className="absolute left-[3%] top-[3%] flex h-[8.5%] w-[16%] items-center justify-center rounded-xl bg-white/94 p-2 shadow-sm">
           {uploadedLogo ? (
             <img src={uploadedLogo} alt="Brand logo" className="h-full w-full object-contain" />
           ) : (
@@ -1282,35 +1331,57 @@ function ThemePreviewLarge({
           {renderHeroZone('absolute inset-0 rounded-[22px]')}
         </div>
 
-        <div className="absolute bottom-[14%] right-[3%] top-[18%] w-[58%] rounded-[24px] border border-white/10 bg-slate-950/15 px-[4%] py-[5%]">
+        <div className="absolute bottom-[14%] right-[3%] top-[18%] flex w-[58%] flex-col gap-3 rounded-[24px] border border-white/10 bg-slate-950/18 px-[4.5%] py-[5%]">
           <div className="space-y-1.5">
-            {wrapPreviewText(safeHeadline, 18, 3).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[18px] font-black leading-tight text-white">
+            {compactHeadlineLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                className="font-black text-white"
+                style={{
+                  fontSize: compactHeadlineLines.length > 3 ? '16px' : '18px',
+                  lineHeight: compactHeadlineLines.length > 3 ? 1.15 : 1.12,
+                }}
+              >
                 {line}
               </p>
             ))}
           </div>
-          {safeTagline && (
-            <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: previewPalette.accent }}>
-              {safeTagline}
-            </p>
+          {shortTaglineLines.length > 0 && (
+            <div className="space-y-1">
+              {shortTaglineLines.map((line, index) => (
+                <p
+                  key={`${line}-${index}`}
+                  className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+                  style={{ color: previewPalette.accent }}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
           )}
-          <div className="mt-4 h-1 w-[26%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-          <div className="mt-5 space-y-3">
-            {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']).slice(0, 4).map((line, index) => (
+          <div className="h-1 w-[26%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="space-y-3">
+            {industrialFeatures.map((line, index) => (
               <div key={`${line}-${index}`} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-white" style={{ backgroundColor: previewPalette.support }}>
-                  ✓
+                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.support }}>
+                  <CheckCircle2 className="h-4 w-4 text-white" />
                 </div>
-                <p className="text-[11px] font-semibold leading-snug text-white/95">{line}</p>
+                <div className="flex-1">
+                  {fitPreviewText(line, [24, 26, 28], 2).map((chunk, chunkIndex) => (
+                    <p key={`${chunk}-${chunkIndex}`} className="text-[11px] font-semibold leading-snug text-white/95">
+                      {chunk}
+                    </p>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="absolute inset-x-[6%] bottom-[3.1%] flex items-center justify-between text-[11px] font-semibold tracking-wide text-white/90">
-          <span>{safeFooterWebsite || brandName || 'Brand site'}</span>
-          <span>{safeFooterEmail || partnerName || 'Campaign footer'}</span>
+        <div className="absolute inset-x-[6%] bottom-[2.8%] flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold tracking-wide text-white/90">
+          {(footerPreviewLines.length > 0 ? footerPreviewLines : [safeFooterWebsite || brandName || 'Brand site']).map((line, index) => (
+            <span key={`${line}-${index}`}>{line}</span>
+          ))}
         </div>
       </div>
     );
@@ -1412,38 +1483,54 @@ function ThemePreviewLarge({
 
   // ── Clean Brand ──────────────────────────────────────────────────────────────
   if (themeId === 'clean-brand') {
+    const cleanTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 3);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden bg-white`}>
         <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100" />
         <div className="absolute inset-x-0 top-0 flex h-[14%] items-center justify-between border-b border-slate-100 px-[5%]">
           {renderLogoBox('h-[65%] w-[13%] rounded-lg border border-slate-200 bg-white shadow-sm')}
-          <div className="flex gap-3">
-            <div className="h-2 w-10 rounded-full bg-slate-200" />
-            <div className="h-2 w-10 rounded-full bg-slate-200" />
-            <div className="h-2 w-10 rounded-full bg-slate-200" />
-          </div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Clean Brand</p>
         </div>
         <div className="absolute bottom-[12%] left-[6%] top-[18%] flex w-[54%] flex-col justify-center gap-3">
           <div className="flex items-center gap-2">
             <div className="h-1 w-8 rounded-full" style={{ backgroundColor: previewPalette.bgStart }} />
-            <div className="h-2 w-20 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>
+              {brandName || 'Brand'}
+            </p>
           </div>
           <div className="space-y-2">
-            <div className="h-7 w-full rounded" style={{ backgroundColor: previewPalette.bgStart }} />
-            <div className="h-7 w-5/6 rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+            {standardHeadlineLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                className="font-black"
+                style={{
+                  color: previewPalette.bgStart,
+                  fontSize: standardHeadlineLines.length > 2 ? '18px' : '21px',
+                  lineHeight: standardHeadlineLines.length > 2 ? 1.16 : 1.1,
+                }}
+              >
+                {line}
+              </p>
+            ))}
           </div>
           <div className="space-y-1.5">
-            <div className="h-2 w-full rounded-full" style={{ backgroundColor: previewPalette.muted }} />
-            <div className="h-2 w-5/6 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
-            <div className="h-2 w-4/6 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+            {(cleanTaglineLines.length > 0 ? cleanTaglineLines : ['Minimal structure. Clear headline. Premium whitespace.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug" style={{ color: previewPalette.muted }}>
+                {line}
+              </p>
+            ))}
           </div>
-          <div className="h-8 w-28 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+            Brand Focus
+          </div>
         </div>
         <div className="absolute bottom-[12%] right-[4%] top-[16%] w-[36%] rounded-2xl border border-slate-200 bg-slate-100">
           {renderHeroZone('absolute inset-0 rounded-2xl')}
         </div>
         <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center border-t border-slate-100 px-[6%]">
-          <div className="h-2 w-24 rounded-full bg-slate-200" />
+          <p className="text-[10px] font-semibold text-slate-400">
+            {footerPreviewLines[0] || safeFooterWebsite || brandName || 'Brand site'}
+          </p>
         </div>
         {generateCta}
       </div>
@@ -1452,6 +1539,8 @@ function ThemePreviewLarge({
 
   // ── Brand Story ──────────────────────────────────────────────────────────────
   if (themeId === 'brand-story') {
+    const storyHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 3);
+    const storyTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 4);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}33 100%)` }} />
@@ -1463,18 +1552,32 @@ function ThemePreviewLarge({
         <div className="absolute bottom-[10%] right-[4%] top-[10%] flex w-[52%] flex-col justify-center gap-3">
           {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
           <div className="space-y-2">
-            <div className="h-6 w-full rounded" style={{ backgroundColor: previewPalette.bgStart }} />
-            <div className="h-6 w-4/5 rounded" style={{ backgroundColor: previewPalette.bgStart }} />
+            {storyHeadlineLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                className="font-black"
+                style={{
+                  color: previewPalette.bgStart,
+                  fontSize: storyHeadlineLines.length > 2 ? '17px' : '20px',
+                  lineHeight: 1.12,
+                }}
+              >
+                {line}
+              </p>
+            ))}
           </div>
           <div className="space-y-1.5">
-            <div className="h-2 w-full rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
-            <div className="h-2 w-11/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
-            <div className="h-2 w-9/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
-            <div className="h-2 w-10/12 rounded-full" style={{ backgroundColor: `${previewPalette.muted}99` }} />
+            {(storyTaglineLines.length > 0 ? storyTaglineLines : ['Use this layout for thoughtful storytelling and a more editorial tone.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug" style={{ color: `${previewPalette.muted}dd` }}>
+                {line}
+              </p>
+            ))}
           </div>
           <div className="flex items-center gap-3">
-            <div className="h-8 w-24 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-            <div className="h-2 w-16 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
+            <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+              Story Highlight
+            </div>
+            <div className="h-1.5 w-16 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
           </div>
         </div>
         {generateCta}
@@ -1538,18 +1641,28 @@ function ThemePreviewLarge({
         {renderLogoBox('absolute left-[4%] top-[4%] h-[10%] w-[13%] rounded-xl border border-slate-200 bg-white shadow-sm')}
         <div className="absolute left-[6%] top-[19%] h-1 w-[42%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
         <div className="absolute bottom-[16%] left-[6%] top-[24%] flex w-[44%] flex-col justify-center gap-3">
-          {wrapPreviewText(safeHeadline, 20, 3).map((line, index) => (
-            <p key={`${line}-${index}`} className="text-[19px] font-black leading-tight" style={{ color: previewPalette.text }}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>
+            Product Hero
+          </p>
+          {productHeadlineLines.map((line, index) => (
+            <p
+              key={`${line}-${index}`}
+              className="font-black leading-tight"
+              style={{
+                color: previewPalette.text,
+                fontSize: productHeadlineLines.length > 2 ? '17px' : '19px',
+              }}
+            >
               {line}
             </p>
           ))}
-          {wrapPreviewText(safeTagline, 28, 2).map((line, index) => (
-            <p key={`${line}-${index}`} className="text-[12px] leading-snug" style={{ color: previewPalette.muted }}>
+          {productTaglineLines.map((line, index) => (
+            <p key={`${line}-${index}`} className="text-[11px] leading-snug" style={{ color: previewPalette.muted }}>
               {line}
             </p>
           ))}
-          <div className="mt-2 flex h-9 w-28 items-center justify-center rounded-full text-[11px] font-bold" style={{ backgroundColor: previewPalette.accent, color: previewPalette.text }}>
-            Shop Now
+          <div className="mt-2 flex h-8 w-32 items-center justify-center rounded-full text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+            Product Spotlight
           </div>
         </div>
         <div className="absolute bottom-[12%] right-[5%] top-[14%] w-[34%] rounded-[26px] border border-slate-200/80" style={{ backgroundColor: `${previewPalette.surface}66` }}>
@@ -1572,12 +1685,19 @@ function ThemePreviewLarge({
           </div>
           <div className="flex flex-col justify-center gap-2.5 rounded-xl p-4" style={{ border: `1px solid ${previewPalette.accent}55`, backgroundColor: `${previewPalette.accent}18` }}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>{brandName || 'Brand'}</p>
-            {wrapPreviewText(safeHeadline, 18, 3).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[16px] font-black leading-tight" style={{ color: previewPalette.text }}>
+            {knowledgeHeadlineLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                className="font-black leading-tight"
+                style={{
+                  color: previewPalette.text,
+                  fontSize: knowledgeHeadlineLines.length > 2 ? '15px' : '16px',
+                }}
+              >
                 {line}
               </p>
             ))}
-            {wrapPreviewText(safeTagline, 24, 2).map((line, index) => (
+            {knowledgeTaglineLines.map((line, index) => (
               <p key={`${line}-${index}`} className="text-[11px] leading-snug" style={{ color: previewPalette.muted }}>
                 {line}
               </p>
@@ -1588,12 +1708,18 @@ function ThemePreviewLarge({
                   <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black" style={{ backgroundColor: previewPalette.support, color: previewPalette.bgStart }}>
                     {index + 1}
                   </div>
-                  <p className="text-[10px] font-semibold leading-snug" style={{ color: previewPalette.text }}>{line}</p>
+                  <div className="flex-1">
+                    {fitPreviewText(line, [18, 20, 22], 2).map((chunk, chunkIndex) => (
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug" style={{ color: previewPalette.text }}>
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="mt-1 flex h-7 w-24 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.surface}44`, color: previewPalette.text }}>
-              Read More
+            <div className="mt-1 flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.surface}44`, color: previewPalette.text }}>
+              Knowledge Brief
             </div>
           </div>
         </div>
@@ -1615,13 +1741,18 @@ function ThemePreviewLarge({
             <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
               <div className="mb-1.5 flex items-center gap-2">
                 {renderLogoBox('h-6 w-10 rounded border border-slate-200')}
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Datasheet Frame</p>
               </div>
-              {wrapPreviewText(safeHeadline, 18, 2).map((line, index) => (
+              {datasheetHeadlineLines.map((line, index) => (
                 <p key={`${line}-${index}`} className="text-[13px] font-black leading-tight text-slate-900">
                   {line}
                 </p>
               ))}
-              {safeTagline && <p className="mt-1.5 text-[10px] leading-snug text-slate-500">{safeTagline}</p>}
+              {datasheetTaglineLines.map((line, index) => (
+                <p key={`${line}-${index}`} className="mt-1.5 text-[10px] leading-snug text-slate-500">
+                  {line}
+                </p>
+              ))}
             </div>
             <div className="grid flex-1 grid-cols-2 gap-[5%]">
               {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Key specification', 'Product benefit', 'Protection detail', 'Application fit']).slice(0, 4).map((line, i) => (
@@ -1629,7 +1760,7 @@ function ThemePreviewLarge({
                   <div className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
                     {i + 1}
                   </div>
-                  {wrapPreviewText(line, 16, 3).map((chunk, index) => (
+                  {fitPreviewText(line, [16, 18, 20], 3).map((chunk, index) => (
                     <p key={`${chunk}-${index}`} className="mt-2 text-[10px] font-semibold leading-snug text-slate-800">
                       {chunk}
                     </p>
@@ -1657,7 +1788,7 @@ function ThemePreviewLarge({
                   {i + 1}
                 </div>
                 <div className="flex-1">
-                  {wrapPreviewText(line, 20, 3).map((chunk, index) => (
+                  {fitPreviewText(line, [20, 22, 24], 3).map((chunk, index) => (
                     <p key={`${chunk}-${index}`} className="text-[10px] font-semibold leading-snug text-slate-900">
                       {chunk}
                     </p>
@@ -1668,20 +1799,20 @@ function ThemePreviewLarge({
           </div>
           <div className="flex flex-col justify-center gap-3 rounded-xl border border-slate-200 p-4" style={{ backgroundColor: previewPalette.bgStart }}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>{brandName || 'Brand'}</p>
-            {wrapPreviewText(safeHeadline, 18, 2).map((line, index) => (
+            {proofHeadlineLines.map((line, index) => (
               <p key={`${line}-${index}`} className="text-[16px] font-black leading-tight text-white">
                 {line}
               </p>
             ))}
             <div className="space-y-1.5">
-              {wrapPreviewText(safeTagline, 24, 3).map((line, index) => (
+              {proofTaglineLines.map((line, index) => (
                 <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/70">
                   {line}
                 </p>
               ))}
             </div>
-            <div className="flex h-7 w-24 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: previewPalette.accent, color: previewPalette.text }}>
-              See Proof
+            <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+              Proof Snapshot
             </div>
           </div>
         </div>
@@ -1704,22 +1835,32 @@ function ThemePreviewLarge({
               <span className="text-[8px] font-bold text-slate-700">{brandName || 'Brand'}</span>
             )}
           </div>
-          <div className="h-6 w-20 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="flex h-6 w-24 items-center justify-center rounded-full px-2 text-[9px] font-bold uppercase tracking-[0.14em]" style={{ backgroundColor: previewPalette.accent, color: previewPalette.text }}>
+            Launch Mode
+          </div>
         </div>
         <div className="absolute inset-x-[8%] top-[22%] space-y-2">
-          {wrapPreviewText(safeHeadline, 20, 3).map((line, index) => (
-            <p key={`${line}-${index}`} className="text-[24px] font-black leading-tight text-white">
+          {launchHeadlineLines.map((line, index) => (
+            <p
+              key={`${line}-${index}`}
+              className="font-black leading-tight text-white"
+              style={{ fontSize: launchHeadlineLines.length > 2 ? '20px' : '24px' }}
+            >
               {line}
             </p>
           ))}
-          {safeTagline && <p className="mt-2 text-[13px] font-medium text-white/70">{safeTagline}</p>}
+          {launchTaglineLines.map((line, index) => (
+            <p key={`${line}-${index}`} className="mt-2 text-[12px] font-medium text-white/72">
+              {line}
+            </p>
+          ))}
         </div>
         <div className="absolute bottom-[8%] inset-x-[8%] flex items-center justify-between">
           <div className="rounded-full px-4 py-2 text-[11px] font-semibold" style={{ backgroundColor: `${previewPalette.surface}44`, color: previewPalette.text }}>
             {brandName || 'Brand'}
           </div>
-          <div className="flex h-9 w-24 items-center justify-center rounded-xl bg-white/90 text-[11px] font-bold text-slate-800">
-            Get Started
+          <div className="flex h-8 w-28 items-center justify-center rounded-xl bg-white/90 text-[10px] font-bold text-slate-800">
+            Launch Update
           </div>
         </div>
         {generateCta}
@@ -1729,18 +1870,23 @@ function ThemePreviewLarge({
 
   // ── Sector Collage ───────────────────────────────────────────────────────────
   if (themeId === 'sector-collage') {
+    const sectorLabels = (
+      safeFeatureLines.length > 0
+        ? safeFeatureLines
+        : ['Power factor improvement', 'Power quality support', 'Controller integration']
+    ).slice(0, 3);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}44 100%)` }} />
         <div className="absolute inset-x-0 top-0 flex h-[16%] items-center justify-between border-b border-white/10 px-[4%]" style={{ backgroundColor: `${previewPalette.headerPanel}cc` }}>
           {renderLogoBox('h-[65%] w-[13%] rounded bg-white/90 p-1', true)}
           <div className="space-y-1.5 text-right">
-            {wrapPreviewText(safeHeadline, 22, 2).map((line, index) => (
+            {fitPreviewText(safeHeadline, [20, 22, 24], 2).map((line, index) => (
               <p key={`${line}-${index}`} className="text-[13px] font-black leading-tight text-white">
                 {line}
               </p>
             ))}
-            {safeTagline && <p className="text-[10px] font-medium text-white/70">{safeTagline}</p>}
+            {shortTaglineLines[0] && <p className="text-[10px] font-medium text-white/70">{shortTaglineLines[0]}</p>}
           </div>
         </div>
         <div className="absolute inset-x-[3%] flex gap-[2%]" style={{ top: '19%', bottom: '26%' }}>
@@ -1759,11 +1905,17 @@ function ThemePreviewLarge({
             );
           })}
         </div>
-        <div className="absolute inset-x-[3%] flex justify-around items-center" style={{ bottom: '8%', height: '14%' }}>
-          {['⚡', '🏭', '🏥', '⛏', '🚗', '🏢'].map((icon, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <span className="text-base leading-none">{icon}</span>
-              <div className="h-1.5 w-9 rounded bg-white/50" />
+        <div className="absolute inset-x-[3%] grid grid-cols-3 gap-3" style={{ bottom: '8%', minHeight: '14%' }}>
+          {sectorLabels.map((label, i) => (
+            <div key={`${label}-${i}`} className="rounded-xl border border-white/10 bg-black/18 px-3 py-2 text-center">
+              <div className="mx-auto flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
+                {i + 1}
+              </div>
+              {fitPreviewText(label, [16, 18, 20], 2).map((line, index) => (
+                <p key={`${line}-${index}`} className="mt-1 text-[9px] font-semibold leading-snug text-white/88">
+                  {line}
+                </p>
+              ))}
             </div>
           ))}
         </div>
@@ -1774,18 +1926,34 @@ function ThemePreviewLarge({
 
   // ── Offer Card ───────────────────────────────────────────────────────────────
   if (themeId === 'offer-card') {
+    const offerTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 2);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}88 100%)` }} />
         <div className="absolute inset-[4%] grid grid-cols-[1.4fr_1fr] gap-[3%]">
           <div className="flex flex-col justify-center gap-3 rounded-xl p-4" style={{ backgroundColor: `${previewPalette.surface}18` }}>
-            <div className="h-5 w-20 rounded-full" style={{ backgroundColor: `${previewPalette.accent}e6` }} />
-            <div className="space-y-1.5">
-              <div className="h-6 w-full rounded bg-white/95" />
-              <div className="h-6 w-4/5 rounded bg-white/95" />
+            <div className="flex h-5 w-24 items-center justify-center rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ backgroundColor: `${previewPalette.accent}e6`, color: previewPalette.text }}>
+              Special Offer
             </div>
-            <div className="h-5 w-3/5 rounded" style={{ backgroundColor: previewPalette.accent }} />
-            <div className="h-8 w-28 rounded-xl bg-white/90" />
+            <div className="space-y-1.5">
+              {standardHeadlineLines.map((line, index) => (
+                <p
+                  key={`${line}-${index}`}
+                  className="font-black text-white"
+                  style={{ fontSize: standardHeadlineLines.length > 2 ? '18px' : '21px', lineHeight: 1.12 }}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
+            {offerTaglineLines.map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] font-medium leading-snug" style={{ color: `${previewPalette.accent}` }}>
+                {line}
+              </p>
+            ))}
+            <div className="flex h-8 w-32 items-center justify-center rounded-xl bg-white/90 text-[10px] font-bold text-slate-800">
+              Offer Spotlight
+            </div>
           </div>
           <div className="rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}33` }}>
             {renderHeroZone('h-full w-full rounded-xl')}
@@ -1798,36 +1966,73 @@ function ThemePreviewLarge({
 
   // ── Comparison Board ─────────────────────────────────────────────────────────
   if (themeId === 'comparison-board') {
+    const comparisonBullets = (
+      safeFeatureLines.length > 0
+        ? safeFeatureLines
+        : ['Improve power factor', 'Reduce wasted energy', 'Support automatic networking', 'Built-in protection features']
+    ).slice(0, 4);
+    const leftBullets = comparisonBullets.slice(0, 2);
+    const rightBullets = comparisonBullets.slice(2, 4);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden bg-white`}>
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
         <div className="absolute inset-x-[4%] top-[4%] flex items-center gap-3">
           {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
-          <div className="h-4 w-44 rounded bg-slate-900" />
+          <div className="space-y-1">
+            {fitPreviewText(safeHeadline, [22, 24, 26], 2).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[12px] font-black leading-tight text-slate-900">
+                {line}
+              </p>
+            ))}
+          </div>
         </div>
         <div className="absolute inset-x-[4%] top-[18%] grid grid-cols-2 gap-[3%]" style={{ bottom: '8%' }}>
           <div className="flex flex-col gap-2 rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
-            <div className="h-3.5 w-2/3 rounded bg-slate-900" />
+            <p className="text-[11px] font-bold text-slate-900">Operational Value</p>
             <div className="flex-1 rounded-xl bg-slate-100 overflow-hidden">
               {getSlotSrc('panel-left') ? (
                 <img src={getSlotSrc('panel-left')!} alt="Option A" className="h-full w-full object-cover rounded-xl" />
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <div className="h-2 w-full rounded bg-slate-300" />
-              <div className="h-2 w-4/5 rounded bg-slate-300" />
+              {leftBullets.map((line, index) => (
+                <div key={`${line}-${index}`} className="flex items-start gap-2">
+                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    {fitPreviewText(line, [18, 20, 22], 2).map((chunk, chunkIndex) => (
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-snug text-slate-700">
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <div className="flex flex-col gap-2 rounded-2xl p-3 shadow-sm" style={{ border: `1px solid ${previewPalette.accent}77`, backgroundColor: `${previewPalette.accent}15` }}>
-            <div className="h-3.5 w-2/3 rounded bg-slate-900" />
+            <p className="text-[11px] font-bold text-slate-900">Protection &amp; Control</p>
             <div className="flex-1 rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.accent}44` }}>
               {getSlotSrc('panel-right') ? (
                 <img src={getSlotSrc('panel-right')!} alt="Option B" className="h-full w-full object-cover rounded-xl" />
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <div className="h-2 w-full rounded" style={{ backgroundColor: `${previewPalette.accent}66` }} />
-              <div className="h-2 w-4/5 rounded" style={{ backgroundColor: `${previewPalette.accent}66` }} />
+              {rightBullets.map((line, index) => (
+                <div key={`${line}-${index}`} className="flex items-start gap-2">
+                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.accent }}>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    {fitPreviewText(line, [18, 20, 22], 2).map((chunk, chunkIndex) => (
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-snug text-slate-700">
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1838,6 +2043,8 @@ function ThemePreviewLarge({
 
   // ── Premium Editorial ────────────────────────────────────────────────────────
   if (themeId === 'premium-editorial') {
+    const editorialHeadlineLines = fitPreviewText(safeHeadline, [20, 22, 24], 3);
+    const editorialTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 4);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 60%, ${previewPalette.accent}44 100%)` }} />
@@ -1853,24 +2060,33 @@ function ThemePreviewLarge({
           </div>
           <div className="flex flex-col justify-center gap-3 py-2">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-16 rounded" style={{ backgroundColor: `${previewPalette.accent}b3` }} />
-              <div className="h-2 w-20 rounded bg-white/20" />
+              <div className="h-0.5 w-12 rounded" style={{ backgroundColor: previewPalette.accent }} />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Editorial</p>
             </div>
             <div className="space-y-2">
-              <div className="h-6 w-full rounded bg-white/95" />
-              <div className="h-6 w-11/12 rounded bg-white/95" />
-              <div className="h-6 w-4/5 rounded bg-white/95" />
+              {editorialHeadlineLines.map((line, index) => (
+                <p
+                  key={`${line}-${index}`}
+                  className="font-black text-white"
+                  style={{ fontFamily: 'Georgia, serif', fontSize: editorialHeadlineLines.length > 2 ? '18px' : '20px', lineHeight: 1.14 }}
+                >
+                  {line}
+                </p>
+              ))}
             </div>
             <div className="h-0.5 w-12 rounded" style={{ backgroundColor: previewPalette.accent }} />
             <div className="space-y-1.5">
-              <div className="h-2 w-full rounded bg-white/40" />
-              <div className="h-2 w-11/12 rounded bg-white/40" />
-              <div className="h-2 w-10/12 rounded bg-white/40" />
-              <div className="h-2 w-9/12 rounded bg-white/40" />
+              {(editorialTaglineLines.length > 0 ? editorialTaglineLines : ['Elegant, premium storytelling with a calm editorial rhythm.']).map((line, index) => (
+                <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/72">
+                  {line}
+                </p>
+              ))}
             </div>
             <div className="mt-auto flex items-center justify-between">
-              <div className="h-2 w-28 rounded bg-white/30" />
-              <div className="h-7 w-20 rounded-lg" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
+              <p className="text-[10px] font-semibold text-white/45">{brandName || 'Brand editorial'}</p>
+              <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.bgStart }}>
+                Editorial Feature
+              </div>
             </div>
           </div>
         </div>
@@ -1889,14 +2105,21 @@ function ThemePreviewLarge({
           {renderHeroZone('h-full w-full rounded-2xl')}
         </div>
         <div className="flex flex-col justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-4">
-          <div className="h-5 w-full rounded bg-white/90" />
-          <div className="h-5 w-4/5 rounded bg-white/90" />
+          {standardHeadlineLines.map((line, index) => (
+            <p key={`${line}-${index}`} className="text-[18px] font-black leading-tight text-white">
+              {line}
+            </p>
+          ))}
           <div className="space-y-1.5">
-            <div className="h-2 w-full rounded bg-white/50" />
-            <div className="h-2 w-11/12 rounded bg-white/50" />
-            <div className="h-2 w-9/12 rounded bg-white/50" />
+            {(supportingTaglineLines.length > 0 ? supportingTaglineLines : ['Preview reflects the theme direction, hierarchy, and subject placement before generation.']).map((line, index) => (
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/72">
+                {line}
+              </p>
+            ))}
           </div>
-          <div className="h-7 w-24 rounded-lg" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
+          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold" style={{ backgroundColor: `${previewPalette.accent}cc`, color: previewPalette.text }}>
+            Theme Preview
+          </div>
         </div>
       </div>
       {generateCta}

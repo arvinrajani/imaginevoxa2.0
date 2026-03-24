@@ -263,7 +263,7 @@ function buildThemeDirective(themeId: string) {
     'product-hero': {
       label: 'Product Hero',
       direction:
-        'LAYOUT CONTRACT: The final image has a centered circular product showcase (centered at 50% width, 39% height, ~19% radius), a headline below it at 72% height, a tagline at 79% height, and a centered CTA button at 84% height. A small logo card sits at top-left. Generate a clean, premium background plate using the brand colors for surfaces and lighting that makes a circular product cutout pop. Keep the center clear for the product circle. Do NOT render any text, circles, buttons, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a centered circular product showcase (centered at 50% width, 39% height, ~19% radius), a headline below it at 72% height, a tagline at 79% height, and a centered product-focus label zone at 84% height. A small logo card sits at top-left. Generate a clean, premium background plate using the brand colors for surfaces and lighting that makes a circular product cutout pop. Keep the center clear for the product circle. Do NOT render any text, circles, labels, or UI elements.',
     },
     'knowledge-visual': {
       label: 'Knowledge-Led',
@@ -273,7 +273,7 @@ function buildThemeDirective(themeId: string) {
     'clean-brand': {
       label: 'Clean Brand',
       direction:
-        'LAYOUT CONTRACT: The final image has a light background using the brand colors, a top header bar with logo (top 14%), a LEFT text zone (6% from left) for large headline and tagline, a RIGHT hero image panel (60%-96% width, 16%-88% height), a CTA button at 68% height, and a light footer (bottom 10%). Generate a subtle, minimal, clean background plate — mostly light with gentle brand-colored accents. Do NOT render any text, logos, buttons, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a light background using the brand colors, a top header bar with logo (top 14%), a LEFT text zone (6% from left) for large headline and tagline, a RIGHT hero image panel (60%-96% width, 16%-88% height), a subtle brand-focus chip at 68% height, and a light footer (bottom 10%). Generate a subtle, minimal, clean background plate — mostly light with gentle brand-colored accents. Do NOT render any text, logos, chips, or UI elements.',
     },
     'industrial-campaign': {
       label: 'Industrial Campaign',
@@ -288,12 +288,12 @@ function buildThemeDirective(themeId: string) {
     'proof-stack': {
       label: 'Proof Stack',
       direction:
-        'LAYOUT CONTRACT: The final image has THREE stacked proof cards on the LEFT (4%-50% width, evenly spaced from top) with colored accent squares, and a LARGE dark info panel on the RIGHT (52%-96% width, 8%-92% height) for headline, tagline, and CTA. Background uses the brand colors for a clean, trust-building plate. Do NOT render any text, cards, panels, or UI elements.',
+        'LAYOUT CONTRACT: The final image has THREE stacked proof cards on the LEFT (4%-50% width, evenly spaced from top) with colored accent squares, and a LARGE dark info panel on the RIGHT (52%-96% width, 8%-92% height) for headline, tagline, and a proof label. Background uses the brand colors for a clean, trust-building plate. Do NOT render any text, cards, panels, or UI elements.',
     },
     'launch-banner': {
       label: 'Launch Banner',
       direction:
-        'LAYOUT CONTRACT: The final image has a vibrant gradient background using the brand colors, a pill-shaped logo badge at top-left, an accent badge at top-right, a LARGE bold headline in the center-left (8% from left, 35%-45% height), a tagline below it, and a CTA button at bottom-right. Generate a rich, energetic gradient background plate with launch/announcement energy using brand colors as the dominant palette. Do NOT render any text, badges, buttons, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a vibrant gradient background using the brand colors, a pill-shaped logo badge at top-left, an accent badge at top-right, a LARGE bold headline in the center-left (8% from left, 35%-45% height), a tagline below it, and a launch-update label at bottom-right. Generate a rich, energetic gradient background plate with launch/announcement energy using brand colors as the dominant palette. Do NOT render any text, badges, labels, or UI elements.',
     },
     'sector-collage': {
       label: 'Sector Collage',
@@ -303,12 +303,12 @@ function buildThemeDirective(themeId: string) {
     'brand-story': {
       label: 'Brand Story',
       direction:
-        'LAYOUT CONTRACT: The final image has a warm background using the brand colors, a LARGE circular portrait/story image on the LEFT (centered at 24% width, 50% height), a small logo on the RIGHT at 52% width / 18% height, a serif headline at 34% height on the right, a tagline below it, and a CTA button at 72% height. Generate a warm, elegant, story-telling background plate tinted with brand colors. Do NOT render any text, circles, logos, buttons, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a warm background using the brand colors, a LARGE circular portrait/story image on the LEFT (centered at 24% width, 50% height), a small logo on the RIGHT at 52% width / 18% height, a serif headline at 34% height on the right, a tagline below it, and a story-highlight label at 72% height. Generate a warm, elegant, story-telling background plate tinted with brand colors. Do NOT render any text, circles, logos, labels, or UI elements.',
     },
     'offer-card': {
       label: 'Offer Card',
       direction:
-        'LAYOUT CONTRACT: The final image has a rich gradient background using the brand colors, a LEFT info zone (4%-54% width) with an accent badge, large headline, tagline, and CTA button, and a RIGHT product panel (58%-96% width, full height) for a product/service image. Generate a vibrant, conversion-oriented gradient background plate using brand colors. Do NOT render any text, badges, buttons, panels, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a rich gradient background using the brand colors, a LEFT info zone (4%-54% width) with an accent badge, large headline, tagline, and an offer-focus label, and a RIGHT product panel (58%-96% width, full height) for a product/service image. Generate a vibrant, professional, brand-forward spotlight background plate using brand colors. Do NOT render any text, badges, labels, panels, or UI elements.',
     },
     'comparison-board': {
       label: 'Comparison Board',
@@ -318,7 +318,7 @@ function buildThemeDirective(themeId: string) {
     'premium-editorial': {
       label: 'Premium Editorial',
       direction:
-        'LAYOUT CONTRACT: The final image has a luxurious dark gradient background using the brand colors, a LEFT editorial image panel (3%-33% width, full height), headline text on the right at 30% height, an accent line, tagline text below, and a CTA button at bottom-right. Generate a rich, magazine-quality dark gradient background plate using brand colors for luxury finishing. Do NOT render any text, panels, lines, buttons, or UI elements.',
+        'LAYOUT CONTRACT: The final image has a luxurious dark gradient background using the brand colors, a LEFT editorial image panel (3%-33% width, full height), headline text on the right at 30% height, an accent line, tagline text below, and an editorial-feature label at bottom-right. Generate a rich, magazine-quality dark gradient background plate using brand colors for luxury finishing. Do NOT render any text, panels, lines, labels, or UI elements.',
     },
   };
 
@@ -375,9 +375,9 @@ function buildVariationDirective(nonce: number, themeId: string) {
       'Background atmosphere: premium story-telling environment with warm brand-colored ambient lighting.',
     ],
     'offer-card': [
-      'Background atmosphere: vibrant promotional gradient in brand colors with urgency-driven energy.',
-      'Background atmosphere: rich brand-colored sweep with conversion-focused bold tones.',
-      'Background atmosphere: dynamic sales-energy gradient using brand palette with premium warmth.',
+      'Background atmosphere: vibrant brand-forward gradient in brand colors with confident spotlight energy.',
+      'Background atmosphere: rich brand-colored sweep with professional feature-spotlight tones.',
+      'Background atmosphere: dynamic brand-energy gradient using the palette with premium warmth.',
     ],
     'comparison-board': [
       'Background atmosphere: clean, neutral surface tinted with brand colors and soft even lighting.',
@@ -950,12 +950,13 @@ CREATIVE MODE:
 
 THEME FIDELITY — CRITICAL (THIS OVERRIDES ALL OTHER COMPOSITION RULES):
 - Your image will be placed INSIDE the theme layout as the hero visual content.
-- A structured SVG overlay will be composited on top, adding panels, text, logos, buttons, and layout around your image.
+- A structured SVG overlay will be composited on top, adding panels, text, logos, chips, labels, and layout around your image.
 - Generate a STRONG, FOCUSED visual subject — the product, scene, environment, or concept that tells the story.
-- Do NOT render any text, headlines, taglines, brand names, logos, buttons, UI panels, cards, or structural layout elements — the overlay adds all of those.
+- Do NOT render any text, headlines, taglines, brand names, logos, chips, labels, UI panels, cards, or structural layout elements — the overlay adds all of those.
 - Do NOT improvise your own layout, poster system, or text hierarchy — focus entirely on the visual content.
 - Fill the frame with rich, detailed visual content — this image will be cropped into the theme's hero slot.
 - Use brand colors in the scene (lighting, surfaces, materials, environment) so the AI content harmonizes with the theme overlay colors.
+- This is a LinkedIn post visual system, not an ecommerce ad or landing-page banner. Avoid retail "shop now" aesthetics, coupon energy, or hard-sell web ad styling.
 
 ${safeBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
 BRAND IDENTITY — #1 PRIORITY (READ THIS FIRST)
@@ -1010,7 +1011,7 @@ ${isAiGuided ? `AI GUIDED MODE (PRIMARY BEHAVIOR):
 - If a reference image is supplied, use it as a real subject/style input, not as a hidden slot placeholder.
 - Make the final image feel bespoke and fully art-directed, not template-like.
 - Keep all readable text inside a disciplined safe area with at least 8% side padding and 10% top/bottom padding.
-- Never let any headline, CTA, brand text, or label touch the canvas edge.
+- Never let any headline, brand text, or support label touch the canvas edge.
 - If the subject sits on one side, reserve the opposite side as a dedicated text column with clean negative space.
 - Prefer 2-4 shorter lines over one oversized headline block. Readability is more important than drama.\n` : ''}
 
@@ -1032,12 +1033,18 @@ ${brandNamingDirective ? `${brandNamingDirective}
 VISUAL STORYTELLING BRIEF:
 ${safeHeadline ? `- Core message: ${safeHeadline}` : ''}
 ${safeTagline ? `- Supporting message: ${safeTagline}` : ''}
+${composedFeatureBullets.length ? `- Supporting proof signals: ${composedFeatureBullets.join('; ')}` : ''}
 ${safeProductName ? `- Product/service spotlight: ${safeProductName}` : ''}
 ${safeContextBrief ? `- User context: ${safeContextBrief}` : ''}
 
 SUBJECT ANCHOR (the image MUST visually represent this):
 - "${semanticAnchor}"
 - The viewer should immediately understand what this image is about without reading the post.
+
+${composedFeatureBullets.length ? `THEME SIGNALS TO HONOR (influence the image visually, never as readable text):
+${composedFeatureBullets.map((line) => `- ${line}`).join('\n')}
+- Let these signals shape the product details, environment, supporting props, or proof-oriented atmosphere so the final poster feels aligned with the user's selections.
+` : ''}
 
 ${isAlliancePoster ? `ALLIANCE POSTER BACKGROUND RULES:
 - Generate the background plate only. Final logos, headlines, footer text, and bullet pointers will be composited later.
@@ -1069,7 +1076,7 @@ COMPOSITION MASTERY:
 
 ${THEME_SCHEMAS[themeId] || isAlliancePoster ? `TEXT RENDERING RULES (CRITICAL):
 - Do NOT render ANY text, headlines, taglines, brand names, logos, or letterforms in the image.
-- The theme overlay system will add all text, logos, and UI elements on top of your background plate.
+- The theme overlay system will add all text, logos, chips, labels, and structured graphic elements on top of your background plate.
 - Any text you render will be covered by the overlay and create visual noise.
 - Focus entirely on creating a rich, atmospheric background.` : `TEXT RENDERING RULES (CRITICAL — AI text must be perfect):
 - Every letter in every word must be spelled correctly with no missing, extra, swapped, or garbled characters.
@@ -1121,7 +1128,7 @@ ABSOLUTE PROHIBITIONS:
 - Abstract color gradients that communicate nothing about the topic
 - Cheesy visual metaphors (lightbulbs for ideas, handshakes for partnership, puzzle pieces for teamwork)
 - Human hands with incorrect finger counts or anatomical errors
-${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, taglines, brand names, logos, letterforms, UI panels, buttons, or structural overlay elements — the theme overlay adds all of these
+${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, taglines, brand names, logos, letterforms, UI panels, chips, labels, or structural overlay elements — the theme overlay adds all of these
 - Fake UI, mockup screens, or layout structures — the theme system handles structure` : `- Misspelled text, garbled letters, or nonsensical words anywhere in the image
 - Text that is too small to read at 552px display width`}
 - Generic stock-photo compositions that lack brand personality
