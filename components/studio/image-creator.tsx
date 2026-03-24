@@ -87,6 +87,9 @@ type PdfImageReference = {
   id: string;
   title: string;
   signed_url: string;
+  description?: string | null;
+  tags?: string[] | null;
+  created_at?: string | null;
   sourceEvidenceId?: string | null;
 };
 
@@ -271,27 +274,106 @@ function getPdfImageDisplayTitle(title: string) {
   };
 }
 
-function getPdfImagePriorityScore(title: string) {
-  const normalized = title.toLowerCase();
-  if (normalized.includes('extracted image')) return 420;
-  if (normalized.includes('page 1 visual')) return 300;
-  if (normalized.includes('front page visual')) return 280;
-  if (normalized.includes('cover page visual')) return 260;
-  if (/page\s+\d+\s+visual/.test(normalized)) return 180;
-  return 0;
+function parsePdfImageSizeHint(description?: string | null) {
+  if (typeof description !== 'string') return null;
+  const match = description.match(/(\d{2,5})x(\d{2,5})px/i);
+  if (!match) return null;
+
+  const width = Number.parseInt(match[1], 10);
+  const height = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return {
+    width,
+    height,
+    area: width * height,
+    aspectRatio: width / height,
+  };
 }
 
-function sortPdfImageReferences<T extends { title: string }>(images: T[]) {
-  return [...images].sort((left, right) => {
+function getPdfImagePriorityScore(image: {
+  title: string;
+  description?: string | null;
+  tags?: string[] | null;
+}) {
+  const normalized = image.title.toLowerCase();
+  const tags = Array.isArray(image.tags) ? image.tags : [];
+  const sizeHint = parsePdfImageSizeHint(image.description);
+
+  let score = 0;
+  if (normalized.includes('page 1 visual') || normalized.includes('front page visual') || normalized.includes('cover page visual')) {
+    score += 360;
+  } else if (/page\s+\d+\s+visual/.test(normalized)) {
+    score += 260;
+  }
+
+  if (tags.includes('pdf-page-1')) score += 220;
+  if (tags.includes('pdf-rendered-page')) score += 180;
+  if (tags.includes('pdf-embedded-image')) score += 40;
+
+  if (sizeHint) {
+    if (sizeHint.area >= 260000) score += 220;
+    else if (sizeHint.area >= 150000) score += 160;
+    else if (sizeHint.area >= 90000) score += 100;
+    else if (sizeHint.area < 45000) score -= 320;
+    else if (sizeHint.area < 80000) score -= 180;
+
+    if (Math.min(sizeHint.width, sizeHint.height) < 180) score -= 220;
+
+    if (sizeHint.aspectRatio >= 0.5 && sizeHint.aspectRatio <= 2.3) score += 120;
+    else if (sizeHint.aspectRatio >= 0.35 && sizeHint.aspectRatio <= 3.2) score += 40;
+    else score -= 280;
+  }
+
+  if (/(logo|icon|shape|triangle|arrow|divider|bullet|seal|stamp)/.test(normalized)) {
+    score -= 260;
+  }
+
+  if (normalized.includes('extracted image') && !sizeHint) {
+    score -= 120;
+  }
+
+  return score;
+}
+
+function sortPdfImageReferences<
+  T extends {
+    title: string;
+    description?: string | null;
+    tags?: string[] | null;
+    created_at?: string | null;
+  }
+>(images: T[]) {
+  const sorted = [...images].sort((left, right) => {
     const scoreDifference =
-      getPdfImagePriorityScore(right.title) - getPdfImagePriorityScore(left.title);
+      getPdfImagePriorityScore(right) - getPdfImagePriorityScore(left);
 
     if (scoreDifference !== 0) {
       return scoreDifference;
     }
 
+    const rightTime = Date.parse(right.created_at || '') || 0;
+    const leftTime = Date.parse(left.created_at || '') || 0;
+    if (rightTime !== leftTime) {
+      return rightTime - leftTime;
+    }
+
     return left.title.localeCompare(right.title);
   });
+
+  if (sorted.length <= 12) {
+    return sorted;
+  }
+
+  const strongCandidates = sorted.filter((image) => getPdfImagePriorityScore(image) >= 120);
+  if (strongCandidates.length >= 6) {
+    return strongCandidates;
+  }
+
+  const usableCandidates = sorted.filter((image) => getPdfImagePriorityScore(image) >= 0);
+  return usableCandidates.length >= 6 ? usableCandidates : sorted;
 }
 
 function getPdfSourceEvidenceId(tags?: string[] | null) {
@@ -1035,7 +1117,12 @@ function ThemePreviewLarge({
   const showHero = Boolean(heroSrc);
   const safeHeadline = sanitizeVisualText(activeHeadlineText || brandName || 'Campaign headline', 96);
   const safeTagline = sanitizeVisualText(activeTaglineText || partnerTagline || '', 120);
-  const safeFeatureLines = derivePosterBenefitLines(...featureLines).slice(0, 6);
+  const safeFeatureLines = derivePosterBenefitLines(
+    ...featureLines,
+    activeTaglineText,
+    activeHeadlineText,
+    customPrompt
+  ).slice(0, 6);
   const safeFooterWebsite = sanitizeVisualText(footerWebsite || '', 48);
   const safeFooterEmail = sanitizeVisualText(footerEmail || '', 48);
   const visionLines = wrapPreviewText(customPrompt || '', 34, 4);
@@ -1070,7 +1157,7 @@ function ThemePreviewLarge({
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`}>
         {showHero ? (
-          <img src={heroSrc!} alt="Reference" className="h-full w-full object-contain p-3 drop-shadow-lg" />
+          <img src={heroSrc!} alt="Reference" className="h-full w-full object-cover drop-shadow-lg" />
         ) : (
           <div className="flex flex-col items-center gap-2 text-white/30">
             <ImageIcon className="h-8 w-8" />
@@ -2501,7 +2588,16 @@ export function ImageCreator({
       cache: 'no-store',
     })
       .then((res) => (res.ok ? res.json() : Promise.resolve({ evidence: [] })))
-      .then((payload: { evidence?: Array<{ id: string; type: string; title: string; tags?: string[]; file_path?: string; signed_url?: string | null }> }) => {
+      .then((payload: { evidence?: Array<{
+        id: string;
+        type: string;
+        title: string;
+        description?: string | null;
+        tags?: string[] | null;
+        created_at?: string | null;
+        file_path?: string;
+        signed_url?: string | null;
+      }> }) => {
         const extracted = (payload.evidence ?? []).filter(
           (item) =>
             item.type === 'image' &&
@@ -2516,6 +2612,9 @@ export function ImageCreator({
           extracted.map((item) => ({
             id: item.id,
             title: item.title,
+            description: item.description || null,
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            created_at: item.created_at || null,
             signed_url: item.signed_url as string,
             sourceEvidenceId: getPdfSourceEvidenceId(item.tags),
           }))
@@ -2558,7 +2657,7 @@ export function ImageCreator({
     [slotAssignments]
   );
   const effectivePdfImages = useMemo(
-    () => (propPdfImages !== undefined ? propPdfImages : sortPdfImageReferences(pdfEvidenceImages)),
+    () => sortPdfImageReferences(propPdfImages !== undefined ? propPdfImages : pdfEvidenceImages),
     [pdfEvidenceImages, propPdfImages]
   );
   const resolvedNonHeroSlotAssignments = useMemo(
@@ -2955,14 +3054,20 @@ export function ImageCreator({
     const effectiveLogoForGeneration =
       effectiveLogoPlacement !== 'none' ? resolvedLogoForGeneration : null;
     const manualFeatureLines = derivePosterBenefitLines(benefitsText);
+    const supplementalFeatureLines = derivePosterBenefitLines(
+      effectiveTagline,
+      effectiveHeadline,
+      contextBrief,
+      confirmedPostImageBrief,
+      confirmedPostText
+    );
     const resolvedFeatureLines =
-      manualFeatureLines.length > 0 ? manualFeatureLines : postDerivedFeatureLines;
-    const benefitBullets =
-      selectedThemeId === 'alliance-poster'
-        ? resolvedFeatureLines.slice(0, 6)
-        : selectedThemeId === 'industrial-campaign'
-          ? resolvedFeatureLines.slice(0, 4)
-          : [];
+      manualFeatureLines.length > 0
+        ? manualFeatureLines
+        : postDerivedFeatureLines.length > 0
+          ? postDerivedFeatureLines
+          : supplementalFeatureLines;
+    const benefitBullets = resolvedFeatureLines.slice(0, selectedThemeId === 'industrial-campaign' ? 4 : 6);
     const resolvedSlotImages: Record<string, string> = { ...resolvedNonHeroSlotAssignments };
     if (themeUsesHeroReference && selectedReferenceImage) {
       resolvedSlotImages.hero = selectedReferenceImage;
@@ -3197,8 +3302,18 @@ export function ImageCreator({
   ).trim();
   const activeTaglineText = (tagline || derivedWording.tagline || analyzedTaglineDefault || '').trim();
   const manualFeatureLines = derivePosterBenefitLines(benefitsText);
+  const supplementalPreviewFeatureLines = derivePosterBenefitLines(
+    activeTaglineText,
+    activeHeadlineText,
+    contextBrief,
+    confirmedPostImageBrief
+  );
   const resolvedFeatureLines =
-    manualFeatureLines.length > 0 ? manualFeatureLines : postDerivedFeatureLines;
+    manualFeatureLines.length > 0
+      ? manualFeatureLines
+      : postDerivedFeatureLines.length > 0
+        ? postDerivedFeatureLines
+        : supplementalPreviewFeatureLines;
   const previewFeatureLines = resolvedFeatureLines;
   const partnerLogo = effectiveAllianceLogos[0] || null;
   const additionalAllianceLogos = effectiveAllianceLogos.slice(1);

@@ -106,6 +106,55 @@ function toDataUri(buffer: Buffer) {
   return `data:image/png;base64,${buffer.toString('base64')}`;
 }
 
+function svg(width: number, height: number, body: string) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+}
+
+async function prepareBackgroundPlate(
+  buffer: Buffer,
+  width: number,
+  height: number,
+  palette?: string[]
+) {
+  const c = deriveStudioPalette(palette);
+  const base = await sharp(buffer)
+    .resize({ width, height, fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.8, saturation: 1.08 })
+    .blur(3.4)
+    .png()
+    .toBuffer();
+
+  const washSvg = svg(
+    width,
+    height,
+    `
+      <defs>
+        <linearGradient id="posterWash" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.82" />
+          <stop offset="54%" stop-color="${c.bgEnd}" stop-opacity="0.60" />
+          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.20" />
+        </linearGradient>
+        <radialGradient id="posterGlow" cx="24%" cy="46%" r="52%">
+          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.18" />
+          <stop offset="100%" stop-color="${c.support}" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="posterVignette" cx="50%" cy="50%" r="74%">
+          <stop offset="54%" stop-color="#000000" stop-opacity="0" />
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.24" />
+        </radialGradient>
+      </defs>
+      <rect width="${width}" height="${height}" fill="url(#posterWash)" />
+      <rect width="${width}" height="${height}" fill="url(#posterGlow)" />
+      <rect width="${width}" height="${height}" fill="url(#posterVignette)" />
+    `
+  );
+
+  return sharp(base)
+    .composite([{ input: Buffer.from(washSvg), blend: 'over' }])
+    .png()
+    .toBuffer();
+}
+
 async function prepareLogo(buffer: Buffer | null | undefined, width: number, height: number) {
   if (!buffer) return null;
 
@@ -341,8 +390,8 @@ function buildAlliancePosterSvg(input: {
     </radialGradient>
   </defs>
 
-  <rect width="${width}" height="${height}" fill="url(#posterTint)" />
-  <rect width="${width}" height="${Math.round(height * 0.175)}" fill="${bgStart}" fill-opacity="0.35" />
+  <rect width="${width}" height="${height}" fill="url(#posterTint)" fill-opacity="0.54" />
+  <rect width="${width}" height="${Math.round(height * 0.175)}" fill="${bgStart}" fill-opacity="0.52" />
   <rect y="${height - Math.round(height * 0.084)}" width="${width}" height="${Math.round(height * 0.084)}" fill="url(#footerFill)" />
   <rect y="${Math.round(height * 0.175)}" width="${width}" height="2" fill="${muted}" fill-opacity="0.34" />
   <circle cx="${Math.round(width * 0.24)}" cy="${Math.round(height * 0.50)}" r="${Math.round(width * 0.20)}" fill="url(#heroGlow)" />
@@ -357,6 +406,7 @@ function buildAlliancePosterSvg(input: {
   ${primaryLogoNode}
   ${partnerHeaderNode}
 
+  <rect x="${Math.round(width * 0.37)}" y="${Math.round(height * 0.18)}" width="${Math.round(width * 0.58)}" height="${Math.round(height * 0.63)}" rx="30" fill="${bgStart}" fill-opacity="0.18" stroke="${muted}" stroke-opacity="0.12" />
   ${headlineNodes}
   ${taglineNodes}
   ${dividerNode}
@@ -370,6 +420,12 @@ function buildAlliancePosterSvg(input: {
 
 export async function composeAlliancePoster(input: AlliancePosterComposeInput) {
   const heroSourceBuffer = input.heroImageBuffer || input.baseImageBuffer;
+  const backgroundPlate = await prepareBackgroundPlate(
+    input.baseImageBuffer,
+    input.width,
+    input.height,
+    input.palette
+  );
 
   const [primaryLogo, heroImage, ...secondaryLogos] = await Promise.all([
     prepareLogo(input.primaryLogoBuffer, Math.round(input.width * 0.18), Math.round(input.height * 0.09)),
@@ -399,7 +455,8 @@ export async function composeAlliancePoster(input: AlliancePosterComposeInput) {
     palette: input.palette,
   });
 
-  return sharp(Buffer.from(svg))
+  return sharp(backgroundPlate)
+    .composite([{ input: Buffer.from(svg), blend: 'over' }])
     .png()
     .toBuffer();
 }

@@ -562,7 +562,9 @@ export default function StudioPage() {
       ).map((item) => ({
         id: item.id,
         title: item.title,
+        description: item.description || null,
         tags: Array.isArray(item.tags) ? item.tags : [],
+        created_at: item.created_at || null,
         signed_url: item.signed_url as string,
         sourceEvidenceId:
           (Array.isArray(item.tags)
@@ -572,9 +574,12 @@ export default function StudioPage() {
       }));
 
       if (selectedEvidenceIds.length === 0) {
-        return extractedImages.map(({ id, title, signed_url, sourceEvidenceId }) => ({
+        return extractedImages.map(({ id, title, description, tags, created_at, signed_url, sourceEvidenceId }) => ({
           id,
           title,
+          description,
+          tags,
+          created_at,
           signed_url,
           sourceEvidenceId,
         }));
@@ -590,9 +595,12 @@ export default function StudioPage() {
       );
       const finalImages = matchedImages.length > 0 ? matchedImages : extractedImages;
 
-      return finalImages.map(({ id, title, signed_url, sourceEvidenceId }) => ({
+      return finalImages.map(({ id, title, description, tags, created_at, signed_url, sourceEvidenceId }) => ({
         id,
         title,
+        description,
+        tags,
+        created_at,
         signed_url,
         sourceEvidenceId,
       }));

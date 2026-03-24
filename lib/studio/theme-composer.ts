@@ -139,6 +139,84 @@ function deriveColors(colors?: string[]) {
   return deriveStudioPalette(colors);
 }
 
+async function prepareBackgroundPlate(
+  buffer: Buffer,
+  width: number,
+  height: number,
+  palette?: string[]
+) {
+  const c = deriveColors(palette);
+  const base = await sharp(buffer)
+    .resize({ width, height, fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.82, saturation: 1.06 })
+    .blur(3)
+    .png()
+    .toBuffer();
+
+  const washSvg = svg(
+    width,
+    height,
+    `
+      <defs>
+        <linearGradient id="themeWash" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.74" />
+          <stop offset="58%" stop-color="${c.bgEnd}" stop-opacity="0.54" />
+          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.20" />
+        </linearGradient>
+        <radialGradient id="themeGlow" cx="22%" cy="28%" r="56%">
+          <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.26" />
+          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="themeSupport" cx="82%" cy="84%" r="36%">
+          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.18" />
+          <stop offset="100%" stop-color="${c.support}" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="themeVignette" cx="50%" cy="50%" r="72%">
+          <stop offset="55%" stop-color="#000000" stop-opacity="0" />
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.22" />
+        </radialGradient>
+      </defs>
+      <rect width="${width}" height="${height}" fill="url(#themeWash)" />
+      <rect width="${width}" height="${height}" fill="url(#themeGlow)" />
+      <rect width="${width}" height="${height}" fill="url(#themeSupport)" />
+      <rect width="${width}" height="${height}" fill="url(#themeVignette)" />
+    `
+  );
+
+  return sharp(base)
+    .composite([{ input: Buffer.from(washSvg), blend: 'over' }])
+    .png()
+    .toBuffer();
+}
+
+function softenThemeCanvas(svgMarkup: string, width: number, height: number) {
+  let fullCanvasRectIndex = 0;
+
+  return svgMarkup.replace(
+    /<rect width="(\d+)" height="(\d+)" fill="([^"]+)"([^>]*)\/>/g,
+    (match, rectWidth, rectHeight, fill, rest) => {
+      if (Number(rectWidth) !== width || Number(rectHeight) !== height) {
+        return match;
+      }
+
+      fullCanvasRectIndex += 1;
+      const targetOpacity = fullCanvasRectIndex === 1 ? '0.52' : '0.74';
+
+      if (/fill-opacity="/.test(rest)) {
+        return match.replace(/fill-opacity="([^"]+)"/, (_existingMatch, existingOpacity) => {
+          const normalized = Number.parseFloat(existingOpacity);
+          if (!Number.isFinite(normalized)) {
+            return `fill-opacity="${targetOpacity}"`;
+          }
+          return `fill-opacity="${Math.min(normalized, Number.parseFloat(targetOpacity)).toFixed(2)}"`;
+        });
+      }
+
+      return `<rect width="${rectWidth}" height="${rectHeight}" fill="${fill}" fill-opacity="${targetOpacity}"${rest} />`;
+    }
+  );
+}
+
 async function prepareImage(
   buffer: Buffer,
   width: number,
@@ -813,14 +891,21 @@ const THEME_BUILDERS: Record<string, SvgBuilder> = {
 export async function composeThemeImage(input: ThemeComposeInput): Promise<Buffer> {
   const { width, height, themeId } = input;
 
-  const baseBuffer = await sharp(input.baseImageBuffer)
+  const resizedBaseBuffer = await sharp(input.baseImageBuffer)
     .resize({ width, height, fit: 'cover', position: 'attention' })
     .png()
     .toBuffer();
 
+  const backgroundPlate = await prepareBackgroundPlate(
+    input.baseImageBuffer,
+    width,
+    height,
+    input.palette
+  );
+
   const builder = THEME_BUILDERS[themeId];
   if (!builder) {
-    return baseBuffer;
+    return resizedBaseBuffer;
   }
 
   const schema = THEME_SCHEMAS[themeId];
@@ -830,7 +915,7 @@ export async function composeThemeImage(input: ThemeComposeInput): Promise<Buffe
   // hero content. This lets AI + theme work together: AI creates the visual subject,
   // the theme overlay provides structure, text, logo, and layout around it.
   if (slots.some((slot) => slot.id === 'hero') && !effectiveSlotImageBuffers.hero) {
-    effectiveSlotImageBuffers.hero = baseBuffer;
+    effectiveSlotImageBuffers.hero = resizedBaseBuffer;
   }
 
   const preparedImages: Record<string, PreparedImage> = {};
@@ -844,16 +929,21 @@ export async function composeThemeImage(input: ThemeComposeInput): Promise<Buffe
     const isFallbackHero = slot.id === 'hero' && !input.slotImageBuffers[slot.id];
     const prepared = await prepareImage(buf, slotW, slotH, {
       trim: !isFallbackHero,
-      fit: isFallbackHero || slot.shape === 'circle' ? 'cover' : 'contain',
+      fit: 'cover',
     });
     preparedImages[slot.id] = prepared;
   });
 
   const [logo] = await Promise.all([logoPromise, ...imagePromises]);
 
-  const overlaySvg = builder(width, height, preparedImages, logo, input);
+  const overlaySvg = softenThemeCanvas(
+    builder(width, height, preparedImages, logo, input),
+    width,
+    height
+  );
 
-  return sharp(Buffer.from(overlaySvg))
+  return sharp(backgroundPlate)
+    .composite([{ input: Buffer.from(overlaySvg), blend: 'over' }])
     .png()
     .toBuffer();
 }
