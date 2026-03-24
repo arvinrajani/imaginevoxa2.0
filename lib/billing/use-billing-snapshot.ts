@@ -91,6 +91,11 @@ export function useBillingSnapshot() {
         { event: "*", schema: "public", table: "credit_transactions", filter: `user_id=eq.${userId}` },
         refresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "audit_logs", filter: `actor_id=eq.${userId}` },
+        refresh
+      )
       .subscribe();
 
     return () => {

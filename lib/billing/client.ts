@@ -158,7 +158,7 @@ function buildBillingAlerts(snapshot: Omit<BillingSnapshot, "alerts">): BillingA
       tone: "info",
       title: "Live billing sync unavailable",
       description:
-        "Credits are currently estimated from your monthly post usage because billing tables are not fully available.",
+        "Credits are currently estimated from your generation activity because billing tables are not fully available.",
     });
   }
 
@@ -231,7 +231,7 @@ export async function fetchBillingSnapshot() {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [profileRes, postsRes, subscriptionRes, creditBalanceRes, creditTxRes] = await Promise.all([
+  const [profileRes, postsRes, subscriptionRes, creditBalanceRes, creditTxRes, auditGenerationRes] = await Promise.all([
     supabase.from("profiles").select("full_name, plan, created_at").eq("id", user.id).maybeSingle<ProfileRow>(),
     supabase
       .from("posts")
@@ -256,17 +256,28 @@ export async function fetchBillingSnapshot() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(6),
+    supabase
+      .from("audit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("actor_id", user.id)
+      .eq("action", "post_options_generated")
+      .gte("created_at", startOfMonth.toISOString()),
   ]);
 
   const profile = profileRes.data ?? null;
   const subscriptionMissing = isMissingRelationError(subscriptionRes.error, "subscriptions");
   const creditBalanceMissing = isMissingRelationError(creditBalanceRes.error, "credit_balances");
   const creditTxMissing = isMissingRelationError(creditTxRes.error, "credit_transactions");
+  const auditLogsMissing = isMissingRelationError(auditGenerationRes.error, "audit_logs");
 
   const plan = normalizePlan(subscriptionRes.data?.plan_id ?? profile?.plan ?? user.user_metadata?.plan);
   const planDefinition = PLAN_DEFINITIONS[plan];
 
   const postsThisMonth = postsRes.count ?? 0;
+  const generationRequestsThisMonth =
+    !auditLogsMissing && typeof auditGenerationRes.count === "number"
+      ? auditGenerationRes.count
+      : null;
   const liveCreditsRemaining =
     typeof creditBalanceRes.data?.credits_remaining === "number"
       ? creditBalanceRes.data.credits_remaining
@@ -281,7 +292,8 @@ export async function fetchBillingSnapshot() {
 
   const creditsUnlimited = planDefinition.credits < 0;
   const creditsTotal = creditsUnlimited ? -1 : planDefinition.credits;
-  const creditsUsed = billingSource === "live" && liveCreditsUsed !== null ? liveCreditsUsed : postsThisMonth;
+  const fallbackCreditsUsed = generationRequestsThisMonth ?? postsThisMonth;
+  const creditsUsed = billingSource === "live" && liveCreditsUsed !== null ? liveCreditsUsed : fallbackCreditsUsed;
   const creditsRemaining =
     billingSource === "live" && liveCreditsRemaining !== null
       ? liveCreditsRemaining

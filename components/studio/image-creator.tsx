@@ -1497,13 +1497,14 @@ function ThemePreviewLarge({
       safeFeatureLines.length > 0
         ? safeFeatureLines
         : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']
-    ).slice(0, 3);
+    ).slice(0, 2);
+    const hasIndustrialFooterEmail = Boolean(safeFooterEmail);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
         <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}24, transparent 52%)` }} />
-        <div className="absolute inset-x-0 top-0 h-[12%] border-b border-white/10" style={{ backgroundColor: `${previewPalette.bgStart}88` }} />
-        <div className="absolute inset-x-0 bottom-0 h-[10%]" style={{ backgroundColor: previewPalette.footer }} />
+        <div className="absolute inset-x-0 top-0 h-[11.5%] border-b border-white/10" style={{ backgroundColor: `${previewPalette.bgStart}88` }} />
+        <div className="absolute inset-x-0 bottom-0 h-[9.5%]" style={{ backgroundColor: previewPalette.footer }} />
 
         <div className="absolute left-[3%] top-[3%] flex h-[8.5%] w-[16%] items-center justify-center rounded-xl bg-white/94 p-2 shadow-sm">
           {uploadedLogo ? (
@@ -1513,22 +1514,22 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[14%] left-[3.2%] top-[18%] w-[31%] rounded-[22px] border border-white/20 bg-white/90 shadow-[0_18px_40px_rgba(0,0,0,0.22)] overflow-hidden">
+        <div className="absolute bottom-[13.5%] left-[3.2%] top-[19%] w-[29.5%] rounded-[22px] border border-white/20 bg-white/90 shadow-[0_18px_40px_rgba(0,0,0,0.22)] overflow-hidden">
           {renderHeroZone('absolute inset-0 rounded-[22px]', {
             fit: 'contain',
             imagePaddingClass: 'p-2',
           })}
         </div>
 
-        <div className="absolute bottom-[16%] right-[3.4%] top-[19%] flex w-[56.5%] flex-col gap-3 rounded-[24px] border border-white/10 bg-slate-950/24 px-[4.5%] py-[5%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]">
-          <div className="space-y-1.5">
+        <div className="absolute bottom-[12.5%] right-[3.4%] top-[19%] flex w-[58.2%] flex-col gap-2.5 rounded-[24px] border border-white/10 bg-slate-950/24 px-[4.5%] py-[4.5%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]">
+          <div className="space-y-1">
             {compactHeadlineLines.map((line, index) => (
               <p
                 key={`${line}-${index}`}
                 className="font-black text-white"
                 style={{
-                  fontSize: compactHeadlineLines.length > 3 ? '15px' : '18px',
-                  lineHeight: compactHeadlineLines.length > 3 ? 1.14 : 1.1,
+                  fontSize: compactHeadlineLines.length > 3 ? '14px' : '17px',
+                  lineHeight: compactHeadlineLines.length > 3 ? 1.12 : 1.08,
                 }}
               >
                 {line}
@@ -1536,11 +1537,11 @@ function ThemePreviewLarge({
             ))}
           </div>
           {shortTaglineLines.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {shortTaglineLines.map((line, index) => (
                 <p
                   key={`${line}-${index}`}
-                  className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+                  className="text-[9px] font-semibold uppercase tracking-[0.15em]"
                   style={{ color: previewPalette.accent }}
                 >
                   {line}
@@ -1548,16 +1549,16 @@ function ThemePreviewLarge({
               ))}
             </div>
           )}
-          <div className="h-1 w-[26%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-          <div className="mt-auto space-y-2.5">
+          <div className="h-1 w-[24%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+          <div className="mt-auto space-y-2">
             {industrialFeatures.map((line, index) => (
-              <div key={`${line}-${index}`} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.support }}>
-                  <CheckCircle2 className="h-4 w-4 text-white" />
+              <div key={`${line}-${index}`} className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.support }}>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-white" />
                 </div>
-                <div className="flex-1">
-                  {fitPreviewText(line, [24, 26, 28], 2).map((chunk, chunkIndex) => (
-                    <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-white/95">
+                <div className="min-w-0 flex-1">
+                  {fitPreviewText(line, [26, 28, 30], 2).map((chunk, chunkIndex) => (
+                    <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-[1.3] text-white/95">
                       {chunk}
                     </p>
                   ))}
@@ -1567,13 +1568,15 @@ function ThemePreviewLarge({
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center justify-between gap-4 border-t border-white/10 px-[5%] text-[9px] font-semibold text-white/85" style={{ backgroundColor: previewPalette.footer }}>
-          <span className="max-w-[58%] truncate">
+        <div className="absolute inset-x-0 bottom-0 flex h-[9.5%] items-center justify-between gap-4 border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80" style={{ backgroundColor: previewPalette.footer }}>
+          <span className={`${hasIndustrialFooterEmail ? 'max-w-[58%]' : 'max-w-[100%]'} truncate`}>
             {safeFooterWebsite || brandName || 'Brand site'}
           </span>
-          <span className="max-w-[34%] truncate text-right text-white/70">
-            {safeFooterEmail || 'info@yoursite.com'}
-          </span>
+          {hasIndustrialFooterEmail ? (
+            <span className="max-w-[30%] truncate text-right text-white/65">
+              {safeFooterEmail}
+            </span>
+          ) : null}
         </div>
       </div>
     );

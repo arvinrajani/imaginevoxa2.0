@@ -365,7 +365,7 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
   const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 20).slice(0, 3);
   const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
-  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 2);
   const footerWebsite = firstSafeLine(input.footerWebsite, safeBrandName, 46);
   const footerEmail = firstSafeLine(input.footerEmail, '', 34);
 
@@ -380,35 +380,35 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
 
   // Hero card — white background with product image inside
   const heroCardX = r(w * 0.03);
-  const heroCardY = r(h * 0.155);
-  const heroCardW = r(w * 0.325);
-  const heroCardH = r(h * 0.720);
+  const heroCardY = r(h * 0.18);
+  const heroCardW = r(w * 0.305);
+  const heroCardH = r(h * 0.68);
   const heroNode = heroImg
     ? `<rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="18" fill="rgba(255,255,255,0.96)" />
        <image href="${escapeXml(heroImg.dataUri)}" x="${heroCardX + 6}" y="${heroCardY + 6}" width="${heroCardW - 12}" height="${heroCardH - 12}" preserveAspectRatio="xMidYMid meet" />`
     : `<rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="18" fill="${c.surface}" fill-opacity="0.10" stroke="${c.muted}" stroke-opacity="0.25" />`;
 
   // Right info panel — semi-opaque for text readability over background
-  const infoX = r(w * 0.395);
-  const infoY = r(h * 0.155);
-  const infoW = r(w * 0.575);
-  const infoH = r(h * 0.720);
+  const infoX = r(w * 0.375);
+  const infoY = r(h * 0.18);
+  const infoW = r(w * 0.595);
+  const infoH = r(h * 0.675);
 
-  const headlineFontSize = headline.length >= 3 ? r(w * 0.037) : r(w * 0.042);
+  const headlineFontSize = headline.length >= 3 ? r(w * 0.035) : r(w * 0.04);
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.14 + i * h * 0.072)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.5">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.14 + i * h * 0.067)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900" letter-spacing="-0.5">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.40 + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="700" letter-spacing="1">${escapeXml(line.toUpperCase())}</text>`)
+    .map((line, i) => `<text x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.39 + i * h * 0.038)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" letter-spacing="1">${escapeXml(line.toUpperCase())}</text>`)
     .join('');
 
   const bulletNodesMarkup = bullets
     .map((b, i) => {
-      const boxSize = r(w * 0.038);
+      const boxSize = r(w * 0.034);
       const boxX = r(infoX + infoW * 0.06);
-      const baseY = r(infoY + infoH * 0.54 + i * h * 0.115);
-      const wrapped = wrapText(b, 26).slice(0, 2);
+      const baseY = r(infoY + infoH * 0.56 + i * h * 0.115);
+      const wrapped = wrapText(b, 28).slice(0, 2);
       const checkStroke = Math.max(3, Math.round(boxSize * 0.14));
       const checkPath = [
         `M ${boxX + Math.round(boxSize * 0.24)} ${baseY + Math.round(boxSize * 0.54)}`,
@@ -419,8 +419,8 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
       const textX = r(infoX + infoW * 0.06 + boxSize + r(w * 0.014));
       const textNodes = wrapped
         .map((line, lineIndex) => {
-          const lineY = baseY + Math.round(boxSize * 0.70) + lineIndex * Math.round(h * 0.038);
-          return `<text x="${textX}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="600">${escapeXml(line)}</text>`;
+          const lineY = baseY + Math.round(boxSize * 0.68) + lineIndex * Math.round(h * 0.034);
+          return `<text x="${textX}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="600">${escapeXml(line)}</text>`;
         })
         .join('');
 
@@ -445,15 +445,15 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
       </linearGradient>
     </defs>
     <rect width="${w}" height="${h}" fill="url(#indGrad)" />
-    <rect width="${w}" height="${r(h * 0.135)}" fill="${c.bgStart}" fill-opacity="0.68" />
-    <rect y="${h - r(h * 0.10)}" width="${w}" height="${r(h * 0.10)}" fill="${c.footer}" />
+    <rect width="${w}" height="${r(h * 0.125)}" fill="${c.bgStart}" fill-opacity="0.68" />
+    <rect y="${h - r(h * 0.095)}" width="${w}" height="${r(h * 0.095)}" fill="${c.footer}" />
     <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="10" fill="rgba(255,255,255,0.96)" />
     ${logoNode}
     ${heroNode}
     <rect x="${infoX}" y="${infoY}" width="${infoW}" height="${infoH}" rx="20" fill="url(#indInfoGrad)" stroke="${c.muted}" stroke-opacity="0.22" stroke-width="1" />
     ${headlineNodes}
     ${taglineNodes}
-    <rect x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.50)}" width="${r(infoW * 0.32)}" height="3" rx="2" fill="${c.accent}" />
+    <rect x="${r(infoX + infoW * 0.06)}" y="${r(infoY + infoH * 0.49)}" width="${r(infoW * 0.28)}" height="3" rx="2" fill="${c.accent}" />
     ${bulletNodesMarkup}
     <text x="${r(w * 0.05)}" y="${h - r(h * 0.038)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="600" fill-opacity="0.85">${escapeXml(footerWebsite)}</text>
     ${footerEmail ? `<text x="${w - r(w * 0.05)}" y="${h - r(h * 0.038)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="600" text-anchor="end" fill-opacity="0.75">${escapeXml(footerEmail)}</text>` : ''}
