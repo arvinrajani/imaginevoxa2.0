@@ -521,9 +521,9 @@ export default function StudioPage() {
         const tags = Array.isArray(item.tags) ? item.tags : [];
 
         let score = 0;
+        if (tags.includes('pdf-embedded-image') || title.includes('extracted image')) score += 420;
         if (tags.includes('pdf-page-1') || title.includes('page 1 visual')) score += 300;
         if (tags.includes('pdf-rendered-page')) score += 180;
-        if (title.includes('extracted image')) score += 120;
         return score;
       };
 

@@ -236,9 +236,9 @@ function scoreExtractedVisual(row: { title?: string | null; tags?: string[] | nu
   const tags = Array.isArray(row.tags) ? row.tags : [];
 
   let score = 0;
+  if (tags.includes('pdf-embedded-image') || title.includes('extracted image')) score += 420;
   if (tags.includes('pdf-page-1') || title.includes('page 1 visual')) score += 300;
   if (tags.includes('pdf-rendered-page')) score += 180;
-  if (title.includes('extracted image')) score += 120;
   return score;
 }
 

@@ -176,27 +176,31 @@ async function prepareLogo(
 
 function buildCleanBrandSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
-  const headline = wrapText(input.headline || input.brandName || 'Your Headline', 30).slice(0, 2);
-  const tagline = wrapText(input.tagline || '', 40).slice(0, 2);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 32);
+  const headline = wrapText(input.headline || safeBrandName || 'Your Headline', 22).slice(0, 3);
+  const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
   const heroImg = images['hero'];
+  const footerLine = firstSafeLine(input.footerWebsite, safeBrandName, 42);
+  const headlineFont = headline.length > 2 ? r(w * 0.04) : r(w * 0.046);
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.05)}" y="${r(h * 0.04)}" width="${r(w * 0.13)}" height="${r(h * 0.09)}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${r(w * 0.06)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="800">${escapeXml(input.brandName || 'Brand')}</text>`;
+    : `<text x="${r(w * 0.06)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.60)}" y="${r(h * 0.16)}" width="${r(w * 0.36)}" height="${r(h * 0.72)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<rect x="${r(w * 0.61)}" y="${r(h * 0.15)}" width="${r(w * 0.31)}" height="${r(h * 0.70)}" rx="24" fill="${c.surface}" fill-opacity="0.10" stroke="${c.muted}" stroke-opacity="0.22" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.62)}" y="${r(h * 0.17)}" width="${r(w * 0.29)}" height="${r(h * 0.66)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.38 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.045)}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.33 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.56 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="500">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.57 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.021)}" font-weight="500">${escapeXml(line)}</text>`)
     .join('');
 
-  const ctaY = h * 0.68;
+  const ctaY = h * 0.71;
   const ctaNode = `<rect x="${r(w * 0.06)}" y="${r(ctaY)}" width="${r(w * 0.16)}" height="${r(h * 0.06)}" rx="${r(h * 0.03)}" fill="${c.accent}" />
     <text x="${r(w * 0.14)}" y="${r(ctaY + h * 0.04)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Learn More</text>`;
 
@@ -209,15 +213,17 @@ function buildCleanBrandSvg(w: number, h: number, images: Record<string, Prepare
     ${headlineNodes}
     ${taglineNodes}
     ${ctaNode}
-    <text x="${r(w * 0.06)}" y="${h - r(h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="600">${escapeXml(input.footerWebsite || '')}</text>
+    <text x="${r(w * 0.06)}" y="${h - r(h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="600">${escapeXml(footerLine)}</text>
   `);
 }
 
 function buildBrandStorySvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
-  const headline = wrapText(input.headline || input.brandName || 'Our Story', 28).slice(0, 2);
-  const tagline = wrapText(input.tagline || '', 40).slice(0, 3);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 32);
+  const headline = wrapText(input.headline || safeBrandName || 'Our Story', 20).slice(0, 3);
+  const tagline = wrapText(input.tagline || '', 32).slice(0, 4);
   const heroImg = images['hero'];
+  const headlineFont = headline.length > 2 ? r(w * 0.034) : r(w * 0.04);
 
   const cx = r(w * 0.24);
   const cy = r(h * 0.50);
@@ -230,15 +236,15 @@ function buildBrandStorySvg(w: number, h: number, images: Record<string, Prepare
     : `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.accent}" opacity="0.15" />`;
 
   const logoNode = logo
-    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.52)}" y="${r(h * 0.18)}" width="${r(w * 0.06)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
-    : '';
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.52)}" y="${r(h * 0.16)}" width="${r(w * 0.08)}" height="${r(h * 0.08)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.52)}" y="${r(h * 0.21)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.02)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.34 + i * h * 0.07)}" fill="${c.text}" font-family="Georgia,serif" font-size="${r(w * 0.04)}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.33 + i * h * 0.065)}" fill="${c.text}" font-family="Georgia,serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.54 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.02)}" font-weight="500">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.52)}" y="${r(h * 0.57 + i * h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="500">${escapeXml(line)}</text>`)
     .join('');
 
   return svg(w, h, `
@@ -257,8 +263,8 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
-  const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 24).slice(0, 2);
-  const tagline = wrapText(input.tagline || '', 32).slice(0, 2);
+  const headline = wrapText(input.headline || safeBrandName || 'Campaign Headline', 20).slice(0, 3);
+  const tagline = wrapText(input.tagline || '', 28).slice(0, 2);
   const bullets = getSafeFeatureBullets(input.featureBullets, 4);
   const footerLine =
     [
@@ -273,15 +279,16 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
     : `<text x="${r(w * 0.05)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.16)}" width="${r(w * 0.30)}" height="${r(h * 0.72)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.06)}" y="${r(h * 0.23)}" width="${r(w * 0.22)}" height="${r(h * 0.52)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
+  const headlineFontSize = headline.length >= 3 ? r(w * 0.036) : r(w * 0.040);
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.24 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.054)}" font-weight="900">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.22 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFontSize}" font-weight="900">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.39 + i * h * 0.045)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="600">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.42)}" y="${r(h * 0.42 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="600">${escapeXml(line)}</text>`)
     .join('');
 
   const bulletNodes = bullets
@@ -296,9 +303,9 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const bulletNodesMarkup = bullets
     .map((b, i) => {
       const boxX = r(w * 0.42);
-      const boxSize = r(w * 0.038);
-      const baseY = r(h * 0.50 + i * h * 0.11);
-      const wrapped = wrapText(b, 28).slice(0, 2);
+      const boxSize = r(w * 0.036);
+      const baseY = r(h * 0.53 + i * h * 0.11);
+      const wrapped = wrapText(b, 24).slice(0, 2);
       const checkStroke = Math.max(3, Math.round(boxSize * 0.13));
       const checkPath = [
         `M ${boxX + Math.round(boxSize * 0.26)} ${baseY + Math.round(boxSize * 0.55)}`,
@@ -308,8 +315,8 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
 
       const textNodes = wrapped
         .map((line, lineIndex) => {
-          const lineY = baseY + Math.round(boxSize * 0.36) + lineIndex * Math.round(h * 0.038);
-          return `<text x="${r(w * 0.48)}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.024)}" font-weight="700">${escapeXml(line)}</text>`;
+          const lineY = baseY + Math.round(boxSize * 0.34) + lineIndex * Math.round(h * 0.036);
+          return `<text x="${r(w * 0.475)}" y="${lineY}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.020)}" font-weight="700">${escapeXml(line)}</text>`;
         })
         .join('');
 
@@ -328,117 +335,146 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
     <rect y="${h - r(h * 0.10)}" width="${w}" height="${r(h * 0.10)}" fill="${c.footer}" />
     <rect x="${r(w * 0.03)}" y="${r(h * 0.03)}" width="${r(w * 0.14)}" height="${r(h * 0.09)}" rx="8" fill="${c.surface}" fill-opacity="0.95" />
     ${logoNode}
-    <rect x="${r(w * 0.03)}" y="${r(h * 0.16)}" width="${r(w * 0.31)}" height="${r(h * 0.72)}" rx="18" fill="${c.surface}" fill-opacity="0.06" stroke="${c.muted}" stroke-opacity="0.18" />
+    <rect x="${r(w * 0.03)}" y="${r(h * 0.16)}" width="${r(w * 0.30)}" height="${r(h * 0.70)}" rx="18" fill="${c.surface}" fill-opacity="0.06" stroke="${c.muted}" stroke-opacity="0.18" />
     ${heroNode}
-    <rect x="${r(w * 0.39)}" y="${r(h * 0.16)}" width="${r(w * 0.56)}" height="${r(h * 0.72)}" rx="22" fill="${c.bgStart}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.18" />
+    <rect x="${r(w * 0.39)}" y="${r(h * 0.16)}" width="${r(w * 0.56)}" height="${r(h * 0.70)}" rx="22" fill="${c.bgStart}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.18" />
     ${headlineNodes}
     ${taglineNodes}
-    <rect x="${r(w * 0.42)}" y="${r(h * 0.45)}" width="${r(w * 0.30)}" height="4" rx="2" fill="${c.accent}" />
+    <rect x="${r(w * 0.42)}" y="${r(h * 0.47)}" width="${r(w * 0.24)}" height="4" rx="2" fill="${c.accent}" />
     ${bulletNodesMarkup}
-    <text x="${r(w * 0.50)}" y="${h - r(h * 0.035)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="700" text-anchor="middle">${escapeXml(footerLine)}</text>
+    <text x="${r(w * 0.50)}" y="${h - r(h * 0.040)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">${escapeXml(footerLine)}</text>
   `);
 }
 
 function buildProductHeroSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
-  const headline = wrapText(input.headline || input.brandName || 'Product Name', 30).slice(0, 1);
-  const tagline = wrapText(input.tagline || '', 40).slice(0, 1);
-
-  const cx = r(w * 0.50);
-  const cy = r(h * 0.39);
-  const radius = r(Math.min(w * 0.19, h * 0.25));
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || safeBrandName || 'Product Name', 22).slice(0, 3);
+  const tagline = wrapText(input.tagline || '', 30).slice(0, 2);
+  const headlineFont = headline.length > 2 ? r(w * 0.04) : r(w * 0.046);
 
   const heroNode = heroImg
-    ? `<defs><clipPath id="heroCircle"><circle cx="${cx}" cy="${cy}" r="${radius}" /></clipPath></defs>
-       <circle cx="${cx}" cy="${cy}" r="${radius + 6}" fill="${c.accent}" opacity="0.15" />
-       <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.bgStart}" />
-       <image href="${escapeXml(heroImg.dataUri)}" x="${cx - radius}" y="${cy - radius}" width="${radius * 2}" height="${radius * 2}" clip-path="url(#heroCircle)" preserveAspectRatio="xMidYMid meet" />`
-    : `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${c.bgStart}" />`;
+    ? `<rect x="${r(w * 0.58)}" y="${r(h * 0.14)}" width="${r(w * 0.32)}" height="${r(h * 0.70)}" rx="28" fill="${c.surface}" fill-opacity="0.08" stroke="${c.muted}" stroke-opacity="0.18" />
+       <circle cx="${r(w * 0.74)}" cy="${r(h * 0.47)}" r="${r(Math.min(w * 0.14, h * 0.22))}" fill="${c.accent}" opacity="0.14" />
+       <image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.60)}" y="${r(h * 0.17)}" width="${r(w * 0.28)}" height="${r(h * 0.64)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<rect x="${r(w * 0.58)}" y="${r(h * 0.14)}" width="${r(w * 0.32)}" height="${r(h * 0.70)}" rx="28" fill="${c.surface}" fill-opacity="0.10" />`;
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.12)}" height="${r(h * 0.10)}" preserveAspectRatio="xMidYMid meet" />`
-    : '';
+    : `<text x="${r(w * 0.06)}" y="${r(h * 0.095)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.024)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   return svg(w, h, `
     <rect width="${w}" height="${h}" fill="${c.surface}" />
     <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.13)}" height="${r(h * 0.10)}" rx="12" fill="${c.headerPanel}" stroke="${c.muted}" stroke-opacity="0.3" />
+    <rect x="${r(w * 0.06)}" y="${r(h * 0.19)}" width="${r(w * 0.42)}" height="4" rx="2" fill="${c.accent}" fill-opacity="0.75" />
     ${logoNode}
     ${heroNode}
-    <text x="${r(w * 0.50)}" y="${r(h * 0.72)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.04)}" font-weight="900" text-anchor="middle">${escapeXml(headline[0] || '')}</text>
-    <text x="${r(w * 0.50)}" y="${r(h * 0.79)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="500" text-anchor="middle">${escapeXml(tagline[0] || '')}</text>
-    <rect x="${r(w * 0.38)}" y="${r(h * 0.84)}" width="${r(w * 0.24)}" height="${r(h * 0.065)}" rx="${r(h * 0.033)}" fill="${c.accent}" />
-    <text x="${r(w * 0.50)}" y="${r(h * 0.88)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Shop Now</text>
+    ${headline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.31 + i * h * 0.07)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900">${escapeXml(line)}</text>`).join('')}
+    ${tagline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.57 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.021)}" font-weight="500">${escapeXml(line)}</text>`).join('')}
+    <rect x="${r(w * 0.06)}" y="${r(h * 0.72)}" width="${r(w * 0.18)}" height="${r(h * 0.065)}" rx="${r(h * 0.033)}" fill="${c.accent}" />
+    <text x="${r(w * 0.15)}" y="${r(h * 0.76)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Shop Now</text>
   `);
 }
 
 function buildKnowledgeVisualSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
-  const headline = wrapText(input.headline || 'Knowledge Brief', 26).slice(0, 2);
-  const tagline = wrapText(input.tagline || '', 36).slice(0, 3);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || 'Knowledge Brief', 20).slice(0, 3);
+  const tagline = wrapText(input.tagline || '', 30).slice(0, 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
+  const bulletFont = r(w * 0.016);
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.52)}" height="${r(h * 0.92)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.05)}" y="${r(h * 0.10)}" width="${r(w * 0.42)}" height="${r(h * 0.78)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const headlineNodes = headline
-    .map((line, i) => `<text x="${r(w * 0.60)}" y="${r(h * 0.30 + i * h * 0.06)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.032)}" font-weight="800">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.54)}" y="${r(h * 0.25 + i * h * 0.06)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.03)}" font-weight="800">${escapeXml(line)}</text>`)
     .join('');
 
   const taglineNodes = tagline
-    .map((line, i) => `<text x="${r(w * 0.60)}" y="${r(h * 0.50 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500">${escapeXml(line)}</text>`)
+    .map((line, i) => `<text x="${r(w * 0.54)}" y="${r(h * 0.46 + i * h * 0.035)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500">${escapeXml(line)}</text>`)
     .join('');
+
+  const bulletNodes = bullets
+    .map((line, i) => {
+      const wrapped = wrapText(line, 28).slice(0, 2);
+      const y = r(h * (0.58 + i * 0.11));
+      return `<g>
+        <circle cx="${r(w * 0.565)}" cy="${y - 6}" r="12" fill="${c.support}" />
+        <text x="${r(w * 0.565)}" y="${y - 1}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="800" text-anchor="middle">${i + 1}</text>
+        ${wrapped.map((chunk, idx) => `<text x="${r(w * 0.59)}" y="${y + idx * r(h * 0.03)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${bulletFont}" font-weight="700">${escapeXml(chunk)}</text>`).join('')}
+      </g>`;
+    })
+    .join('');
+
+  const logoNode = logo
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.54)}" y="${r(h * 0.08)}" width="${r(w * 0.07)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.54)}" y="${r(h * 0.11)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
 
   return svg(w, h, `
     <rect width="${w}" height="${h}" fill="${c.bgStart}" />
-    <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.52)}" height="${r(h * 0.92)}" rx="14" fill="${c.surface}" fill-opacity="0.05" stroke="${c.muted}" stroke-opacity="0.10" />
+    <rect x="${r(w * 0.04)}" y="${r(h * 0.08)}" width="${r(w * 0.44)}" height="${r(h * 0.84)}" rx="18" fill="${c.surface}" fill-opacity="0.05" stroke="${c.muted}" stroke-opacity="0.10" />
     ${heroNode}
-    <rect x="${r(w * 0.58)}" y="${r(h * 0.04)}" width="${r(w * 0.38)}" height="${r(h * 0.92)}" rx="14" fill="${c.accent}" fill-opacity="0.08" stroke="${c.accent}" stroke-opacity="0.25" />
-    <rect x="${r(w * 0.60)}" y="${r(h * 0.20)}" width="${r(w * 0.10)}" height="4" rx="2" fill="${c.accent}" fill-opacity="0.70" />
+    <rect x="${r(w * 0.52)}" y="${r(h * 0.08)}" width="${r(w * 0.42)}" height="${r(h * 0.84)}" rx="18" fill="${c.accent}" fill-opacity="0.08" stroke="${c.accent}" stroke-opacity="0.25" />
+    ${logoNode}
+    <rect x="${r(w * 0.54)}" y="${r(h * 0.16)}" width="${r(w * 0.10)}" height="4" rx="2" fill="${c.accent}" fill-opacity="0.70" />
     ${headlineNodes}
     ${taglineNodes}
-    <rect x="${r(w * 0.60)}" y="${r(h * 0.68)}" width="${r(w * 0.14)}" height="${r(h * 0.055)}" rx="8" fill="${c.support}" fill-opacity="0.25" />
-    <text x="${r(w * 0.67)}" y="${r(h * 0.715)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="700" text-anchor="middle">Read More</text>
+    ${bulletNodes}
+    <rect x="${r(w * 0.54)}" y="${r(h * 0.82)}" width="${r(w * 0.16)}" height="${r(h * 0.055)}" rx="8" fill="${c.support}" fill-opacity="0.25" />
+    <text x="${r(w * 0.62)}" y="${r(h * 0.855)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="700" text-anchor="middle">Read More</text>
   `);
 }
 
 function buildDatasheetFrameSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
-  const headline = wrapText(input.headline || input.brandName || 'Product Series', 30).slice(0, 1);
-  const tagline = wrapText(input.tagline || '', 36).slice(0, 1);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || safeBrandName || 'Product Series', 20).slice(0, 2);
+  const tagline = wrapText(input.tagline || '', 28).slice(0, 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
 
   const heroNode = heroImg
-    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.42)}" height="${r(h * 0.92)}" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${escapeXml(heroImg.dataUri)}" x="${r(w * 0.06)}" y="${r(h * 0.10)}" width="${r(w * 0.30)}" height="${r(h * 0.76)}" preserveAspectRatio="xMidYMid meet" />`
     : '';
 
   const logoNode = logo
-    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.50)}" y="${r(h * 0.07)}" width="${r(w * 0.06)}" height="${r(h * 0.05)}" preserveAspectRatio="xMidYMid meet" />`
-    : '';
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.46)}" y="${r(h * 0.08)}" width="${r(w * 0.08)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${r(w * 0.46)}" y="${r(h * 0.12)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
 
   return svg(w, h, `
     <rect width="${w}" height="${h}" fill="${c.surface}" />
-    <rect x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.42)}" height="${r(h * 0.92)}" rx="14" fill="${c.bgStart}" />
+    <rect x="${r(w * 0.04)}" y="${r(h * 0.08)}" width="${r(w * 0.34)}" height="${r(h * 0.84)}" rx="18" fill="${c.bgStart}" />
     ${heroNode}
-    <rect x="${r(w * 0.50)}" y="${r(h * 0.04)}" width="${r(w * 0.46)}" height="${r(h * 0.25)}" rx="14" fill="${c.headerPanel}" stroke="${c.muted}" stroke-opacity="0.3" />
+    <rect x="${r(w * 0.42)}" y="${r(h * 0.08)}" width="${r(w * 0.52)}" height="${r(h * 0.22)}" rx="18" fill="${c.headerPanel}" stroke="${c.muted}" stroke-opacity="0.3" />
     ${logoNode}
-    <text x="${r(w * 0.50)}" y="${r(h * 0.19)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.03)}" font-weight="900">${escapeXml(headline[0] || '')}</text>
-    <text x="${r(w * 0.50)}" y="${r(h * 0.25)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500">${escapeXml(tagline[0] || '')}</text>
+    ${headline.map((line, i) => `<text x="${r(w * 0.46)}" y="${r(h * 0.18 + i * h * 0.05)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="900">${escapeXml(line)}</text>`).join('')}
+    ${tagline.map((line, i) => `<text x="${r(w * 0.46)}" y="${r(h * 0.26 + i * h * 0.03)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="500">${escapeXml(line)}</text>`).join('')}
     ${[0, 1, 2, 3].map((i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      const bx = r(w * (0.50 + col * 0.235));
-      const by = r(h * (0.34 + row * 0.32));
-      return `<rect x="${bx}" y="${by}" width="${r(w * 0.215)}" height="${r(h * 0.28)}" rx="14" fill="${c.headerPanel}" stroke="${c.muted}" stroke-opacity="0.3" />`;
+      const bx = r(w * (0.42 + col * 0.27));
+      const by = r(h * (0.36 + row * 0.27));
+      const cardText = wrapText(bullets[i] || `Key product detail ${i + 1}`, 20).slice(0, 3);
+      return `<g>
+        <rect x="${bx}" y="${by}" width="${r(w * 0.24)}" height="${r(h * 0.22)}" rx="14" fill="${c.headerPanel}" stroke="${c.muted}" stroke-opacity="0.3" />
+        <circle cx="${bx + 22}" cy="${by + 22}" r="12" fill="${c.support}" />
+        <text x="${bx + 22}" y="${by + 27}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.013)}" font-weight="800" text-anchor="middle">${i + 1}</text>
+        ${cardText.map((line, idx) => `<text x="${bx + 18}" y="${by + 54 + idx * r(h * 0.033)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700">${escapeXml(line)}</text>`).join('')}
+      </g>`;
     }).join('')}
   `);
 }
 
 function buildProofStackSvg(w: number, h: number, _images: Record<string, PreparedImage>, _logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
-  const headline = wrapText(input.headline || 'Proven Results', 28).slice(0, 1);
-  const tagline = wrapText(input.tagline || '', 36).slice(0, 3);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || 'Proven Results', 22).slice(0, 2);
+  const tagline = wrapText(input.tagline || '', 30).slice(0, 3);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
   const proofCardColors = [
     { bg: c.support, accent: c.accent },
     { bg: c.bgEnd, accent: c.support },
@@ -448,12 +484,19 @@ function buildProofStackSvg(w: number, h: number, _images: Record<string, Prepar
   const proofCards = proofCardColors
     .map((pc, i) => {
       const cy = r(h * (0.08 + i * 0.30));
-      return `<rect x="${r(w * 0.04)}" y="${cy}" width="${r(w * 0.46)}" height="${r(h * 0.26)}" rx="14" fill="${pc.bg}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.3" />
-        <rect x="${r(w * 0.07)}" y="${r(h * (0.08 + i * 0.30) + h * 0.06)}" width="${r(w * 0.06)}" height="${r(w * 0.06)}" rx="8" fill="${pc.accent}" />`;
+      const text = wrapText(bullets[i] || `Proof point ${i + 1}`, 22).slice(0, 3);
+      return `<g>
+        <rect x="${r(w * 0.04)}" y="${cy}" width="${r(w * 0.46)}" height="${r(h * 0.24)}" rx="14" fill="${pc.bg}" fill-opacity="0.20" stroke="${c.muted}" stroke-opacity="0.3" />
+        <rect x="${r(w * 0.07)}" y="${r(h * (0.08 + i * 0.30) + h * 0.05)}" width="${r(w * 0.06)}" height="${r(w * 0.06)}" rx="8" fill="${pc.accent}" />
+        ${text.map((line, idx) => `<text x="${r(w * 0.16)}" y="${r(cy + h * 0.09 + idx * h * 0.04)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="700">${escapeXml(line)}</text>`).join('')}
+      </g>`;
     })
     .join('');
 
-  const headlineNode = `<text x="${r(w * 0.56)}" y="${r(h * 0.24)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.03)}" font-weight="900">${escapeXml(headline[0] || '')}</text>`;
+  const brandNode = `<text x="${r(w * 0.56)}" y="${r(h * 0.16)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
+  const headlineNode = headline
+    .map((line, idx) => `<text x="${r(w * 0.56)}" y="${r(h * 0.26 + idx * h * 0.06)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.03)}" font-weight="900">${escapeXml(line)}</text>`)
+    .join('');
 
   const taglineNodes = tagline
     .map((line, i) => `<text x="${r(w * 0.56)}" y="${r(h * 0.38 + i * h * 0.04)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="500">${escapeXml(line)}</text>`)
@@ -463,6 +506,7 @@ function buildProofStackSvg(w: number, h: number, _images: Record<string, Prepar
     <rect width="${w}" height="${h}" fill="${c.surface}" />
     ${proofCards}
     <rect x="${r(w * 0.52)}" y="${r(h * 0.08)}" width="${r(w * 0.44)}" height="${r(h * 0.84)}" rx="14" fill="${c.bgStart}" />
+    ${brandNode}
     ${headlineNode}
     ${taglineNodes}
     <rect x="${r(w * 0.56)}" y="${r(h * 0.58)}" width="${r(w * 0.14)}" height="${r(h * 0.055)}" rx="8" fill="${c.support}" />
@@ -498,33 +542,44 @@ function buildLaunchBannerSvg(w: number, h: number, _images: Record<string, Prep
 
 function buildSectorCollageSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
-  const headline = wrapText(input.headline || input.brandName || 'Our Sectors', 30).slice(0, 1);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || safeBrandName || 'Our Sectors', 24).slice(0, 2);
+  const tagline = wrapText(input.tagline || '', 28).slice(0, 1);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 3);
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.03)}" width="${r(w * 0.11)}" height="${r(h * 0.10)}" preserveAspectRatio="xMidYMid meet" />`
-    : '';
+    : `<text x="${r(w * 0.06)}" y="${r(h * 0.085)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="800">${escapeXml(safeBrandName)}</text>`;
 
   const panels = ['panel-1', 'panel-2', 'panel-3'];
   const panelNodes = panels.map((pid, i) => {
     const px = r(w * (0.03 + i * 0.32));
     const py = r(h * 0.19);
     const pw = r(w * 0.30);
-    const ph = r(h * 0.49);
+    const ph = r(h * 0.46);
     const img = images[pid];
+    const caption = wrapText(bullets[i] || ['Energy efficiency', 'Power quality', 'Smart control'][i], 16).slice(0, 2);
     const imgNode = img
       ? `<image href="${escapeXml(img.dataUri)}" x="${px}" y="${py}" width="${pw}" height="${ph}" preserveAspectRatio="xMidYMid slice" clip-path="url(#panel${i}Clip)" />`
       : '';
     return `<defs><clipPath id="panel${i}Clip"><rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="12" /></clipPath></defs>
       <rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="12" fill="${c.surface}" fill-opacity="0.12" />
-      ${imgNode}`;
+      ${imgNode}
+      <rect x="${px}" y="${py + ph - r(h * 0.11)}" width="${pw}" height="${r(h * 0.11)}" fill="${c.bgStart}" fill-opacity="0.72" clip-path="url(#panel${i}Clip)" />
+      ${caption.map((line, idx) => `<text x="${px + 18}" y="${py + ph - r(h * 0.06) + idx * r(h * 0.03)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700">${escapeXml(line)}</text>`).join('')}`;
   }).join('');
 
-  const sectorIcons = ['Energy', 'Industry', 'Health', 'Mining', 'Auto', 'Commercial'];
-  const iconNodes = sectorIcons.map((label, i) => {
-    const ix = r(w * (0.08 + i * 0.15));
-    const iy = r(h * 0.78);
-    return `<text x="${ix}" y="${iy}" fill="${c.text}" fill-opacity="0.65" font-family="Arial,sans-serif" font-size="${r(w * 0.014)}" font-weight="600" text-anchor="middle">${escapeXml(label)}</text>`;
-  }).join('');
+  const iconNodes = (bullets.length > 0 ? bullets : ['Power factor improvement', 'Power quality support', 'Controller integration'])
+    .slice(0, 3)
+    .map((label, i) => {
+      const ix = r(w * (0.18 + i * 0.32));
+      const iy = r(h * 0.80);
+      const lines = wrapText(label, 20).slice(0, 2);
+      return lines
+        .map((line, idx) => `<text x="${ix}" y="${iy + idx * r(h * 0.03)}" fill="${c.text}" fill-opacity="0.72" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="600" text-anchor="middle">${escapeXml(line)}</text>`)
+        .join('');
+    })
+    .join('');
 
   return svg(w, h, `
     <defs><linearGradient id="sectorGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c.bgStart}" /><stop offset="100%" stop-color="${c.bgEnd}" /></linearGradient></defs>
@@ -532,7 +587,8 @@ function buildSectorCollageSvg(w: number, h: number, images: Record<string, Prep
     <rect width="${w}" height="${r(h * 0.16)}" fill="${c.bgStart}" fill-opacity="0.40" />
     <rect x="${r(w * 0.04)}" y="${r(h * 0.03)}" width="${r(w * 0.12)}" height="${r(h * 0.10)}" rx="6" fill="${c.surface}" fill-opacity="0.95" />
     ${logoNode}
-    <text x="${r(w * 0.50)}" y="${r(h * 0.10)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.032)}" font-weight="900" text-anchor="middle">${escapeXml(headline[0] || '')}</text>
+    ${headline.map((line, i) => `<text x="${r(w * 0.50)}" y="${r(h * 0.085 + i * h * 0.045)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.03)}" font-weight="900" text-anchor="middle">${escapeXml(line)}</text>`).join('')}
+    ${tagline[0] ? `<text x="${r(w * 0.50)}" y="${r(h * 0.155)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.017)}" font-weight="600" text-anchor="middle">${escapeXml(tagline[0])}</text>` : ''}
     ${panelNodes}
     ${iconNodes}
   `);
@@ -567,15 +623,19 @@ function buildOfferCardSvg(w: number, h: number, images: Record<string, Prepared
 
 function buildComparisonBoardSvg(w: number, h: number, images: Record<string, PreparedImage>, logo: PreparedImage | null, input: ThemeComposeInput) {
   const c = deriveColors(input.palette);
-  const headline = wrapText(input.headline || 'Compare', 30).slice(0, 1);
+  const safeBrandName = firstSafeLine(input.brandName, 'Brand', 28);
+  const headline = wrapText(input.headline || 'Compare', 22).slice(0, 2);
+  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
+  const leftBullets = bullets.slice(0, 2).length ? bullets.slice(0, 2) : ['Improve power factor', 'Reduce wasted energy'];
+  const rightBullets = bullets.slice(2, 4).length ? bullets.slice(2, 4) : ['Support automatic networking', 'Built-in protection features'];
 
   const logoNode = logo
     ? `<image href="${escapeXml(logo.dataUri)}" x="${r(w * 0.04)}" y="${r(h * 0.04)}" width="${r(w * 0.06)}" height="${r(h * 0.06)}" preserveAspectRatio="xMidYMid meet" />`
-    : '';
+    : `<text x="${r(w * 0.05)}" y="${r(h * 0.085)}" fill="${c.muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700">${escapeXml(safeBrandName)}</text>`;
 
   const panels: Array<{ id: string; x: number; fill: string; stroke: string; label: string }> = [
-    { id: 'panel-left', x: 0.04, fill: c.surface, stroke: c.muted, label: 'Option A' },
-    { id: 'panel-right', x: 0.52, fill: c.headerPanel, stroke: c.accent, label: 'Option B' },
+    { id: 'panel-left', x: 0.04, fill: c.surface, stroke: c.muted, label: 'Operational Value' },
+    { id: 'panel-right', x: 0.52, fill: c.headerPanel, stroke: c.accent, label: 'Protection & Control' },
   ];
 
   const panelNodes = panels.map((p) => {
@@ -584,18 +644,29 @@ function buildComparisonBoardSvg(w: number, h: number, images: Record<string, Pr
     const pw = r(w * 0.44);
     const ph = r(h * 0.74);
     const img = images[p.id];
+    const panelBullets = p.id === 'panel-left' ? leftBullets : rightBullets;
     const imgNode = img
-      ? `<image href="${escapeXml(img.dataUri)}" x="${px + 12}" y="${py + r(h * 0.08)}" width="${pw - 24}" height="${r(h * 0.40)}" preserveAspectRatio="xMidYMid meet" />`
+      ? `<rect x="${px + 18}" y="${py + 48}" width="${pw - 36}" height="${r(h * 0.30)}" rx="18" fill="${c.surface}" fill-opacity="0.12" />
+         <image href="${escapeXml(img.dataUri)}" x="${px + 24}" y="${py + r(h * 0.08)}" width="${pw - 48}" height="${r(h * 0.28)}" preserveAspectRatio="xMidYMid meet" />`
       : '';
-    return `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="18" fill="${p.fill}" stroke="${p.stroke}" stroke-opacity="0.5" />
+    return `<g>
+      <rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="18" fill="${p.fill}" stroke="${p.stroke}" stroke-opacity="0.5" />
       <text x="${px + 16}" y="${py + r(h * 0.05)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.02)}" font-weight="800">${escapeXml(p.label)}</text>
-      ${imgNode}`;
+      ${imgNode}
+      ${panelBullets.map((line, idx) => {
+        const wrapped = wrapText(line, 22).slice(0, 2);
+        const bulletY = py + r(h * (0.54 + idx * 0.12));
+        return `<circle cx="${px + 22}" cy="${bulletY - 6}" r="10" fill="${c.support}" />
+          <text x="${px + 22}" y="${bulletY - 1}" fill="${c.bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="800" text-anchor="middle">${idx + 1}</text>
+          ${wrapped.map((chunk, wrapIdx) => `<text x="${px + 40}" y="${bulletY + wrapIdx * r(h * 0.03)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700">${escapeXml(chunk)}</text>`).join('')}`;
+      }).join('')}
+    </g>`;
   }).join('');
 
   return svg(w, h, `
     <rect width="${w}" height="${h}" fill="${c.surface}" />
     ${logoNode}
-    <text x="${r(w * 0.12)}" y="${r(h * 0.09)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="900">${escapeXml(headline[0] || '')}</text>
+    ${headline.map((line, idx) => `<text x="${r(w * 0.12)}" y="${r(h * 0.09 + idx * h * 0.05)}" fill="${c.text}" font-family="Arial,sans-serif" font-size="${r(w * 0.028)}" font-weight="900">${escapeXml(line)}</text>`).join('')}
     ${panelNodes}
   `);
 }
@@ -748,8 +819,7 @@ export async function composeThemeImage(input: ThemeComposeInput): Promise<Buffe
 
   const overlaySvg = builder(width, height, preparedImages, logo, input);
 
-  return sharp(baseBuffer)
-    .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
+  return sharp(Buffer.from(overlaySvg))
     .png()
     .toBuffer();
 }

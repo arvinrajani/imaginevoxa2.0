@@ -810,8 +810,9 @@ export async function POST(request: Request) {
 
     const effectiveLogoUrl = providedLogoUrl || brandKitLogoUrl || '';
     const hasLogo = Boolean(effectiveLogoUrl);
-    const shouldInfuseLogo = !isAlliancePoster && logoPlacement === 'infuse' && hasLogo;
-    const shouldOverlayLogo = !isAlliancePoster && logoPlacement === 'overlay' && hasLogo;
+    const effectiveLogoPlacement = hasLogo ? logoPlacement : 'none';
+    const shouldInfuseLogo = !isAlliancePoster && effectiveLogoPlacement === 'infuse' && hasLogo;
+    const shouldOverlayLogo = !isAlliancePoster && effectiveLogoPlacement === 'overlay' && hasLogo;
     const posterFeatureBullets =
       featureBullets.length > 0
         ? featureBullets
@@ -831,13 +832,6 @@ export async function POST(request: Request) {
       .slice(0, 6);
     const composedFooterWebsite = sanitizeDisplayText(posterFooterWebsite, 72);
     const composedFooterEmail = sanitizeDisplayText(posterFooterEmail, 72);
-
-    if (!isAlliancePoster && logoPlacement !== 'none' && !hasLogo) {
-      return NextResponse.json(
-        { error: 'Logo placement was requested, but no logo was found. Upload a logo first.' },
-        { status: 400 }
-      );
-    }
 
     // Determine render size from aspect ratio
     const sizeMap: Record<string, string> = {
@@ -1014,7 +1008,11 @@ ${isAiGuided ? `AI GUIDED MODE (PRIMARY BEHAVIOR):
 - "Your Vision" is the main creative brief for composition, scene choice, and visual storytelling.
 - Build the full image yourself: structure, hierarchy, focal subject, lighting, and any readable text.
 - If a reference image is supplied, use it as a real subject/style input, not as a hidden slot placeholder.
-- Make the final image feel bespoke and fully art-directed, not template-like.\n` : ''}
+- Make the final image feel bespoke and fully art-directed, not template-like.
+- Keep all readable text inside a disciplined safe area with at least 8% side padding and 10% top/bottom padding.
+- Never let any headline, CTA, brand text, or label touch the canvas edge.
+- If the subject sits on one side, reserve the opposite side as a dedicated text column with clean negative space.
+- Prefer 2-4 shorter lines over one oversized headline block. Readability is more important than drama.\n` : ''}
 
 CONTENT CONTEXT:
 ${postContext || 'Use the provided headline and tagline as the post message.'}
@@ -1059,7 +1057,7 @@ SCENE CONSTRUCTION (MANDATORY):
 - No gradient-only or abstract-only outputs unless style is "abstract-brand".
 ${effectiveBrandColors.length ? `- Use brand colors (${effectiveBrandColors.slice(0, 3).join(', ')}) as the dominant palette in the scene — in surfaces, lighting, materials, and environment.` : ''}
 
-${logoPlacement === 'none' ? 'No logo needed in this image.' : ''}
+${effectiveLogoPlacement === 'none' ? 'No logo needed in this image.' : ''}
 
 COMPOSITION MASTERY:
 - Apply the rule of thirds for visual balance — place the hero element at an intersection point.
@@ -1154,7 +1152,7 @@ ${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, 
     // For themed images, reference images are routed into the hero slot instead.
     if (!hasThemeComposition && !isAlliancePoster) {
       // Resolve logo buffer for baking into the AI image (non-themed only)
-      if (hasLogo && logoPlacement !== 'none') {
+      if (hasLogo && effectiveLogoPlacement !== 'none') {
         if (primaryLogoBuffer) {
           const logoPng = await sharp(primaryLogoBuffer)
             .resize({ width: 512, height: 512, fit: 'contain', withoutEnlargement: true, background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -1177,13 +1175,22 @@ ${THEME_SCHEMAS[themeId] || isAlliancePoster ? `- ANY readable text, headlines, 
       }
     }
 
-    // For themed images with a reference image but no explicit hero slot assignment,
-    // auto-route the reference image into the theme's hero slot.
-    if (hasThemeComposition && referenceImageUrl && !slotImages['hero']) {
+    // For themed images, auto-route the selected reference into the theme slots so
+    // posters do not come out blank when the user picked a visual but did not map
+    // every slot manually.
+    if (hasThemeComposition && referenceImageUrl) {
       const themeSlots = THEME_SCHEMAS[themeId]?.imageSlots || [];
-      const heroSlot = themeSlots.find((s) => s.id === 'hero');
+      const heroSlot = themeSlots.find((slot) => slot.id === 'hero');
       if (heroSlot) {
-        slotImages['hero'] = referenceImageUrl;
+        if (!slotImages['hero']) {
+          slotImages['hero'] = referenceImageUrl;
+        }
+      } else {
+        for (const slot of themeSlots) {
+          if (!slotImages[slot.id]) {
+            slotImages[slot.id] = referenceImageUrl;
+          }
+        }
       }
     }
 
@@ -1210,7 +1217,7 @@ CRITICAL LOGO RULES:
    - Proper visual weight and sizing
    - A clean background area or contrasting zone behind it so it reads perfectly
    - Professional integration: subtle drop shadow, clean edges, or a complementary backdrop
-4. ${logoPlacement === 'infuse' 
+4. ${effectiveLogoPlacement === 'infuse'
     ? 'INFUSE MODE: Make the logo a central, hero element of the design. It can be large and commanding — centered or prominently placed. It should feel like the image was designed AROUND the logo. Think of it like a brand-launch hero banner where the logo is the star.' 
     : themeId === 'alliance-poster'
       ? 'OVERLAY MODE: Place the logo inside a disciplined brand zone such as a top header, corner stamp, or structured title band. Keep it clearly readable and premium, but do not let it overpower the hero product or core message.'
@@ -1384,7 +1391,7 @@ FINAL QUALITY FALLBACK (MANDATORY):
 
     let finalUrl = baseUrl;
     let finalPngBuffer = basePngBuffer;
-    let logoApplied = useEditEndpoint && hasLogo && logoPlacement !== 'none';
+    let logoApplied = useEditEndpoint && hasLogo && effectiveLogoPlacement !== 'none';
 
     // Only do sharp-based overlay if we did NOT use the edit endpoint
     // and this is NOT a themed image (theme overlay handles logo placement)
@@ -1546,7 +1553,7 @@ FINAL QUALITY FALLBACK (MANDATORY):
               model,
               type: 'linkedin-image-creator',
               logo_applied: logoApplied,
-              logo_placement: logoPlacement,
+              logo_placement: effectiveLogoPlacement,
               logo_baked_by_ai: useEditEndpoint && hasLogo,
               reference_image_url: referenceImageUrl || null,
               reference_as_hero: isAlliancePoster ? referenceAsHero : null,

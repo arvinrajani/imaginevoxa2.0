@@ -4,7 +4,6 @@
  */
 
 const http = require('http');
-const https = require('https');
 
 const BASE_URL = 'http://localhost:3000';
 const tests = [];
