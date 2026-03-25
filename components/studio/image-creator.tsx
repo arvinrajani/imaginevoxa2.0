@@ -925,6 +925,53 @@ function derivePosterBenefitLines(...sources: Array<string | undefined>) {
   return picked.slice(0, 6);
 }
 
+function deriveIndustryBackdropHint(...sources: Array<string | null | undefined>) {
+  const raw = sources
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join(' ')
+    .toLowerCase();
+
+  if (!raw) return 'Build a premium, believable client-specific background that feels custom to the brand and supports the selected theme.';
+
+  if (/(electric|energy|power|utility|grid|substation|electrical|capacitor|transformer|switchgear|industrial automation|automation)/.test(raw)) {
+    return 'Use a premium electrification backdrop with grid infrastructure, power-system depth, engineered light, metallic surfaces, and enterprise industrial atmosphere.';
+  }
+
+  if (/(bank|finance|financial|fintech|wealth|investment|insurance|loan|mortgage|capital|trading)/.test(raw)) {
+    return 'Use a high-trust finance backdrop with premium office interiors, glass towers, subtle market/data screens, executive lighting, and polished corporate depth.';
+  }
+
+  if (/(car|auto|automotive|showroom|dealer|vehicle|suv|sedan|ev|electric vehicle|luxury vehicle)/.test(raw)) {
+    return 'Use a premium automotive backdrop with showroom lighting, reflective floors, hero vehicle staging, controlled highlights, and luxury commercial precision.';
+  }
+
+  if (/(estate|real estate|property|broker|realtor|housing|residential|commercial property|developer)/.test(raw)) {
+    return 'Use an aspirational property backdrop with modern architecture, premium interiors or skyline views, trust-first lighting, and polished real-estate presentation.';
+  }
+
+  if (/(hospital|medical|clinic|health|healthcare|doctor|pharma|wellness)/.test(raw)) {
+    return 'Use a clean healthcare backdrop with modern clinical spaces, trust-building lighting, premium equipment context, and calm professional clarity.';
+  }
+
+  if (/(school|education|college|university|academy|course|training|learning)/.test(raw)) {
+    return 'Use a modern education backdrop with smart learning spaces, campus or classroom context, optimistic lighting, and professional academic credibility.';
+  }
+
+  if (/(construction|builder|cement|infrastructure|architecture|engineering firm|contractor)/.test(raw)) {
+    return 'Use a strong built-environment backdrop with architectural structure, site precision, engineered scale, and premium infrastructure atmosphere.';
+  }
+
+  if (/(hotel|restaurant|cafe|travel|tourism|resort|hospitality)/.test(raw)) {
+    return 'Use an elevated hospitality backdrop with premium interiors, warm lighting, destination cues, and polished guest-experience storytelling.';
+  }
+
+  if (/(retail|fashion|beauty|cosmetic|jewelry|store|boutique|ecommerce)/.test(raw)) {
+    return 'Use a polished retail backdrop with premium merchandising, controlled lighting, intentional surfaces, and clean brand storytelling.';
+  }
+
+  return 'Build a premium, believable client-specific background that matches the industry, feels custom to the brand, and supports the selected theme without looking generic.';
+}
+
 function ThemePreviewMini({
   themeId,
   isActive,
@@ -3488,6 +3535,85 @@ export function ImageCreator({
           ? postDerivedFeatureLines
           : supplementalFeatureLines;
     const benefitBullets = resolvedFeatureLines.slice(0, selectedThemeId === 'industrial-campaign' ? 4 : 6);
+    const generationToneLabel =
+      TONE_OPTIONS.find((tone) => tone.id === selectedTone)?.label || 'Professional';
+    const generationStyleLabel =
+      STYLE_OPTIONS.find((layout) => layout.id === selectedStyle)?.label || 'Split Layout';
+    const generationSelectedPdf =
+      effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
+    const generationSelectedSite =
+      fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
+    const generationReferenceDetail = sanitizeVisualText(
+      generationSelectedPdf?.title ||
+        generationSelectedSite?.source ||
+        generationSelectedSite?.url ||
+        (selectedReferenceImage ? 'Uploaded reference image' : ''),
+      120
+    );
+    const generationAutoBackdropHint = deriveIndustryBackdropHint(
+      analysisProfile?.businessFocus,
+      analysisProfile?.brandDescription,
+      analysisProfile?.targetAudience,
+      productName,
+      confirmedPostHeadline,
+      confirmedPostImageBrief,
+      confirmedPostText,
+      partnerName,
+      brandName
+    );
+    const generationAutoVisionLines = [
+      `Use the ${activeTheme.label} theme as the layout and composition direction. ${sanitizeVisualText(activeTheme.description, 160)}`,
+      analysisProfile?.businessFocus
+        ? `Client category: ${sanitizeVisualText(analysisProfile.businessFocus, 120)}.`
+        : analysisProfile?.brandDescription
+          ? `Client context: ${sanitizeVisualText(analysisProfile.brandDescription, 160)}.`
+          : '',
+      analysisProfile?.targetAudience
+        ? `Target audience: ${sanitizeVisualText(analysisProfile.targetAudience, 100)}.`
+        : '',
+      `Background direction: ${generationAutoBackdropHint}`,
+      `Creative mode: ${generationToneLabel} tone with ${generationStyleLabel} styling.`,
+      effectiveHeadline
+        ? `Support this headline clearly: "${sanitizeVisualText(effectiveHeadline, 96)}".`
+        : '',
+      effectiveTagline
+        ? `Optional support line: "${sanitizeVisualText(effectiveTagline, 120)}".`
+        : '',
+      generationReferenceDetail
+        ? `Use the selected reference visual as the main hero truth: ${generationReferenceDetail}.`
+        : themeUsesHeroReference
+          ? 'Use a strong hero visual lane and make the selected PDF or uploaded reference the main subject when one is chosen.'
+          : '',
+      resolvedLogoForGeneration
+        ? 'Use the selected primary logo as the main brand mark in a clean, premium brand zone.'
+        : '',
+      effectiveAllianceLogos.length > 0 || partnerName.trim()
+        ? partnerTagline.trim()
+          ? `Use partner branding in the header area for ${sanitizeVisualText(partnerName || 'the partner brand', 48)} with the supporting line "${sanitizeVisualText(partnerTagline, 72)}".`
+          : `Use partner branding in the header area for ${sanitizeVisualText(partnerName || 'the partner brand', 48)}.`
+        : '',
+      footerWebsite.trim() || footerEmail.trim()
+        ? `Keep a clean footer lockup with ${[sanitizeVisualText(footerWebsite, 64), sanitizeVisualText(footerEmail, 64)].filter(Boolean).join(' and ')}.`
+        : '',
+      benefitBullets.length > 0
+        ? `Support these proof points: ${benefitBullets.join('; ')}.`
+        : '',
+      normalizedBrandColors.length > 0
+        ? `Stay inside the selected brand palette: ${normalizedBrandColors.slice(0, 4).join(', ')}.`
+        : '',
+    ]
+      .map((line) => sanitizeVisualText(line, 220))
+      .filter(Boolean)
+      .slice(0, 10);
+    const effectiveVisionPromptForGeneration = [
+      generationAutoVisionLines.length > 0
+        ? `AUTO-FED AI DIRECTION:\n${generationAutoVisionLines.map((line) => `- ${line}`).join('\n')}`
+        : '',
+      customPrompt.trim() ? `USER REFINEMENT:\n${customPrompt.trim()}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
     const resolvedSlotImages: Record<string, string> = { ...resolvedNonHeroSlotAssignments };
     if (themeUsesHeroReference && selectedReferenceImage) {
       resolvedSlotImages.hero = selectedReferenceImage;
@@ -3561,7 +3687,7 @@ export function ImageCreator({
             slotImages: Object.keys(resolvedSlotImages).length > 0 ? resolvedSlotImages : undefined,
             postText: confirmedPostText || undefined,
             postImagePrompt: confirmedPostImageBrief || undefined,
-            customPrompt: customPrompt.trim() || undefined,
+            customPrompt: effectiveVisionPromptForGeneration || undefined,
             generationNonce: nonce,
             imageAspect,
             referenceImageUrl: selectedReferenceImage || undefined,
@@ -3789,6 +3915,159 @@ export function ImageCreator({
     };
   }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
   const isAiGuidedTheme = selectedThemeId === 'guided-auto';
+  const hasUserVisionNotes = customPrompt.trim().length > 0;
+  const autoBackdropHint = useMemo(
+    () =>
+      deriveIndustryBackdropHint(
+        analysisProfile?.businessFocus,
+        analysisProfile?.brandDescription,
+        analysisProfile?.targetAudience,
+        productName,
+        confirmedPostHeadline,
+        confirmedPostImageBrief,
+        confirmedPostText,
+        partnerName,
+        brandName
+      ),
+    [
+      analysisProfile?.brandDescription,
+      analysisProfile?.businessFocus,
+      analysisProfile?.targetAudience,
+      brandName,
+      confirmedPostHeadline,
+      confirmedPostImageBrief,
+      confirmedPostText,
+      partnerName,
+      productName,
+    ]
+  );
+  const selectionDrivenVisionLines = useMemo(() => {
+    const lines: string[] = [];
+    const safeBusinessFocus = sanitizeVisualText(analysisProfile?.businessFocus || '', 120);
+    const safeBrandDescription = sanitizeVisualText(analysisProfile?.brandDescription || '', 160);
+    const safeAudience = sanitizeVisualText(analysisProfile?.targetAudience || '', 100);
+    const safePartnerName = sanitizeVisualText(partnerName || '', 48);
+    const safePartnerTagline = sanitizeVisualText(partnerTagline || '', 72);
+    const safeFooterWebsite = sanitizeVisualText(footerWebsite || '', 64);
+    const safeFooterEmail = sanitizeVisualText(footerEmail || '', 64);
+    const safeReferenceDetail = sanitizeVisualText(
+      selectedReferenceSummary?.detail || selectedPdfImage?.title || selectedSiteImage?.source || '',
+      120
+    );
+    const featureSummary = previewFeatureLines.slice(0, selectedThemeId === 'industrial-campaign' ? 4 : 5);
+
+    lines.push(
+      `Use the ${activeTheme.label} theme as the layout and composition direction. ${sanitizeVisualText(activeTheme.description, 160)}`
+    );
+
+    if (safeBusinessFocus) {
+      lines.push(`Client category: ${safeBusinessFocus}.`);
+    } else if (safeBrandDescription) {
+      lines.push(`Client context: ${safeBrandDescription}.`);
+    }
+
+    if (safeAudience) {
+      lines.push(`Target audience: ${safeAudience}.`);
+    }
+
+    lines.push(`Background direction: ${autoBackdropHint}`);
+
+    if (currentTone?.label || currentStyle?.label) {
+      lines.push(
+        `Creative mode: ${currentTone?.label || 'Professional'} tone with ${currentStyle?.label || 'Split Layout'} styling.`
+      );
+    }
+
+    if (activeHeadlineText) {
+      lines.push(`Support this headline clearly: "${sanitizeVisualText(activeHeadlineText, 96)}".`);
+    }
+
+    if (activeTaglineText) {
+      lines.push(`Optional support line: "${sanitizeVisualText(activeTaglineText, 120)}".`);
+    }
+
+    if (safeReferenceDetail) {
+      lines.push(`Use the selected reference visual as the main hero truth: ${safeReferenceDetail}.`);
+    } else if (themeUsesHeroReference) {
+      lines.push('Use a strong hero visual lane and make the selected PDF or uploaded reference the main subject when one is chosen.');
+    }
+
+    if (hasReadyLogo) {
+      lines.push('Use the selected primary logo as the main brand mark in a clean, premium brand zone.');
+    }
+
+    if (allianceHeaderLogos.length > 0 || safePartnerName) {
+      lines.push(
+        safePartnerTagline
+          ? `Use partner branding in the header area for ${safePartnerName || 'the partner brand'} with the supporting line "${safePartnerTagline}".`
+          : `Use partner branding in the header area for ${safePartnerName || 'the partner brand'}.`
+      );
+    }
+
+    if (safeFooterWebsite || safeFooterEmail) {
+      const footerBits = [safeFooterWebsite, safeFooterEmail].filter(Boolean);
+      lines.push(`Keep a clean footer lockup with ${footerBits.join(' and ')}.`);
+    }
+
+    if (featureSummary.length > 0) {
+      lines.push(`Support these proof points: ${featureSummary.join('; ')}.`);
+    }
+
+    if (normalizedBrandColors.length > 0) {
+      lines.push(`Stay inside the selected brand palette: ${normalizedBrandColors.slice(0, 4).join(', ')}.`);
+    }
+
+    return lines
+      .map((line) => sanitizeVisualText(line, 220))
+      .filter(Boolean)
+      .slice(0, 10);
+  }, [
+    activeHeadlineText,
+    activeTaglineText,
+    activeTheme.description,
+    activeTheme.label,
+    allianceHeaderLogos.length,
+    analysisProfile?.brandDescription,
+    analysisProfile?.businessFocus,
+    analysisProfile?.targetAudience,
+    autoBackdropHint,
+    currentStyle?.label,
+    currentTone?.label,
+    footerEmail,
+    footerWebsite,
+    hasReadyLogo,
+    normalizedBrandColors,
+    partnerName,
+    partnerTagline,
+    previewFeatureLines,
+    selectedPdfImage?.title,
+    selectedReferenceSummary?.detail,
+    selectedSiteImage?.source,
+    selectedThemeId,
+    themeUsesHeroReference,
+  ]);
+  const autoVisionBrief = useMemo(
+    () =>
+      selectionDrivenVisionLines.length > 0
+        ? `AUTO-FED AI DIRECTION:\n${selectionDrivenVisionLines.map((line) => `- ${line}`).join('\n')}`
+        : '',
+    [selectionDrivenVisionLines]
+  );
+  const effectiveVisionPrompt = useMemo(
+    () =>
+      [autoVisionBrief, hasUserVisionNotes ? `USER REFINEMENT:\n${customPrompt.trim()}` : '']
+        .filter(Boolean)
+        .join('\n\n')
+        .trim(),
+    [autoVisionBrief, customPrompt, hasUserVisionNotes]
+  );
+  const visionPreviewText = useMemo(
+    () =>
+      hasUserVisionNotes
+        ? customPrompt.trim()
+        : selectionDrivenVisionLines.slice(0, 4).join(' '),
+    [customPrompt, hasUserVisionNotes, selectionDrivenVisionLines]
+  );
   const themePaletteRoles = useMemo(
     () => [
       { label: 'Primary', value: derivedThemePalette.bgStart, hint: 'Main backgrounds and headings' },
@@ -3870,8 +4149,8 @@ export function ImageCreator({
       ? 'Confirm a post in Step 1 first.'
       : !activeHeadlineText && !confirmedPostText
         ? 'Add a headline or use the confirmed post headline.'
-        : isAiGuidedTheme && !customPrompt.trim()
-          ? 'Add Your Vision so AI Guided knows exactly what to build.'
+        : isAiGuidedTheme && !effectiveVisionPrompt
+          ? 'Add Your Vision or enough theme/client details so AI Guided knows what to build.'
         : themeUsesHeroReference && !selectedReferenceImage
           ? 'Choose a PDF image or uploaded reference for the hero visual.'
           : null;
@@ -5422,6 +5701,9 @@ export function ImageCreator({
             <h3 className="font-semibold text-sm text-slate-900">
               {isAiGuidedTheme ? 'Your Vision' : 'Creative Notes'} <span className="text-[10px] font-normal text-gray-400">(optional)</span>
             </h3>
+            <Badge className="border border-violet-200 bg-violet-100 text-violet-700 text-[9px]">
+              Selection-fed
+            </Badge>
             {isAiGuidedTheme && (
               <Badge className="border border-violet-200 bg-violet-100 text-violet-700 text-[9px]">
                 Primary driver for AI Guided
@@ -5438,6 +5720,29 @@ export function ImageCreator({
               </p>
             </div>
           )}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  AI Direction From Your Selections
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                  Theme, client category, logos, footer details, proof points, selected visuals, and palette are merged automatically.
+                </p>
+              </div>
+              <Badge className="border border-slate-200 bg-white text-slate-600 text-[9px]">
+                Auto
+              </Badge>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {selectionDrivenVisionLines.slice(0, 6).map((line, index) => (
+                <p key={`${line}-${index}`} className="text-[11px] leading-5 text-slate-800">
+                  <span className="mr-1 text-violet-500">•</span>
+                  {line}
+                </p>
+              ))}
+            </div>
+          </div>
           {confirmedPostImageBrief && (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-700">
@@ -5494,8 +5799,8 @@ export function ImageCreator({
 
           <p className="text-[10px] text-gray-400">
             {isAiGuidedTheme
-              ? 'Be explicit: subject, camera angle, environment, composition, lighting, text treatment, and any must-show product or logo details.'
-              : 'Be specific: mention subject, setting, layout, mood, and key visual elements. Reference a PDF image by name to auto-select it above.'}
+              ? 'You do not need to write everything manually. Add only the refinements: subject nuance, camera angle, environment, composition, lighting, or any must-show detail the auto brief missed.'
+              : 'Selections already feed the AI direction. Use this box only for extra refinements like scene mood, materials, camera angle, or what to avoid.'}
           </p>
         </Card>
 
@@ -5648,7 +5953,7 @@ export function ImageCreator({
               <p
                 className={`mt-1 text-[11px] font-medium ${
                   isAiGuidedTheme
-                    ? customPrompt.trim()
+                    ? effectiveVisionPrompt
                       ? 'text-emerald-700'
                       : 'text-amber-700'
                     : !themeUsesHeroReference || selectedReferenceImage
@@ -5657,9 +5962,11 @@ export function ImageCreator({
                 }`}
               >
                 {isAiGuidedTheme
-                  ? customPrompt.trim()
+                  ? hasUserVisionNotes
                     ? 'Ready'
-                    : 'Add details'
+                    : effectiveVisionPrompt
+                      ? 'Auto-built'
+                      : 'Add details'
                   : !themeUsesHeroReference
                     ? 'Template-managed'
                     : selectedReferenceImage
@@ -5835,7 +6142,7 @@ export function ImageCreator({
               selectedReferenceImage={selectedReferenceImage}
               hasPostContext={hasPostContext}
               slotAssignments={resolvedNonHeroSlotAssignments}
-              customPrompt={customPrompt}
+              customPrompt={visionPreviewText}
               selectedToneLabel={currentTone?.label}
               selectedStyleLabel={currentStyle?.label}
             />
