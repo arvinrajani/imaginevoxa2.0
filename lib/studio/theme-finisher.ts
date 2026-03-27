@@ -9,11 +9,15 @@ export type ThemeBrandFinisherInput = {
   primaryLogoBuffer?: Buffer | null;
   secondaryLogoBuffers?: Buffer[];
   brandName?: string;
+  headline?: string;
+  tagline?: string;
   partnerName?: string;
   partnerTagline?: string;
   footerWebsite?: string;
   footerEmail?: string;
   palette?: string[];
+  /** When true the theme-composer SVG already placed the primary logo — skip it here */
+  logoAlreadyPlaced?: boolean;
 };
 
 type PreparedImage = {
@@ -96,17 +100,82 @@ function buildFooterText(website: string, email: string, brandName: string) {
   return { left, right };
 }
 
+function wrapDisplayLines(value: string, maxChars: number, maxLines: number) {
+  const safe = sanitizeDisplayText(value, 220);
+  if (!safe) return [];
+
+  const words = safe.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+    } else {
+      lines.push(word.slice(0, maxChars));
+      current = word.slice(maxChars);
+    }
+
+    if (lines.length >= maxLines) break;
+  }
+
+  if (current && lines.length < maxLines) {
+    lines.push(current);
+  }
+
+  if (lines.length > maxLines) {
+    return lines.slice(0, maxLines);
+  }
+
+  if (words.length > 0 && lines.length === maxLines) {
+    const joined = lines.join(' ');
+    if (joined.length < safe.length && !lines[maxLines - 1].endsWith('...')) {
+      lines[maxLines - 1] = `${lines[maxLines - 1].replace(/[.]+$/, '')}...`;
+    }
+  }
+
+  return lines;
+}
+
+function buildCenteredTextBlock(options: {
+  lines: string[];
+  centerX: number;
+  startY: number;
+  fontSize: number;
+  lineHeight: number;
+  fill: string;
+  opacity?: number;
+  weight?: number;
+}) {
+  return options.lines
+    .map(
+      (line, index) =>
+        `<text x="${options.centerX}" y="${options.startY + index * options.lineHeight}" fill="${options.fill}"${typeof options.opacity === 'number' ? ` opacity="${options.opacity}"` : ''} font-family="Arial, Helvetica, sans-serif" font-size="${options.fontSize}" font-weight="${options.weight || 800}" text-anchor="middle">${escapeXml(line)}</text>`
+    )
+    .join('');
+}
+
 function buildAllianceOverlay(input: {
   width: number;
   height: number;
   primaryLogo: PreparedImage | null;
   secondaryLogos: PreparedImage[];
   brandName: string;
+  headline: string;
+  tagline: string;
   partnerName: string;
   partnerTagline: string;
   footerWebsite: string;
   footerEmail: string;
   palette?: string[];
+  logoAlreadyPlaced?: boolean;
 }) {
   const { bgStart, bgEnd, accent, support, text, footer, headerPanel, surface, muted } =
     deriveStudioPalette(input.palette);
@@ -130,6 +199,10 @@ function buildAllianceOverlay(input: {
   );
   const safePartnerName = sanitizeDisplayText(input.partnerName, 28);
   const safePartnerTagline = sanitizeDisplayText(input.partnerTagline, 42);
+  const safeHeadline = sanitizeDisplayText(input.headline, 120);
+  const safeTagline = sanitizeDisplayText(input.tagline, 84);
+  const headlineLines = wrapDisplayLines(safeHeadline, w >= 1100 ? 28 : 22, 2);
+  const taglineLines = safeTagline ? wrapDisplayLines(safeTagline, w >= 1100 ? 42 : 32, 1) : [];
   const logos = input.secondaryLogos.slice(0, 3);
   const logoGap = Math.round(w * 0.008);
   const logoCardH = Math.round(h * 0.056);
@@ -154,6 +227,16 @@ function buildAllianceOverlay(input: {
   const partnerTextY = logos.length > 0
     ? logoCardY + logoCardH + Math.round(h * 0.02)
     : rightCardY + Math.round(h * 0.045);
+  const headlineZoneX = leftCardX + leftCardW + Math.round(w * 0.028);
+  const headlineZoneW = Math.max(Math.round(w * 0.18), rightCardX - headlineZoneX - Math.round(w * 0.02));
+  const headlineCenterX = headlineZoneX + Math.round(headlineZoneW / 2);
+  const headlineFontSize = Math.max(24, Math.round(w * 0.024));
+  const headlineLineHeight = Math.max(28, Math.round(headlineFontSize * 1.06));
+  const headlineTopY =
+    headerH > 88
+      ? Math.round(headerH * (headlineLines.length > 1 ? 0.42 : 0.5))
+      : Math.round(headerH * 0.48);
+  const taglineStartY = headlineTopY + headlineLineHeight * headlineLines.length + Math.round(h * 0.014);
 
   return svg(
     w,
@@ -168,11 +251,19 @@ function buildAllianceOverlay(input: {
           <stop offset="0%" stop-color="${footer}" stop-opacity="0.92" />
           <stop offset="100%" stop-color="${accent}" stop-opacity="0.86" />
         </linearGradient>
+        <linearGradient id="headlineGlow" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="${surface}" stop-opacity="0.04" />
+          <stop offset="50%" stop-color="${surface}" stop-opacity="0.16" />
+          <stop offset="100%" stop-color="${surface}" stop-opacity="0.04" />
+        </linearGradient>
       </defs>
       <rect x="0" y="0" width="${w}" height="${headerH}" fill="url(#headerFill)" />
       <rect x="0" y="${h - footerH}" width="${w}" height="${footerH}" fill="url(#footerFill)" />
       <rect x="0" y="${headerH}" width="${w}" height="2" fill="${support}" fill-opacity="0.34" />
-      <rect x="${leftCardX}" y="${leftCardY}" width="${leftCardW}" height="${leftCardH}" rx="16" fill="${surface}" fill-opacity="0.98" />
+      <rect x="${headlineZoneX}" y="${Math.round(h * 0.018)}" width="${headlineZoneW}" height="${Math.round(headerH * 0.76)}" rx="16" fill="url(#headlineGlow)" />
+      <rect x="${leftCardX + leftCardW + Math.round(w * 0.012)}" y="${Math.round(h * 0.03)}" width="${Math.round(w * 0.006)}" height="${Math.round(headerH * 0.62)}" rx="999" fill="${accent}" fill-opacity="0.72" transform="skewX(-18)" />
+      <rect x="${rightCardX - Math.round(w * 0.018)}" y="${Math.round(h * 0.03)}" width="${Math.round(w * 0.006)}" height="${Math.round(headerH * 0.62)}" rx="999" fill="${support}" fill-opacity="0.72" transform="skewX(-18)" />
+      ${!input.logoAlreadyPlaced ? `<rect x="${leftCardX}" y="${leftCardY}" width="${leftCardW}" height="${leftCardH}" rx="16" fill="${surface}" fill-opacity="0.98" />
       ${buildLogoNode(
         input.primaryLogo,
         leftCardX + 10,
@@ -181,7 +272,26 @@ function buildAllianceOverlay(input: {
         leftCardH - 20,
         input.brandName,
         bgStart
-      )}
+      )}` : ''}
+      ${headlineLines.length > 0 ? buildCenteredTextBlock({
+        lines: headlineLines,
+        centerX: headlineCenterX,
+        startY: headlineTopY,
+        fontSize: headlineFontSize,
+        lineHeight: headlineLineHeight,
+        fill: text,
+        weight: 900,
+      }) : ''}
+      ${taglineLines.length > 0 ? buildCenteredTextBlock({
+        lines: taglineLines,
+        centerX: headlineCenterX,
+        startY: taglineStartY,
+        fontSize: Math.max(12, Math.round(w * 0.0128)),
+        lineHeight: Math.max(15, Math.round(h * 0.026)),
+        fill: text,
+        opacity: 0.94,
+        weight: 700,
+      }) : ''}
       <rect x="${rightCardX}" y="${rightCardY}" width="${rightCardW}" height="${rightCardH}" rx="16" fill="${headerPanel}" fill-opacity="0.74" stroke="${muted}" stroke-opacity="0.18" />
       ${secondaryLogoNodes}
       ${safePartnerName ? `<text x="${rightCardX + rightCardW / 2}" y="${partnerTextY}" fill="${text}" font-family="Arial, Helvetica, sans-serif" font-size="${Math.round(w * 0.021)}" font-weight="800" text-anchor="middle">${escapeXml(safePartnerName)}</text>` : ''}
@@ -192,7 +302,7 @@ function buildAllianceOverlay(input: {
   );
 }
 
-function buildGenericOverlay(input: {
+function buildRibbonOverlay(input: {
   width: number;
   height: number;
   primaryLogo: PreparedImage | null;
@@ -202,13 +312,15 @@ function buildGenericOverlay(input: {
   footerWebsite: string;
   footerEmail: string;
   palette?: string[];
+  logoAlreadyPlaced?: boolean;
 }) {
   const { bgStart, bgEnd, accent, text, headerPanel, surface, muted } =
     deriveStudioPalette(input.palette);
   const w = input.width;
   const h = input.height;
+  const headerH = Math.round(h * 0.108);
   const logoCardX = Math.round(w * 0.026);
-  const logoCardY = Math.round(h * 0.03);
+  const logoCardY = Math.round(h * 0.022);
   const logoCardW = Math.round(w * 0.17);
   const logoCardH = Math.round(h * 0.082);
   const badgeW = Math.round(w * 0.14);
@@ -228,12 +340,18 @@ function buildGenericOverlay(input: {
     h,
     `
       <defs>
+        <linearGradient id="ribbonHeader" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="${bgStart}" stop-opacity="0.9" />
+          <stop offset="100%" stop-color="${bgEnd}" stop-opacity="0.72" />
+        </linearGradient>
         <linearGradient id="genericFooter" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stop-color="${bgStart}" stop-opacity="0.86" />
           <stop offset="100%" stop-color="${bgEnd}" stop-opacity="0.72" />
         </linearGradient>
       </defs>
-      <rect x="${logoCardX}" y="${logoCardY}" width="${logoCardW}" height="${logoCardH}" rx="16" fill="${surface}" fill-opacity="0.96" />
+      <rect x="0" y="0" width="${w}" height="${headerH}" fill="url(#ribbonHeader)" />
+      <rect x="0" y="${headerH}" width="${w}" height="2" fill="${accent}" fill-opacity="0.38" />
+      ${!input.logoAlreadyPlaced ? `<rect x="${logoCardX}" y="${logoCardY}" width="${logoCardW}" height="${logoCardH}" rx="16" fill="${surface}" fill-opacity="0.96" />
       ${buildLogoNode(
         input.primaryLogo,
         logoCardX + 8,
@@ -242,7 +360,7 @@ function buildGenericOverlay(input: {
         logoCardH - 16,
         input.brandName,
         bgStart
-      )}
+      )}` : ''}
       ${(secondaryLogo || safePartnerName) ? `
         <rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="14" fill="${headerPanel}" fill-opacity="0.78" stroke="${muted}" stroke-opacity="0.16" />
         ${secondaryLogo
@@ -273,20 +391,23 @@ export async function applyThemeBrandFinisher(input: ThemeBrandFinisherInput) {
   ]);
 
   const overlay =
-    input.themeId === 'alliance-poster'
+    ['alliance-poster', 'industrial-campaign'].includes(input.themeId)
       ? buildAllianceOverlay({
           width: input.width,
           height: input.height,
           primaryLogo,
           secondaryLogos: secondaryLogos.filter(Boolean) as PreparedImage[],
           brandName: input.brandName || '',
+          headline: input.headline || '',
+          tagline: input.tagline || '',
           partnerName: input.partnerName || '',
           partnerTagline: input.partnerTagline || '',
           footerWebsite: input.footerWebsite || '',
           footerEmail: input.footerEmail || '',
           palette: input.palette,
+          logoAlreadyPlaced: input.logoAlreadyPlaced,
         })
-      : buildGenericOverlay({
+      : buildRibbonOverlay({
           width: input.width,
           height: input.height,
           primaryLogo,
@@ -296,6 +417,7 @@ export async function applyThemeBrandFinisher(input: ThemeBrandFinisherInput) {
           footerWebsite: input.footerWebsite || '',
           footerEmail: input.footerEmail || '',
           palette: input.palette,
+          logoAlreadyPlaced: input.logoAlreadyPlaced,
         });
 
   return sharp(input.baseImageBuffer)

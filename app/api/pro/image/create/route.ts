@@ -6,6 +6,8 @@ import sharp from 'sharp';
 import { composeAlliancePoster } from '@/lib/studio/alliance-poster';
 import { composeThemeImage, THEME_SCHEMAS } from '@/lib/studio/theme-composer';
 import { applyThemeBrandFinisher } from '@/lib/studio/theme-finisher';
+import { resolveServerScene } from '@/lib/studio/industry-scenes';
+import { buildVoxaPromptPackage } from '@/lib/studio/voxa-prompt-spec';
 
 type CreateImageRequest = {
   brandId?: string;
@@ -204,47 +206,27 @@ function deriveSceneBrief(options: {
   postText?: string;
   postImagePrompt?: string;
   contextBrief?: string;
+  industry?: string | null;
+  businessFocus?: string | null;
 }) {
-  const raw = `${options.productName || ''} ${options.headline || ''} ${options.postImagePrompt || ''} ${options.postText || ''} ${options.contextBrief || ''}`.toLowerCase();
+  // Priority: explicit industry field → businessFocus → keyword match against all text
+  const fallbackText = `${options.productName || ''} ${options.headline || ''} ${options.postImagePrompt || ''} ${options.postText || ''} ${options.contextBrief || ''}`;
+  const matched = resolveServerScene(
+    options.industry,
+    options.businessFocus,
+    fallbackText
+  );
 
-  const sceneByKeyword: Array<{ keywords: string[]; scene: string }> = [
-    {
-      keywords: ['energy', 'power', 'distribution', 'utility', 'grid', 'solar', 'industrial'],
-      scene:
-        'A realistic business-energy scene with infrastructure context: professionals reviewing live distribution dashboards and modern industrial assets in the background.',
-    },
-    {
-      keywords: ['saas', 'software', 'platform', 'product', 'ai', 'automation', 'data', 'analytics'],
-      scene:
-        'A realistic tech workspace scene: professionals collaborating around analytics screens, product UI context, clear subject depth, and modern office detail.',
-    },
-    {
-      keywords: ['finance', 'bank', 'invest', 'fintech', 'wealth', 'capital'],
-      scene:
-        'A realistic finance business scene: executive discussion with clear financial dashboard visuals and premium corporate environment.',
-    },
-    {
-      keywords: ['health', 'medical', 'clinic', 'hospital', 'care', 'wellness'],
-      scene:
-        'A realistic healthcare innovation scene: professionals in a clean clinical environment with modern devices and trust-focused composition.',
-    },
-    {
-      keywords: ['logistics', 'supply', 'warehouse', 'shipping', 'transport'],
-      scene:
-        'A realistic logistics operations scene: organized warehouse or shipping workflow with strong leading lines and clear operational subject.',
-    },
-    {
-      keywords: ['education', 'learning', 'course', 'training', 'students'],
-      scene:
-        'A realistic professional learning scene: presenter/instructor and learners with clear visual aids and focused collaboration.',
-    },
-  ];
-
-  const matched =
-    sceneByKeyword.find((entry) => entry.keywords.some((keyword) => raw.includes(keyword)))?.scene ||
-    'A realistic professional business scene with a clear subject, purposeful environment context, and strong visual depth.';
-
-  return `${matched} Keep the scene concrete and identifiable, never abstract-only. ${options.brandName ? `Reflect ${options.brandName} brand personality.` : ''} ${options.productName ? `Highlight product context: ${options.productName}.` : ''}`.trim();
+  const parts: string[] = [matched];
+  if (options.brandName) {
+    parts.push(`Reflect ${options.brandName} brand personality in the environment and lighting.`);
+  }
+  if (options.productName) {
+    parts.push(`Highlight product context: ${options.productName}.`);
+  }
+  parts.push('Keep the scene concrete and identifiable, never abstract-only.');
+  parts.push('Avoid: generic gradients, blurred bokeh-only backgrounds, stock photography feel, empty color washes. The background must look like it was shot on location for this specific brand.');
+  return parts.join(' ');
 }
 
 function describeThemeShape(shape: 'rect' | 'circle' | 'rounded-rect') {
@@ -617,6 +599,105 @@ function buildAiThemeStructureGuide(themeId: string, hasStructuredBranding: bool
   ];
 
   return [...shared, ...themeSpecific].join('\n');
+}
+
+function buildStructuredBrandContentGuide(options: {
+  themeId: string;
+  brandName: string;
+  headline: string;
+  tagline: string;
+  partnerName: string;
+  partnerTagline: string;
+  footerWebsite: string;
+  footerEmail: string;
+  hasPrimaryLogo: boolean;
+  secondaryLogoCount: number;
+}) {
+  const brandName = options.brandName.trim();
+  const headline = options.headline.trim();
+  const tagline = options.tagline.trim();
+  const partnerName = options.partnerName.trim();
+  const partnerTagline = options.partnerTagline.trim();
+  const footerWebsite = options.footerWebsite.trim();
+  const footerEmail = options.footerEmail.trim();
+  const hasPartnerLockup = options.secondaryLogoCount > 0 || Boolean(partnerName || partnerTagline);
+
+  const lines = [
+    'USER-SELECTED BRAND CONTENT (DO NOT IGNORE OR REPLACE):',
+    options.hasPrimaryLogo
+      ? `- Primary brand mark: exact selected main logo for "${brandName || 'the brand'}". Leave a clean, premium lane for it.`
+      : brandName
+      ? `- Primary brand text reference: "${brandName}". If the brand name appears, spell it exactly.`
+      : null,
+    headline
+      ? `- Selected headline: "${headline}". Treat this as the primary message, not optional filler.`
+      : null,
+    tagline
+      ? `- Selected supporting line: "${tagline}". Use it only if it stays large and readable.`
+      : null,
+    hasPartnerLockup
+      ? `- Partner/header lockup: ${[
+          options.secondaryLogoCount > 0 ? `${options.secondaryLogoCount} selected partner logo(s)` : null,
+          partnerName ? `partner name "${partnerName}"` : null,
+          partnerTagline ? `partner line "${partnerTagline}"` : null,
+        ]
+          .filter(Boolean)
+          .join(', ')}.`
+      : null,
+    footerWebsite || footerEmail
+      ? `- Footer/contact lockup: ${[footerWebsite, footerEmail].filter(Boolean).join(' | ')}. Keep this information exact and readable.`
+      : null,
+    '- Never replace selected footer details with fake placeholders, random domains, or invented contact information.',
+  ].filter(Boolean) as string[];
+
+  const themeSpecificMap: Record<string, string[]> = {
+    'alliance-poster': [
+      '- For Alliance Poster: place the primary logo on the left side of the top brand band, the main headline in the center of that band, the partner lockup on the right, the hero product on the left body zone, and proof bullets on the right body zone.',
+      '- Do not move the main headline into a competing oversized body block if the top band structure is active.',
+      '- The body should support the headline band, not fight it.',
+    ],
+    'industrial-campaign': [
+      '- For Industrial Campaign: keep a disciplined top brand/header band with the primary logo left, partner/header details right, and the selected headline treated as the dominant campaign message.',
+      '- Use the left body as the prestige product bay and the right body as the proof/message lane.',
+    ],
+    'clean-brand': [
+      '- For Clean Brand: keep the brand/header treatment restrained and elegant, with the narrative headline on the left and the hero visual on the right.',
+    ],
+    'knowledge-visual': [
+      '- For Knowledge Visual: keep the primary brand mark in the top-left, the reference or evidence panel fills the left side, and the headline/insight text fills the right column.',
+    ],
+    'product-hero': [
+      '- For Product Hero: the brand mark sits in a corner zone, the product is the uncontested center hero, and the headline sits cleanly below or beside it — never compete with the product.',
+    ],
+    'datasheet-frame': [
+      '- For Datasheet Frame: the brand mark and product name anchor the top-left, the product fills the main left panel, and spec/info modules fill the right grid — keep it precise and brochure-clean.',
+    ],
+    'proof-stack': [
+      '- For Proof Stack: keep the brand mark visible in the header, the proof cards on the left stacked clearly, and the narrative panel on the right with the headline and supporting context.',
+    ],
+    'launch-banner': [
+      '- For Launch Banner: the brand mark is in the top-left corner, the dominant announcement headline is centered and large, and no second competing headline block should appear elsewhere.',
+    ],
+    'job-posting': [
+      '- For Job Posting: the brand mark is at the top-left inside the accent header band, the role title is the primary headline on the left column, and the workplace image is on the right.',
+      '- Keep the footer website/contact detail exact — never invent a URL or email address.',
+    ],
+    'hiring-banner': [
+      '- For Hiring Banner: the brand mark is in the header zone, the WE\'RE HIRING badge is centered near the top, the role title is the dominant centered headline, and only one CTA button appears.',
+    ],
+    'team-spotlight': [
+      '- For Team Spotlight: the brand mark is in the top-left header zone, the circular team image anchors the left body, and the JOIN OUR TEAM copy fills the right column.',
+    ],
+    'career-growth': [
+      '- For Career Growth: the brand mark is in the top-left header zone, the career opportunity label and headline are on the left, numbered benefit cards stack below them, and the workplace image is on the right.',
+    ],
+  };
+
+  const themeSpecific = themeSpecificMap[options.themeId] || [
+    '- Keep the selected brand/logo/header/footer details inside clean, premium lanes instead of scattering them randomly across the poster.',
+  ];
+
+  return [...lines, ...themeSpecific].join('\n');
 }
 
 function buildVariationDirective(nonce: number, themeId: string) {
@@ -1100,7 +1181,6 @@ export async function POST(request: Request) {
     const isAlliancePoster = themeId === 'alliance-poster';
     const isAiGuided = themeId === 'guided-auto';
     const hasThemeComposition = Boolean(THEME_SCHEMAS[themeId]);
-    const aiOwnsFullPoster = isAiGuided || hasThemeComposition || isAlliancePoster;
     const shouldUseLegacyThemeComposer = process.env.LEGACY_THEME_COMPOSER === '1';
     const effectiveBrandColors = requestedBrandColors.length
       ? requestedBrandColors
@@ -1108,6 +1188,7 @@ export async function POST(request: Request) {
     const analyzedTagline = marketingDnaContext?.tagline || '';
     const displayTagline = (body.tagline?.trim() || derived.tagline || analyzedTagline).slice(0, 120);
     const analyzedContextLines = [
+      asTrimmedString(brandRow?.industry) ? `- Industry: ${asTrimmedString(brandRow?.industry)} (USE THIS TO DRIVE SCENE AND BACKGROUND CHOICES)` : null,
       marketingDnaContext?.brandDescription ? `- Brand summary: ${marketingDnaContext.brandDescription}` : null,
       marketingDnaContext?.businessFocus ? `- Business focus: ${marketingDnaContext.businessFocus}` : null,
       marketingDnaContext?.targetAudience ? `- Target audience: ${marketingDnaContext.targetAudience}` : null,
@@ -1120,7 +1201,6 @@ export async function POST(request: Request) {
       marketingDnaContext?.contentPillars.length ? `- Content pillars: ${marketingDnaContext.contentPillars.join(', ')}` : null,
       marketingDnaContext?.keyOfferings.length ? `- Key offerings: ${marketingDnaContext.keyOfferings.join(', ')}` : null,
       marketingDnaContext?.website ? `- Website: ${marketingDnaContext.website}` : null,
-      asTrimmedString(brandRow?.industry) ? `- Industry: ${asTrimmedString(brandRow?.industry)}` : null,
     ]
       .filter(Boolean)
       .join('\n');
@@ -1149,14 +1229,19 @@ export async function POST(request: Request) {
       .slice(0, 6);
     const composedFooterWebsite = sanitizeDisplayText(posterFooterWebsite, 72);
     const composedFooterEmail = sanitizeDisplayText(posterFooterEmail, 72);
-    const hasStructuredBrandSelections =
-      aiOwnsFullPoster &&
-      !shouldUseLegacyThemeComposer &&
-      (
-        (hasLogo && effectiveLogoPlacement !== 'none') ||
-        additionalLogoUrls.length > 0 ||
-        Boolean(composedFooterWebsite || composedFooterEmail || partnerName || partnerTagline)
-      );
+    // ── Overlay strategy ──────────────────────────────────────────────────
+    // Determine which post-processing layers will composite text/logos/panels
+    // on top of the AI base image. This drives the prompt: when overlays run,
+    // the AI must generate a background plate only — no text, no logos.
+    const hasBrandOverlayContent =
+      (hasLogo && effectiveLogoPlacement !== 'none') ||
+      additionalLogoUrls.length > 0 ||
+      Boolean(composedFooterWebsite || composedFooterEmail || partnerName || partnerTagline);
+    const willApplyThemeOverlay = shouldUseLegacyThemeComposer && (hasThemeComposition || isAlliancePoster);
+    const willApplyBrandFinisher = !shouldUseLegacyThemeComposer && hasBrandOverlayContent && (hasThemeComposition || isAlliancePoster);
+    // AI owns the full poster only when NO overlay composites text/logos/panels on top
+    const aiOwnsFullPoster = isAiGuided || (!willApplyThemeOverlay && !willApplyBrandFinisher);
+    const hasStructuredBrandSelections = willApplyBrandFinisher;
 
     // Determine render size from aspect ratio
     const sizeMap: Record<string, string> = {
@@ -1255,18 +1340,72 @@ export async function POST(request: Request) {
       postImagePrompt: safePostImagePrompt,
       postText,
       contextBrief: safeContextBrief,
+      industry: brandRow?.industry?.trim() || null,
+      businessFocus: marketingDnaContext?.businessFocus || null,
     });
 
     const postContext = postText.replace(/\s+/g, ' ').trim().slice(0, 1200);
-    const selectedTheme = aiOwnsFullPoster
-      ? buildAiThemePosterGuide(themeId)
-      : buildThemeDirective(themeId);
+    const voxaPromptPackage = buildVoxaPromptPackage({
+      themeId,
+      format: imageAspect,
+      aiOwnsFullPoster,
+      hasStructuredBranding: hasStructuredBrandSelections,
+      brandColors: effectiveBrandColors,
+      brandName: safeBrandName,
+      productName: safeProductName,
+      headline: safeHeadline,
+      tagline: safeTagline,
+      benefits: composedFeatureBullets,
+      contextBrief: safeContextBrief,
+      customPrompt: safeCustomPrompt,
+      sceneBrief,
+      industry: brandRow?.industry?.trim() || marketingDnaContext?.businessFocus || null,
+      website: composedFooterWebsite,
+      email: composedFooterEmail,
+      partnerName,
+      partnerTagline,
+      hasPrimaryLogo: Boolean(hasLogo && effectiveLogoPlacement !== 'none'),
+      secondaryLogoCount: additionalLogoUrls.length,
+      hasReferenceImage: Boolean(referenceImageUrl),
+      referenceSummary: semanticAnchor,
+    });
+
+    if (voxaPromptPackage.preflight.supported && voxaPromptPackage.preflight.errors.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'VOXA preflight failed',
+          details: voxaPromptPackage.preflight.errors,
+          warnings: voxaPromptPackage.preflight.warnings,
+          preflight: voxaPromptPackage.preflight,
+        },
+        { status: 400 }
+      );
+    }
+
+    const selectedTheme =
+      voxaPromptPackage.themeGuide ||
+      (aiOwnsFullPoster ? buildAiThemePosterGuide(themeId) : buildThemeDirective(themeId));
     const variationDirective = buildVariationDirective(generationNonce, themeId);
     const variationSalt = `${generationNonce}-${Date.now().toString(36).slice(-6)}`;
     const themeSlotGuidance = hasThemeComposition ? buildThemeSlotGuidance(themeId) : '';
     const aiStructureGuide = aiOwnsFullPoster
       ? buildAiThemeStructureGuide(themeId, hasStructuredBrandSelections)
       : '';
+    const structuredBrandContentGuide =
+      aiOwnsFullPoster && hasStructuredBrandSelections
+        ? buildStructuredBrandContentGuide({
+            themeId,
+            brandName: safeBrandName,
+            headline: safeHeadline,
+            tagline: safeTagline,
+            partnerName,
+            partnerTagline,
+            footerWebsite: composedFooterWebsite,
+            footerEmail: composedFooterEmail,
+            hasPrimaryLogo: Boolean(hasLogo && effectiveLogoPlacement !== 'none'),
+            secondaryLogoCount: additionalLogoUrls.length,
+          })
+        : '';
     const themeSelectionGuidance =
       hasThemeComposition || isAlliancePoster
         ? buildThemeSelectionGuidance({
@@ -1276,6 +1415,9 @@ export async function POST(request: Request) {
             referenceAsHero,
           })
         : '';
+    const voxaPromptBlock = voxaPromptPackage.supported ? voxaPromptPackage.positivePrompt : '';
+    const voxaNegativePrompt = voxaPromptPackage.supported ? voxaPromptPackage.negativePrompt : '';
+    const voxaQualityGate = voxaPromptPackage.supported ? voxaPromptPackage.qualityGate : '';
 
     const imagePrompt = `
 You are an elite creative director and visual designer who has art-directed campaigns for Fortune 500 brands. You specialize in LinkedIn visual content that stops the scroll and drives engagement.
@@ -1295,6 +1437,7 @@ ${aiOwnsFullPoster ? `- The selected theme is a COMPOSITION BRIEF for the final 
 - The finished image must already look LinkedIn-ready with no extra design pass required.
 - Selected visuals, logos, and proof lines are real content inputs. They must visibly shape the final poster instead of being ignored or reduced to background texture.
 - Keep every element inside disciplined safe margins with clean spacing. No footer collisions, no bullet overflow, no cramped typography, no fake template feel.
+- If the theme uses a top header band or locked brand/footer lanes, compose around them on purpose. Do not put a second giant competing headline or stray logo system elsewhere in the frame.
 - This is a LinkedIn campaign/editorial poster, not an ecommerce banner. Avoid retail "shop now" aesthetics, coupon energy, and cheap CTA-button styling unless the chosen hiring theme genuinely needs a restrained recruitment action cue.
 - Build depth, lighting, and atmosphere that feel expensive and custom-made. Avoid flat dead gradients, empty color washes, or generic blurred nothingness.` : `- Your image will be placed INSIDE the theme layout as the hero visual content.
 - A structured SVG overlay will be composited on top, adding panels, text, logos, chips, labels, and layout around your image.
@@ -1309,7 +1452,24 @@ ${hasThemeComposition || isAlliancePoster ? `
 - Create premium atmosphere, depth, and lighting that makes the final composed poster feel intentional, not like a stock image with a template dropped on top.
 - Preserve a clear relationship between the likely hero zone and the likely text-safe zone: one side may carry richer environmental detail, while the text side stays calmer, deeper, and easier to read over.
 - Avoid flat dead gradients, empty color washes, or generic blurred nothingness. The plate must have richness, texture, and believable visual storytelling.
-` : ''}`}
+` : ''}
+
+=== SVG OVERLAY AWARENESS (READ THIS CAREFULLY) ===
+A structured SVG overlay WILL be composited on top of your output containing ALL text, logos, panels, bullets, and branding.
+Your job is ONLY to generate the background scene and hero subject.
+Do NOT add any text, title cards, logo zones, bullet points, lower thirds, or panel graphics to the image.
+Generate a clean, rich, atmospheric background with a strong hero subject in the designated zone.
+Leave the top 14% of the frame clean and calm for the header band.
+Leave the left or right 45% relatively calm for text panels.
+The SVG overlay will handle all typography and branding.
+If you render text, logos, panels, cards, or UI chrome, they will COLLIDE with the overlay and produce a broken double-layered mess.
+=== END SVG OVERLAY AWARENESS ===
+`}
+
+${safeCustomPrompt ? `CREATIVE BRIEF (HIGHEST PRIORITY):
+"${safeCustomPrompt}"
+This is the primary creative direction. Use it to drive scene choice, composition, and mood. All structural constraints below must serve this brief.
+` : ''}
 
 ${themeSlotGuidance ? `THEME SLOT MAP:
 ${themeSlotGuidance}
@@ -1354,6 +1514,18 @@ ${safeProductName ? `\nPRODUCT: "${safeProductName}" — if the product appears 
 ═══════════════════════════════════════════════════
 ` : ''}
 
+${effectiveBrandColors.length > 0 ? `=== BRAND COLOR MANDATE — HIGHEST PRIORITY ===
+Primary palette: ${effectiveBrandColors.join(', ')}
+- The background environment must contain these colors in gradients, surfaces, lighting, and materials
+- Panel fills must use these colors at varying opacities (100%, 70%, 40%)
+- If a color is dark navy (#050d1a style), build a dark cinematic scene — do NOT generate a light/white background
+- If a color is warm red (#cc2200 style), drive warm industrial or energetic lighting into the scene
+- Neutral or white brand colors → clean minimal light background with brand accent used in architectural or product details
+- At least 60% of the visible canvas must reflect the brand palette — no exceptions
+- NEVER fall back to generic blue, purple, gold, or teal unless those exact hex values are in the palette above
+=== END MANDATE ===
+` : ''}
+
 ${analyzedContextLines ? `BRAND INTELLIGENCE (use this to inform every design decision):
 ${analyzedContextLines}
 This is the brand's DNA. Every color choice, composition style, and visual element should feel native to this brand.
@@ -1367,9 +1539,7 @@ ${safeContextBrief ? `USER CONTEXT (TREAT THIS LIKE THE MAIN CHATGPT-STYLE REQUE
 "${safeContextBrief}"
 Use this as the main explanation of what the user wants the picture to communicate and what must be shown.\n` : ''}
 
-${safeCustomPrompt ? `USER IMAGE REQUEST (CREATIVE REFINEMENT):
-"${safeCustomPrompt}"
-Use this to refine the scene, angle, composition, and mood while staying aligned with the post generator brief and confirmed post.\n` : ''}
+${'' /* safeCustomPrompt moved to CREATIVE BRIEF block before theme slot guidance */}
 
 ${isAiGuided ? `AI GUIDED MODE (PRIMARY BEHAVIOR):
 - There is NO fixed poster/template overlay for this request.
@@ -1389,7 +1559,18 @@ ${aiOwnsFullPoster && !isAiGuided ? `AI THEME POSTER MODE (PRIMARY BEHAVIOR):
 - Make the selected visual assets visible and celebrated. If a product/reference image exists, it should be a real recognizable hero or support visual in the poster.
 - Keep text disciplined: headline first, tagline optional, 2-4 proof bullets maximum, and only include footer/contact info if it remains readable.
 - Do not let bullet stacks, footer text, or logos collide with the canvas edge or each other.
+- If a theme-specific top brand band exists, treat that header as the primary home for the brand lockup and core campaign headline. Do not render a second competing billboard headline elsewhere unless the composition clearly needs a smaller echo.
 ${hasStructuredBrandSelections ? '- The exact selected logos, partner marks, and footer/contact details will be locked in afterward. Compose around those reserved brand lanes instead of improvising duplicate lockups elsewhere.\n' : '\n'}` : ''}
+
+${structuredBrandContentGuide ? `${structuredBrandContentGuide}\n` : ''}
+
+${voxaPromptBlock ? `VOXA MASTER PROMPT SPEC:
+${voxaPromptBlock}
+` : ''}
+
+${voxaQualityGate ? `VOXA QUALITY GATE:
+${voxaQualityGate}
+` : ''}
 
 CONTENT CONTEXT:
 ${postContext || 'Use the provided headline and tagline as the post message.'}
@@ -1451,7 +1632,8 @@ ${(hasThemeComposition || isAlliancePoster) && referenceImageUrl ? (aiOwnsFullPo
 - Design the atmosphere, lighting, and environment to make the product feel at home and prestigious.
 - The product sits in the LEFT hero zone — create background texture and lighting that gives it context and weight.
 - The RIGHT zone (text area) must remain dark and atmospheric so white text reads clearly over it.
-- Match the industrial, technical, or environmental character of the product type described in the post context above.`) : ''}
+- Match the industrial, technical, or environmental character of the product type described in the post context above.
+- HARD CONSTRAINT: The user has selected a specific reference image as the hero subject. Do NOT invent a new hero. Instead: use the composition, subject, and core visual from the reference. Improve its lighting, crop to the theme's hero zone, enhance color depth to match the brand palette, and sharpen the staging. The reference image IS the product/hero — treat it as ground truth.`) : ''}
 SCENE CONSTRUCTION (MANDATORY):
 - ${sceneBrief}
 - Every image needs a clear HERO ELEMENT (the main visual subject) and SUPPORTING CONTEXT (environment, props, or secondary elements that reinforce the story).
@@ -1517,6 +1699,10 @@ QUALITY STANDARD (NON-NEGOTIABLE):
 - The image should trigger the viewer to stop scrolling within 0.3 seconds.
 - All visible text must be perfectly spelled, properly kerned, and clearly legible.
 - Color accuracy: brand colors must match the hex values provided — no approximations.
+
+${voxaNegativePrompt ? `VOXA NEGATIVE PROMPT (ABSOLUTE AVOIDS):
+- ${voxaNegativePrompt}
+` : ''}
 
 ABSOLUTE PROHIBITIONS:
 - Blurry, soft-focus, or low-resolution output
@@ -1674,7 +1860,8 @@ CRITICAL BRAND-LANE RULES:
 2. Keep those reserved brand lanes clean and supportive — do NOT place critical subject matter, dense props, or competing text inside them.
 3. Do NOT invent duplicate floating logos, alternate brand badges, extra footer strips, or off-theme corner stamps outside the reserved structure.
 4. If you show any brand presence yourself, it must align with the same reserved header/footer logic and never fight the final brand lockup.
-5. Brand name reference: "${effectiveBrandName || 'Brand'}". Keep spelling exact anywhere it appears.`
+5. If a selected headline or supporting line exists, keep the header lane calm enough that it can be locked in cleanly afterward without collisions.
+6. Brand name reference: "${effectiveBrandName || 'Brand'}". Keep spelling exact anywhere it appears.`
           : `\n\nLOGO INTEGRATION — THIS IS THE #1 PRIORITY:
 You have been given the brand's logo as a reference image. You MUST faithfully reproduce this exact logo inside the generated image as a core, beautiful element of the design.
 
@@ -2016,7 +2203,7 @@ FINAL QUALITY FALLBACK (MANDATORY):
     }
 
     const shouldApplyThemeFinisher =
-      hasStructuredBrandSelections &&
+      willApplyBrandFinisher &&
       (
         (hasLogo && effectiveLogoPlacement !== 'none' && Boolean(primaryLogoBuffer)) ||
         posterSecondaryLogoBuffers.length > 0 ||
@@ -2032,11 +2219,14 @@ FINAL QUALITY FALLBACK (MANDATORY):
         primaryLogoBuffer,
         secondaryLogoBuffers: posterSecondaryLogoBuffers,
         brandName: composedBrandName,
+        headline: composedHeadline,
+        tagline: composedTagline,
         partnerName,
         partnerTagline,
         footerWebsite: composedFooterWebsite,
         footerEmail: composedFooterEmail,
         palette: effectiveBrandColors,
+        logoAlreadyPlaced: willApplyThemeOverlay,
       });
 
       logoApplied =
@@ -2110,6 +2300,21 @@ FINAL QUALITY FALLBACK (MANDATORY):
               analyzed_image_style: marketingDnaContext?.imageStyle || null,
               analyzed_content_pillars: marketingDnaContext?.contentPillars || [],
               analyzed_target_audience: marketingDnaContext?.targetAudience || null,
+              voxa_theme_id: voxaPromptPackage.preflight.supported
+                ? voxaPromptPackage.preflight.themeId
+                : null,
+              voxa_theme_label: voxaPromptPackage.preflight.supported
+                ? voxaPromptPackage.preflight.themeLabel
+                : null,
+              voxa_preflight_score: voxaPromptPackage.preflight.supported
+                ? voxaPromptPackage.preflight.score
+                : null,
+              voxa_preflight_passed: voxaPromptPackage.preflight.supported
+                ? voxaPromptPackage.preflight.passed
+                : null,
+              voxa_preflight_warnings: voxaPromptPackage.preflight.supported
+                ? voxaPromptPackage.preflight.warnings
+                : [],
             },
           })
           .select('id')
@@ -2129,6 +2334,9 @@ FINAL QUALITY FALLBACK (MANDATORY):
       logoUrlUsed: effectiveLogoUrl || null,
       generationNonceUsed: generationNonce,
       generated: true,
+      voxaPreflight: voxaPromptPackage.preflight.supported
+        ? voxaPromptPackage.preflight
+        : null,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Image creation failed';

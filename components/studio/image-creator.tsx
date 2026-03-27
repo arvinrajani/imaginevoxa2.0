@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Upload,
   Sparkles,
@@ -32,6 +33,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { getThemeSlots } from '@/lib/studio/theme-slots';
 import { deriveStudioPalette } from '@/lib/studio/theme-palette';
+import { resolveClientScene } from '@/lib/studio/industry-scenes';
+import { buildVoxaPreflight } from '@/lib/studio/voxa-prompt-spec';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +48,7 @@ interface ImageCreatorProps {
   brandColorNames?: Record<string, string>;
   logoUrl?: string;
   logoAssets?: Array<{ url: string; name?: string }>;
+  industry?: string | null;
   analysisProfile?: {
     tone?: string | null;
     imageStyle?: string | null;
@@ -557,6 +561,43 @@ type UploadedLogoAsset = {
   url: string;
 };
 
+type VisionComponentKey =
+  | 'heroImage'
+  | 'header'
+  | 'footer'
+  | 'body'
+  | 'logo'
+  | 'palette'
+  | 'overlay';
+
+type VisionComponentOption = {
+  id: string;
+  label: string;
+  summary: string;
+  details: string[];
+  autoText: string;
+  apply?: {
+    paletteColors?: string[];
+    logoPlacement?: 'overlay' | 'infuse' | 'none';
+  };
+};
+
+type VisionComponentEntry = {
+  key: VisionComponentKey;
+  label: string;
+  option: VisionComponentOption;
+  accepted: boolean;
+  overrideText: string;
+  resolvedText: string;
+};
+
+type GeneratedArtifactMeta = {
+  baseUrl: string;
+  finalUrl: string;
+  rationale: string;
+  revisionTarget?: VisionComponentKey | null;
+};
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -631,12 +672,12 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: 'clean-brand',
-    label: 'Clean Brand',
+    label: 'Minimal / Clean',
     category: 'General',
-    description: 'Minimal, controlled, brand-native visual with less visual clutter.',
-    summary: 'Best for polished branded posts where restraint matters more than visual density.',
+    description: 'Whitespace-led premium brand visual with minimal chrome and one clear focal point.',
+    summary: 'Best for premium thought leadership, restrained product moments, and clean editorial layouts.',
     promptHint:
-      'Describe the message in one or two sentences and note any required whitespace, clean text zones, or minimal design cues.',
+      'Describe the single main message and any whitespace, restraint, or premium editorial cues the composition must preserve.',
     recommendedTone: 'minimal',
     recommendedStyle: 'text-overlay',
     recommendedLogoPlacement: 'overlay',
@@ -655,12 +696,12 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: 'datasheet-frame',
-    label: 'Datasheet Frame',
+    label: 'Technical / Data',
     category: 'Technical',
-    description: 'Brochure-like product layout with clear content blocks and disciplined information areas.',
-    summary: 'Best when you want the result to feel like a technical brochure, not a generic ad image.',
+    description: 'Structured technical layout for product specs, diagrams, proof blocks, and engineering clarity.',
+    summary: 'Best when the output should feel like a modern technical sell-sheet rather than a generic ad visual.',
     promptHint:
-      'Describe the product, specs or proof points that matter, and whether the design should feel technical, modular, or brochure-driven.',
+      'Describe the product, key specifications, technical proof points, and whether the result should feel like a datasheet, diagram, or brochure cover.',
     recommendedTone: 'tech',
     recommendedStyle: 'infographic',
     recommendedLogoPlacement: 'overlay',
@@ -679,12 +720,12 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: 'launch-banner',
-    label: 'Launch Banner',
+    label: 'Bold Announcement',
     category: 'Campaign',
-    description: 'Headline-first announcement layout for launches, new arrivals, or bold campaign reveals.',
-    summary: 'Best for product launches, event announcements, or attention-grabbing rollout creatives.',
+    description: 'High-contrast announcement theme where typography is the hero and the visual supports the reveal.',
+    summary: 'Best for launches, major announcements, event reveals, and scroll-stopping campaign moments.',
     promptHint:
-      'Describe what is launching, who it is for, and whether the image should feel urgent, premium, or celebratory.',
+      'Describe what is being announced, who it is for, and whether the reveal should feel urgent, premium, or high-energy.',
     recommendedTone: 'bold',
     recommendedStyle: 'text-overlay',
     recommendedLogoPlacement: 'overlay',
@@ -821,6 +862,102 @@ const ASPECT_DIMENSIONS: Record<'landscape' | 'square' | 'portrait', { width: nu
   portrait: { width: 1080, height: 1350 },
 };
 
+const VISION_COMPONENT_ORDER: VisionComponentKey[] = [
+  'heroImage',
+  'header',
+  'footer',
+  'body',
+  'logo',
+  'palette',
+  'overlay',
+];
+
+const VISION_COMPONENT_LABELS: Record<VisionComponentKey, string> = {
+  heroImage: 'Hero Image',
+  header: 'Header',
+  footer: 'Footer',
+  body: 'Bullet / Body Style',
+  logo: 'Logo Zone',
+  palette: 'Color Palette',
+  overlay: 'Overlay',
+};
+
+function createVisionAcceptedState(defaultValue = false) {
+  return VISION_COMPONENT_ORDER.reduce((acc, key) => {
+    acc[key] = defaultValue;
+    return acc;
+  }, {} as Record<VisionComponentKey, boolean>);
+}
+
+function createVisionOverrideState() {
+  return VISION_COMPONENT_ORDER.reduce((acc, key) => {
+    acc[key] = '';
+    return acc;
+  }, {} as Record<VisionComponentKey, string>);
+}
+
+function getNextVisionOptionId(options: VisionComponentOption[], currentId?: string | null) {
+  if (options.length === 0) return null;
+  const currentIndex = options.findIndex((option) => option.id === currentId);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % options.length : 0;
+  return options[nextIndex]?.id || options[0].id;
+}
+
+function buildVisionBriefBlock(entries: VisionComponentEntry[], revisionTarget?: VisionComponentKey | null) {
+  const resolvedEntries = entries.filter((entry) => entry.resolvedText.trim());
+  const approvedEntries = resolvedEntries.filter((entry) => entry.accepted);
+  const workingEntries = resolvedEntries.filter((entry) => !entry.accepted);
+  const activeEntries = [...approvedEntries, ...workingEntries];
+
+  const revisionLine = revisionTarget
+    ? `REVISION PRIORITY: Keep every other approved component stable. Rework only the ${VISION_COMPONENT_LABELS[revisionTarget].toLowerCase()} unless a small supporting adjustment is required for coherence.`
+    : '';
+
+  return [
+    'MY VISION BRIEF:',
+    ...activeEntries.map((entry, index) => {
+      const status = entry.accepted ? 'APPROVED' : 'WORKING';
+      return `${index + 1}. ${status} ${entry.label}: ${sanitizeVisualText(entry.resolvedText, 180)}`;
+    }),
+    '',
+    'AI ENHANCEMENT PASS (MANDATORY):',
+    'You are an expert graphic designer. Based on the user selections below, produce a pixel-perfect, print-ready composition.',
+    '1. Logo infusion: do not drop the logo on top. Blend its colors, shape, spacing, and shadow language into the layout so it feels native.',
+    '2. Overlay correction: if the hero background is busy or high-contrast, calculate a brand-matched overlay that preserves image personality while keeping text readable.',
+    '3. Header/footer coherence: make both feel like one design system with matched alignment rhythm, weight, and color temperature.',
+    '4. Image optimization: crop to the focal point and tune brightness, contrast, and saturation so the hero supports the copy instead of competing with it.',
+    '5. Typography hierarchy: enforce deliberate vertical rhythm between headline, supporting text, bullets, and footer details.',
+    '6. Final output: return the enhanced composition with a short rationale explaining what was adjusted and why.',
+    revisionLine,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 1800);
+}
+
+function buildEnhancementRationale(args: {
+  themeLabel: string;
+  entries: VisionComponentEntry[];
+  revisionTarget?: VisionComponentKey | null;
+}) {
+  const byKey = Object.fromEntries(
+    args.entries.map((entry) => [entry.key, entry])
+  ) as Record<VisionComponentKey, VisionComponentEntry>;
+
+  const overlaySummary = byKey.overlay?.option.summary || 'brand-aware overlay logic';
+  const logoSummary = byKey.logo?.option.summary || 'logo integration';
+  const headerSummary = byKey.header?.option.summary || 'header hierarchy';
+  const footerSummary = byKey.footer?.option.summary || 'footer coherence';
+  const revisionSummary = args.revisionTarget
+    ? ` This pass prioritized the ${VISION_COMPONENT_LABELS[args.revisionTarget].toLowerCase()}.`
+    : '';
+
+  return `${args.themeLabel} was enhanced by tightening ${headerSummary.toLowerCase()} with ${footerSummary.toLowerCase()}, using ${overlaySummary.toLowerCase()} to keep text readable, and treating ${logoSummary.toLowerCase()} as a native design input instead of a pasted overlay.${revisionSummary}`.slice(
+    0,
+    420
+  );
+}
+
 function createPresetId() {
   return `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -925,51 +1062,144 @@ function derivePosterBenefitLines(...sources: Array<string | undefined>) {
   return picked.slice(0, 6);
 }
 
-function deriveIndustryBackdropHint(...sources: Array<string | null | undefined>) {
-  const raw = sources
-    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    .join(' ')
-    .toLowerCase();
+function deriveIndustryBackdropHint(
+  industryField: string | null | undefined,
+  ...sources: Array<string | null | undefined>
+) {
+  return resolveClientScene(industryField, ...sources);
+}
 
-  if (!raw) return 'Build a premium, believable client-specific background that feels custom to the brand and supports the selected theme.';
+/**
+ * Auto-compose a human-readable "Your Vision" paragraph from all available
+ * brand, theme, and content data. The output goes directly into the textarea
+ * so the user sees (and can edit) the creative brief before generating.
+ */
+function composeSmartVision(options: {
+  industry?: string | null;
+  businessFocus?: string | null;
+  brandDescription?: string | null;
+  targetAudience?: string | null;
+  brandName?: string;
+  productName?: string;
+  tagline?: string | null;
+  tone?: string | null;
+  imageStyle?: string | null;
+  themeLabel: string;
+  themeLayoutHint: string;
+  headline?: string;
+  taglineText?: string;
+  featureBullets?: string[];
+  hasLogo: boolean;
+  partnerName?: string;
+  footerWebsite?: string;
+  footerEmail?: string;
+  brandColors?: string[];
+  toneName?: string;
+  styleName?: string;
+  referenceDetail?: string;
+}): string {
+  const scene = resolveClientScene(
+    options.industry,
+    options.businessFocus,
+    options.brandDescription
+  );
+  const toneStr = options.toneName || options.tone || 'professional';
+  const styleStr = options.styleName || options.imageStyle || 'split-layout';
+  const lines: string[] = [
+    `Create a premium LinkedIn poster that feels bespoke, high-end, and custom-built for this client.`,
+    scene,
+    `Follow the ${options.themeLabel} composition blueprint: ${options.themeLayoutHint}`,
+    `Use a ${toneStr} tone with ${styleStr} aesthetics, clean hierarchy, disciplined spacing, and no cheap template feel.`,
+  ];
 
-  if (/(electric|energy|power|utility|grid|substation|electrical|capacitor|transformer|switchgear|industrial automation|automation)/.test(raw)) {
-    return 'Use a premium electrification backdrop with grid infrastructure, power-system depth, engineered light, metallic surfaces, and enterprise industrial atmosphere.';
+  if (options.headline) {
+    lines.push(`Primary headline (DO NOT CHANGE THIS WORDING): "${options.headline.slice(0, 96)}".`);
   }
 
-  if (/(bank|finance|financial|fintech|wealth|investment|insurance|loan|mortgage|capital|trading)/.test(raw)) {
-    return 'Use a high-trust finance backdrop with premium office interiors, glass towers, subtle market/data screens, executive lighting, and polished corporate depth.';
+  if (options.taglineText) {
+    lines.push(`Supporting tagline (DO NOT CHANGE THIS WORDING): "${options.taglineText.slice(0, 96)}".`);
   }
 
-  if (/(car|auto|automotive|showroom|dealer|vehicle|suv|sedan|ev|electric vehicle|luxury vehicle)/.test(raw)) {
-    return 'Use a premium automotive backdrop with showroom lighting, reflective floors, hero vehicle staging, controlled highlights, and luxury commercial precision.';
+  if (options.referenceDetail) {
+    lines.push(`Use the selected reference as the visual truth for the main hero subject and improve its staging, lighting, crop, and atmosphere instead of replacing it with a generic invented product.`);
+  } else {
+    lines.push(`Create a strong hero subject that feels specific to the client and chosen theme, not generic stock imagery.`);
   }
 
-  if (/(estate|real estate|property|broker|realtor|housing|residential|commercial property|developer)/.test(raw)) {
-    return 'Use an aspirational property backdrop with modern architecture, premium interiors or skyline views, trust-first lighting, and polished real-estate presentation.';
+  if (options.hasLogo) {
+    lines.push(`Place the selected main logo in a clean premium brand zone with strong readability.`);
   }
 
-  if (/(hospital|medical|clinic|health|healthcare|doctor|pharma|wellness)/.test(raw)) {
-    return 'Use a clean healthcare backdrop with modern clinical spaces, trust-building lighting, premium equipment context, and calm professional clarity.';
+  if (options.partnerName) {
+    lines.push(`Include partner branding for ${options.partnerName} in the header/brand area without crowding the composition.`);
   }
 
-  if (/(school|education|college|university|academy|course|training|learning)/.test(raw)) {
-    return 'Use a modern education backdrop with smart learning spaces, campus or classroom context, optimistic lighting, and professional academic credibility.';
+  if (options.featureBullets && options.featureBullets.length > 0) {
+    lines.push(`Support these proof points with clean readable hierarchy: ${options.featureBullets.slice(0, 4).join('; ')}.`);
   }
 
-  if (/(construction|builder|cement|infrastructure|architecture|engineering firm|contractor)/.test(raw)) {
-    return 'Use a strong built-environment backdrop with architectural structure, site precision, engineered scale, and premium infrastructure atmosphere.';
+  if (options.footerWebsite || options.footerEmail) {
+    const footer = [options.footerWebsite, options.footerEmail].filter(Boolean).join(' | ');
+    lines.push(`Keep a restrained footer lockup for ${footer} if it fits cleanly.`);
   }
 
-  if (/(hotel|restaurant|cafe|travel|tourism|resort|hospitality)/.test(raw)) {
-    return 'Use an elevated hospitality backdrop with premium interiors, warm lighting, destination cues, and polished guest-experience storytelling.';
+  if (options.targetAudience) {
+    lines.push(`The final look should feel credible and persuasive for ${options.targetAudience.slice(0, 120)}.`);
   }
 
-  if (/(retail|fashion|beauty|cosmetic|jewelry|store|boutique|ecommerce)/.test(raw)) {
-    return 'Use a polished retail backdrop with premium merchandising, controlled lighting, intentional surfaces, and clean brand storytelling.';
+  if (options.brandColors && options.brandColors.length > 0) {
+    lines.push(`Stay inside the selected brand palette: ${options.brandColors.slice(0, 4).join(', ')}.`);
   }
 
-  return 'Build a premium, believable client-specific background that matches the industry, feels custom to the brand, and supports the selected theme without looking generic.';
+  lines.push(`Build a rich client-specific background with depth, atmosphere, and polished lighting. Keep text-safe lanes calm and keep the final result clean at LinkedIn feed size.`);
+  lines.push(`AVOID: generic gradients, blurred bokeh-only backgrounds, empty color washes, stock photography feel, fake UI mockups, crowded bullets, flat blue voids.`);
+
+  let result = lines.join(' ');
+  if (result.length > 1200) {
+    result = `${result.slice(0, 1197)}...`;
+  }
+  return result;
+}
+
+function deriveThemeLayoutHint(themeId: ThemeId) {
+  switch (themeId) {
+    case 'alliance-poster':
+      return 'Use a disciplined top brand band with the main logo on the left, the campaign headline centered, the partner lockup on the right, a left hero bay, a right proof lane, and a clean footer strip.';
+    case 'industrial-campaign':
+      return 'Use a premium industrial campaign structure with a restrained top brand band, a strong left-side product bay, a right-side headline and proof lane, and a footer that stays readable.';
+    case 'clean-brand':
+      return 'Keep the structure elegant and minimal: restrained brand zone at the top, narrative copy on the left, hero visual on the right, and a slim footer only if it stays clean.';
+    case 'knowledge-visual':
+      return 'Use a knowledge-led split with evidence or reference visuals on the left, a clear insight/message lane on the right, and clean brand/footer treatment.';
+    case 'datasheet-frame':
+      return 'Use a technical brochure-like structure with a disciplined brand zone, a strong product panel, and modular information lanes that feel engineered and tidy.';
+    case 'proof-stack':
+      return 'Use a structured proof-led layout with clear stacked evidence lanes and a separate narrative zone so the message reads fast and clean.';
+    case 'product-hero':
+      return 'Keep the product as the clear hero, give it premium staging, and reserve a calm brand zone instead of crowding the frame with labels.';
+    case 'launch-banner':
+      return 'Use a bold announcement structure: brand zone at the top, a dominant centered headline, a short tagline below it, a single CTA, and a footer — nothing else should compete with the headline.';
+    case 'sector-collage':
+      return 'Use a top header band with the brand lockup and centered headline, three equal image panels below with sector labels, and a clean footer strip.';
+    case 'offer-card':
+      return 'Use a left text zone (brand, offer badge, headline, tagline, CTA) and a right hero image panel — keep both zones uncluttered with clear visual separation.';
+    case 'comparison-board':
+      return 'Use a top header with brand and headline, then two equal left-and-right comparison panels with disciplined labels and evidence — keep the layout symmetrical and analytical.';
+    case 'premium-editorial':
+      return 'Use a dramatic left editorial image panel, a deep dark right column for the headline and supporting text, and a subtle brand/footer zone — every element should feel magazine-quality.';
+    case 'brand-story':
+      return 'Use a large circular portrait on the left, a brand lockup at the top-right, a narrative headline and supporting copy on the right, and a warm ambient footer.';
+    case 'job-posting':
+      return 'Use a bold accent header with a "WE\'RE HIRING" label, the brand mark at top-left, the role title and description on the left, a workplace image on the right, an Apply Now CTA, and a branded footer.';
+    case 'hiring-banner':
+      return 'Use a top brand bar, a centered "WE\'RE HIRING" pill badge, a dominant role headline, a short tagline, a "View Openings" CTA, and a footer — keep the composition bold and centered.';
+    case 'team-spotlight':
+      return 'Use a top header bar with the brand mark, a large circular team image on the left, a "JOIN OUR TEAM" label and headline on the right, supporting values, a CTA, and a footer.';
+    case 'career-growth':
+      return 'Use a top header with the brand mark, a career opportunity label and headline on the left, numbered benefit cards below, a workplace image card on the right, and a footer with CTA.';
+    default:
+      return 'Follow the selected theme as a true composition blueprint: keep brand lanes calm, the hero zone intentional, and footer details clean and readable.';
+  }
 }
 
 function ThemePreviewMini({
@@ -1220,7 +1450,7 @@ function ThemePreviewMini({
     return (
       <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1a2744] via-[#2d4a7a] to-[#4a90d9] p-2 shadow-sm ${ringClass}`}>
         <div className="mb-1 h-3 w-full rounded-t bg-blue-500/80">
-          <p className="text-center text-[6px] font-bold leading-[12px] text-white">WE'RE HIRING</p>
+          <p className="text-center text-[6px] font-bold leading-[12px] text-white">WE&apos;RE HIRING</p>
         </div>
         <div className="flex h-[calc(100%-16px)] gap-1.5">
           <div className="flex-1 space-y-1 p-1">
@@ -1243,7 +1473,7 @@ function ThemePreviewMini({
       <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1e1145] via-[#6b2fa0] to-[#e85d75] p-2 shadow-sm ${ringClass}`}>
         <div className="flex h-full flex-col items-center justify-center rounded-xl border border-white/12 bg-white/5 p-2">
           <div className="mb-1 h-3.5 w-20 rounded-full bg-white/90">
-            <p className="text-center text-[5.5px] font-bold leading-[14px] text-purple-700">WE'RE HIRING</p>
+            <p className="text-center text-[5.5px] font-bold leading-[14px] text-purple-700">WE&apos;RE HIRING</p>
           </div>
           <div className="h-3 w-4/5 rounded bg-white/90" />
           <div className="mt-1 h-2.5 w-3/5 rounded bg-white/50" />
@@ -1670,6 +1900,8 @@ function ThemePreviewLarge({
   }
 
   if ((themeId as string) === 'industrial-campaign') {
+    const industrialHeaderHeadlineLines = fitPreviewText(safeHeadline, [24, 26, 28], 2);
+    const industrialHeaderTaglineLines = fitPreviewText(safeTagline, [34, 38, 42], 1);
     const industrialFeatures = (
       safeFeatureLines.length > 0
         ? safeFeatureLines
@@ -1718,7 +1950,58 @@ function ThemePreviewLarge({
           )}
         </div>
 
-        <div className="absolute bottom-[12%] left-[3.5%] top-[19%] w-[31%] overflow-hidden rounded-[24px] border border-white/18 bg-white/94 shadow-[0_22px_48px_rgba(0,0,0,0.24)]">
+        {hasAllianceHeaderContent && (
+          <div
+            className="absolute right-[2.6%] top-[2.8%] flex h-[9%] w-[22%] items-center justify-center gap-2 rounded-xl px-2 backdrop-blur-sm"
+            style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
+          >
+            {allianceHeaderLogos.length > 0 ? (
+              allianceHeaderLogos.map((logo) => (
+                <div key={logo.id} className="flex h-[72%] flex-1 items-center justify-center rounded-lg bg-white/92 p-1">
+                  <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
+                </div>
+              ))
+            ) : (
+              <div className="text-center">
+                <p className="text-[11px] font-semibold text-white">{partnerName || 'Partner brand'}</p>
+                <p className="text-[9px] text-white/70">{partnerTagline || 'Header lockup'}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="absolute left-[24%] right-[25%] top-[3.8%] text-center">
+          <div className="space-y-0.5">
+            {industrialHeaderHeadlineLines.map((line, index) => (
+              <p
+                key={`${line}-${index}`}
+                className="font-black text-white"
+                style={{
+                  fontSize: industrialHeaderHeadlineLines.length > 1 ? '18px' : '20px',
+                  lineHeight: industrialHeaderHeadlineLines.length > 1 ? 1.04 : 1.08,
+                  textShadow: '0 2px 10px rgba(0,0,0,0.34)',
+                }}
+              >
+                {line}
+              </p>
+            ))}
+          </div>
+          {industrialHeaderTaglineLines.length > 0 && (
+            <div className="mt-1">
+              {industrialHeaderTaglineLines.map((line, index) => (
+                <p
+                  key={`${line}-${index}`}
+                  className="text-[9px] font-semibold uppercase tracking-[0.18em]"
+                  style={{ color: previewPalette.accent }}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="absolute bottom-[12%] left-[3.5%] top-[21%] w-[31%] overflow-hidden rounded-[24px] border border-white/18 bg-white/94 shadow-[0_22px_48px_rgba(0,0,0,0.24)]">
           <div className="absolute bottom-[1.5%] left-[14%] right-[14%] h-[7%] rounded-full bg-slate-950/20 blur-sm" />
           <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
           {renderHeroZone('absolute inset-0 rounded-[22px]', {
@@ -1727,7 +2010,7 @@ function ThemePreviewLarge({
           })}
         </div>
 
-        <div className="absolute bottom-[12%] right-[3.2%] top-[19%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.8%] py-[5.2%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(135deg, rgba(7,18,36,0.48), rgba(4,11,24,0.78))' }}>
+        <div className="absolute bottom-[12%] right-[3.2%] top-[21%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.8%] py-[5.2%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(135deg, rgba(7,18,36,0.48), rgba(4,11,24,0.78))' }}>
           <div className="absolute inset-y-0 left-0 w-[1.6%] rounded-l-[24px]" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
           <div className="space-y-1.5">
             {compactHeadlineLines.map((line, index) => (
@@ -2452,7 +2735,7 @@ function ThemePreviewLarge({
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
         <div className="absolute inset-x-0 top-0 flex h-[12%] items-center justify-center" style={{ backgroundColor: previewPalette.accent }}>
-          <p className="text-[12px] font-black tracking-[0.2em] text-white">WE'RE HIRING</p>
+          <p className="text-[12px] font-black tracking-[0.2em] text-white">WE&apos;RE HIRING</p>
         </div>
         <div className="absolute left-[5%] top-[3%] z-10">
           {renderLogoBox('h-[8%] w-[10%] rounded-lg', true)}
@@ -2509,7 +2792,7 @@ function ThemePreviewLarge({
         </div>
         <div className="absolute inset-x-0 top-[17%] flex justify-center">
           <div className="rounded-full px-6 py-1.5" style={{ backgroundColor: `${previewPalette.surface}ee` }}>
-            <p className="text-[11px] font-black tracking-[0.25em]" style={{ color: previewPalette.accent }}>WE'RE HIRING</p>
+            <p className="text-[11px] font-black tracking-[0.25em]" style={{ color: previewPalette.accent }}>WE&apos;RE HIRING</p>
           </div>
         </div>
         <div className="absolute inset-x-[10%] top-[32%] flex flex-col items-center gap-2">
@@ -2729,6 +3012,7 @@ export function ImageCreator({
   brandColorNames,
   logoUrl: defaultLogoUrl,
   logoAssets = [],
+  industry,
   analysisProfile,
   confirmedPostText,
   confirmedPostHeadline,
@@ -2781,7 +3065,6 @@ export function ImageCreator({
       derivedWording.tagline,
     ]
   );
-
   // Form state
   const [headline, setHeadline] = useState(confirmedPostHeadline || derivedWording.headline || '');
   const [usePostHeadline, setUsePostHeadline] = useState(true);
@@ -2791,6 +3074,15 @@ export function ImageCreator({
   const [selectedTone, setSelectedTone] = useState('professional');
   const [selectedStyle, setSelectedStyle] = useState('split-layout');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [isVisionUserEdited, setIsVisionUserEdited] = useState(false);
+  const [visionSelections, setVisionSelections] = useState<Partial<Record<VisionComponentKey, string>>>({});
+  const [acceptedVisionComponents, setAcceptedVisionComponents] = useState<Record<VisionComponentKey, boolean>>(
+    () => createVisionAcceptedState(false)
+  );
+  const [visionOverrides, setVisionOverrides] = useState<Record<VisionComponentKey, string>>(
+    () => createVisionOverrideState()
+  );
+  const visionComposeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(primaryBrandLogoUrl);
   const [logoPlacement, setLogoPlacement] = useState<'overlay' | 'infuse' | 'none'>(
     primaryBrandLogoUrl ? 'overlay' : 'none'
@@ -2848,11 +3140,16 @@ export function ImageCreator({
     rawUrl: string;
     blendedUrl: string;
   } | null>(null);
+  const [artifactMetaByUrl, setArtifactMetaByUrl] = useState<Record<string, GeneratedArtifactMeta>>({});
+  const [artifactCompareView, setArtifactCompareView] = useState<'before' | 'after'>('after');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const allianceLogoInputRef = useRef<HTMLInputElement>(null);
   const partnerLogoInputRef = useRef<HTMLInputElement>(null);
   const referenceImageInputRef = useRef<HTMLInputElement>(null);
+  const revisionTargetRef = useRef<VisionComponentKey | null>(null);
+  const themeVisionOptionsRef = useRef<Record<VisionComponentKey, VisionComponentOption[]> | null>(null);
+  const themeVisionEntriesRef = useRef<VisionComponentEntry[]>([]);
   const baselineBrandIdRef = useRef('');
   const baselineBrandColorsRef = useRef<string[]>([]);
   const lastSyncedPostKeyRef = useRef('');
@@ -3153,6 +3450,57 @@ export function ImageCreator({
     [primaryBrandLogoUrl, uploadedLogo]
   );
 
+  const handleSwapVisionOption = useCallback(
+    (key: VisionComponentKey) => {
+      const options = themeVisionOptionsRef.current?.[key] || [];
+      if (options.length === 0) return;
+
+      const currentId = visionSelections[key];
+      const nextId = getNextVisionOptionId(options, visionSelections[key]);
+      if (!nextId) return;
+
+      const nextOption = options.find((option) => option.id === nextId) || options[0];
+      setVisionSelections((prev) => ({ ...prev, [key]: nextId }));
+      if (currentId !== nextId) {
+        setAcceptedVisionComponents((prev) =>
+          prev[key]
+            ? {
+                ...prev,
+                [key]: false,
+              }
+            : prev
+        );
+      }
+
+      if (nextOption.apply?.paletteColors && nextOption.apply.paletteColors.length > 0) {
+        applyBrandColors(nextOption.apply.paletteColors);
+      }
+
+      if (typeof nextOption.apply?.logoPlacement === 'string') {
+        setLogoPlacement(nextOption.apply.logoPlacement);
+      }
+
+      toast.message(`${VISION_COMPONENT_LABELS[key]} swapped`, {
+        description: nextOption.label,
+      });
+    },
+    [applyBrandColors, visionSelections]
+  );
+
+  const handleToggleVisionAcceptance = useCallback((key: VisionComponentKey) => {
+    setAcceptedVisionComponents((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }, []);
+
+  const handleVisionOverrideChange = useCallback((key: VisionComponentKey, value: string) => {
+    setVisionOverrides((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }, []);
+
   const persistPresets = useCallback(
     (nextPresets: SavedImagePreset[]) => {
       setSavedPresets(nextPresets);
@@ -3217,6 +3565,7 @@ export function ImageCreator({
     setSelectedThemeId(preset.themeId);
     setContextBrief(preset.contextBrief || '');
     setCustomPrompt(preset.customPrompt || '');
+    setIsVisionUserEdited(Boolean(preset.customPrompt));
     setSelectedTone(preset.selectedTone || 'professional');
     setSelectedStyle(preset.selectedStyle || 'split-layout');
     setLogoPlacement(preset.logoPlacement || 'overlay');
@@ -3499,8 +3848,40 @@ export function ImageCreator({
     }
   }, [siteUrl]);
 
+  const selectedPdfImage =
+    effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
+  const selectedSiteImage =
+    fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
+  const selectedReferenceSummary = useMemo(() => {
+    if (!selectedReferenceImage) return null;
+    if (selectedPdfImage) {
+      return {
+        badge: 'PDF',
+        title: 'Hero visual is using a PDF image',
+        detail: selectedPdfImage.title,
+      };
+    }
+    if (selectedSiteImage) {
+      return {
+        badge: 'Website',
+        title: 'Hero visual is using a website image',
+        detail: selectedSiteImage.source || selectedSiteImage.url,
+      };
+    }
+    return {
+      badge: 'Upload',
+      title: 'Hero visual is using an uploaded image',
+      detail: 'Manual reference upload',
+    };
+  }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
+  const autoBackdropHintRef = useRef('');
+
   // ── Generate Image (supports batch) ──
   const handleGenerate = useCallback(async () => {
+    const revisionTarget = revisionTargetRef.current;
+    revisionTargetRef.current = null;
+    const currentVisionEntries = themeVisionEntriesRef.current;
+
     if (!hasPostContext) {
       toast.error('Confirm your post first', {
         description: 'Image generation is linked to the confirmed post from Step 1.',
@@ -3535,81 +3916,51 @@ export function ImageCreator({
           ? postDerivedFeatureLines
           : supplementalFeatureLines;
     const benefitBullets = resolvedFeatureLines.slice(0, selectedThemeId === 'industrial-campaign' ? 4 : 6);
-    const generationToneLabel =
-      TONE_OPTIONS.find((tone) => tone.id === selectedTone)?.label || 'Professional';
-    const generationStyleLabel =
-      STYLE_OPTIONS.find((layout) => layout.id === selectedStyle)?.label || 'Split Layout';
-    const generationSelectedPdf =
-      effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
-    const generationSelectedSite =
-      fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
-    const generationReferenceDetail = sanitizeVisualText(
-      generationSelectedPdf?.title ||
-        generationSelectedSite?.source ||
-        generationSelectedSite?.url ||
-        (selectedReferenceImage ? 'Uploaded reference image' : ''),
-      120
-    );
-    const generationAutoBackdropHint = deriveIndustryBackdropHint(
-      analysisProfile?.businessFocus,
-      analysisProfile?.brandDescription,
-      analysisProfile?.targetAudience,
-      productName,
-      confirmedPostHeadline,
-      confirmedPostImageBrief,
-      confirmedPostText,
-      partnerName,
-      brandName
-    );
     const generationAutoVisionLines = [
-      `Use the ${activeTheme.label} theme as the layout and composition direction. ${sanitizeVisualText(activeTheme.description, 160)}`,
-      analysisProfile?.businessFocus
-        ? `Client category: ${sanitizeVisualText(analysisProfile.businessFocus, 120)}.`
-        : analysisProfile?.brandDescription
-          ? `Client context: ${sanitizeVisualText(analysisProfile.brandDescription, 160)}.`
-          : '',
-      analysisProfile?.targetAudience
-        ? `Target audience: ${sanitizeVisualText(analysisProfile.targetAudience, 100)}.`
+      contextBrief.trim()
+        ? `Campaign context: ${contextBrief.trim()}.`
         : '',
-      `Background direction: ${generationAutoBackdropHint}`,
-      `Creative mode: ${generationToneLabel} tone with ${generationStyleLabel} styling.`,
+      confirmedPostText
+        ? `Ground the composition in the confirmed post message: ${sanitizeVisualText(confirmedPostText, 220)}.`
+        : '',
+      confirmedPostImageBrief
+        ? `Use the confirmed post visual brief as supporting context: ${sanitizeVisualText(confirmedPostImageBrief, 180)}.`
+        : '',
       effectiveHeadline
-        ? `Support this headline clearly: "${sanitizeVisualText(effectiveHeadline, 96)}".`
+        ? `Primary headline: ${sanitizeVisualText(effectiveHeadline, 120)}.`
         : '',
       effectiveTagline
-        ? `Optional support line: "${sanitizeVisualText(effectiveTagline, 120)}".`
+        ? `Supporting tagline: ${sanitizeVisualText(effectiveTagline, 140)}.`
         : '',
-      generationReferenceDetail
-        ? `Use the selected reference visual as the main hero truth: ${generationReferenceDetail}.`
+      themeUsesHeroReference && selectedReferenceImage
+        ? 'Use the selected reference visual as the main hero source.'
         : themeUsesHeroReference
-          ? 'Use a strong hero visual lane and make the selected PDF or uploaded reference the main subject when one is chosen.'
+          ? 'Reserve the hero lane for the selected PDF or uploaded reference when one is chosen.'
           : '',
       resolvedLogoForGeneration
-        ? 'Use the selected primary logo as the main brand mark in a clean, premium brand zone.'
+        ? 'Use the selected primary logo as the main brand mark in a deliberate brand zone.'
         : '',
       effectiveAllianceLogos.length > 0 || partnerName.trim()
         ? partnerTagline.trim()
-          ? `Use partner branding in the header area for ${sanitizeVisualText(partnerName || 'the partner brand', 48)} with the supporting line "${sanitizeVisualText(partnerTagline, 72)}".`
-          : `Use partner branding in the header area for ${sanitizeVisualText(partnerName || 'the partner brand', 48)}.`
+          ? `Partner branding: ${sanitizeVisualText(partnerName || 'Partner brand', 64)} with supporting line "${sanitizeVisualText(partnerTagline, 90)}".`
+          : `Partner branding: ${sanitizeVisualText(partnerName || 'Partner brand', 64)}.`
         : '',
       footerWebsite.trim() || footerEmail.trim()
-        ? `Keep a clean footer lockup with ${[sanitizeVisualText(footerWebsite, 64), sanitizeVisualText(footerEmail, 64)].filter(Boolean).join(' and ')}.`
+        ? `Footer lockup: ${[sanitizeVisualText(footerWebsite, 64), sanitizeVisualText(footerEmail, 64)].filter(Boolean).join(' and ')}.`
         : '',
       benefitBullets.length > 0
-        ? `Support these proof points: ${benefitBullets.join('; ')}.`
+        ? `Proof points: ${benefitBullets.map((line) => sanitizeVisualText(line, 120)).join('; ')}.`
         : '',
       normalizedBrandColors.length > 0
-        ? `Stay inside the selected brand palette: ${normalizedBrandColors.slice(0, 4).join(', ')}.`
+        ? `Brand palette: ${normalizedBrandColors.slice(0, 4).join(', ')}.`
         : '',
-    ]
-      .map((line) => sanitizeVisualText(line, 220))
-      .filter(Boolean)
-      .slice(0, 10);
+    ].filter(Boolean);
     const effectiveVisionPromptForGeneration = [
+      buildVisionBriefBlock(currentVisionEntries, revisionTarget),
       generationAutoVisionLines.length > 0
-        ? `AUTO-FED AI DIRECTION:\n${generationAutoVisionLines.map((line) => `- ${line}`).join('\n')}`
+        ? `AUTOMATIC CONTEXT:\n${generationAutoVisionLines.map((line) => `- ${line}`).join('\n')}`
         : '',
-      customPrompt.trim() ? `USER REFINEMENT:\n${customPrompt.trim()}` : '',
+      isVisionUserEdited && customPrompt.trim() ? `MASTER BRIEF OVERRIDE:\n${customPrompt.trim()}` : '',
     ]
       .filter(Boolean)
       .join('\n\n')
@@ -3630,6 +3981,44 @@ export function ImageCreator({
         description: 'Use a PDF-extracted image or a reference image. It will automatically fill the hero area for this theme.',
       });
       return;
+    }
+
+    const voxaPreflight = buildVoxaPreflight({
+      themeId: selectedThemeId,
+      format: imageAspect,
+      aiOwnsFullPoster: selectedThemeId === 'guided-auto',
+      hasStructuredBranding: selectedThemeId !== 'guided-auto',
+      brandColors: normalizedBrandColors,
+      brandName,
+      productName: productName || undefined,
+      headline: effectiveHeadline || undefined,
+      tagline: effectiveTagline || undefined,
+      benefits: benefitBullets,
+      contextBrief: contextBrief.trim() || undefined,
+      customPrompt: effectiveVisionPromptForGeneration || undefined,
+      sceneBrief: autoBackdropHintRef.current,
+      industry,
+      website: footerWebsite.trim() || undefined,
+      email: footerEmail.trim() || undefined,
+      partnerName: partnerName.trim() || undefined,
+      partnerTagline: partnerTagline.trim() || undefined,
+      hasPrimaryLogo: Boolean(resolvedLogoForGeneration),
+      secondaryLogoCount: effectiveAllianceLogos.length,
+      hasReferenceImage: Boolean(selectedReferenceImage),
+      referenceSummary: selectedReferenceSummary?.detail || undefined,
+    });
+
+    if (voxaPreflight.supported && voxaPreflight.errors.length > 0) {
+      toast.error('VOXA preflight failed', {
+        description: voxaPreflight.errors.slice(0, 2).join(' '),
+      });
+      return;
+    }
+
+    if (voxaPreflight.supported && voxaPreflight.warnings.length > 0 && voxaPreflight.score < 23) {
+      toast.message(`VOXA preflight ${voxaPreflight.score}/25`, {
+        description: voxaPreflight.warnings.slice(0, 2).join(' '),
+      });
     }
 
     if (logoPlacement !== 'none' && !resolvedLogoForGeneration) {
@@ -3695,8 +4084,14 @@ export function ImageCreator({
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Generation failed' }));
-          throw new Error(err.error || 'Generation failed');
+          const err = await res
+            .json()
+            .catch(() => ({ error: 'Generation failed' })) as {
+            error?: string;
+            details?: string[];
+          };
+          const detailText = Array.isArray(err.details) ? err.details.slice(0, 2).join(' ') : '';
+          throw new Error(detailText || err.error || 'Generation failed');
         }
 
         const data = await res.json();
@@ -3758,6 +4153,21 @@ export function ImageCreator({
             setLatestBlendPreview(null);
           }
 
+          const rationale = buildEnhancementRationale({
+            themeLabel: activeTheme.label,
+            entries: currentVisionEntries,
+            revisionTarget,
+          });
+          setArtifactMetaByUrl((prev) => ({
+            ...prev,
+            [finalImageUrl]: {
+              baseUrl: rawImageUrl,
+              finalUrl: finalImageUrl,
+              rationale,
+              revisionTarget,
+            },
+          }));
+          setArtifactCompareView('after');
           setGeneratedImages((prev) => [finalImageUrl, ...prev]);
           setSelectedImage(0);
           setGenerationCount((c) => c + 1);
@@ -3822,13 +4232,25 @@ export function ImageCreator({
     footerWebsite,
     selectedBlendMode,
     selectedReferenceImage,
+    isVisionUserEdited,
     postDerivedFeatureLines,
     onImageGenerated,
     resolvedNonHeroSlotAssignments,
     themeUsesHeroReference,
+    industry,
+    selectedReferenceSummary,
   ]);
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Confirm Ã¢â€â‚¬Ã¢â€â‚¬
+  const handleRegenerateComponent = useCallback((key: VisionComponentKey) => {
+    revisionTargetRef.current = key;
+    setArtifactCompareView('after');
+    toast.message(`Regenerating ${VISION_COMPONENT_LABELS[key].toLowerCase()}...`, {
+      description: 'The next pass will keep the rest of the approved system as stable as possible.',
+    });
+    void handleGenerate();
+  }, [handleGenerate]);
+
   const handleConfirm = useCallback(() => {
     if (selectedImage === null || !generatedImages[selectedImage]) {
       toast.error('Please select an image first');
@@ -3878,8 +4300,6 @@ export function ImageCreator({
   // Fall back to internally-fetched images when no prop is provided.
   const isLoadingPdf = propPdfImages !== undefined ? false : isFetchingPdfImages;
   const normalizedPrompt = normalizeReferenceText(customPrompt);
-  const selectedPdfImage =
-    effectivePdfImages.find((img) => img.signed_url === selectedReferenceImage) || null;
   const previewedPdfImage = useMemo(() => {
     if (effectivePdfImages.length === 0) return null;
     return (
@@ -3889,36 +4309,17 @@ export function ImageCreator({
       null
     );
   }, [effectivePdfImages, previewedPdfImageId, selectedPdfImage]);
-  const selectedSiteImage =
-    fetchedSiteImages.find((img) => img.url === selectedReferenceImage) || null;
   const hasReadyLogo = Boolean(uploadedLogo || primaryBrandLogoUrl);
-  const selectedReferenceSummary = useMemo(() => {
-    if (!selectedReferenceImage) return null;
-    if (selectedPdfImage) {
-      return {
-        badge: 'PDF',
-        title: 'Hero visual is using a PDF image',
-        detail: selectedPdfImage.title,
-      };
-    }
-    if (selectedSiteImage) {
-      return {
-        badge: 'Website',
-        title: 'Hero visual is using a website image',
-        detail: selectedSiteImage.source || selectedSiteImage.url,
-      };
-    }
-    return {
-      badge: 'Upload',
-      title: 'Hero visual is using an uploaded image',
-      detail: 'Manual reference upload',
-    };
-  }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
+  const selectedArtifactMeta =
+    selectedImage !== null && generatedImages[selectedImage]
+      ? artifactMetaByUrl[generatedImages[selectedImage]] || null
+      : null;
   const isAiGuidedTheme = selectedThemeId === 'guided-auto';
   const hasUserVisionNotes = customPrompt.trim().length > 0;
   const autoBackdropHint = useMemo(
     () =>
       deriveIndustryBackdropHint(
+        industry,
         analysisProfile?.businessFocus,
         analysisProfile?.brandDescription,
         analysisProfile?.targetAudience,
@@ -3930,6 +4331,7 @@ export function ImageCreator({
         brandName
       ),
     [
+      industry,
       analysisProfile?.brandDescription,
       analysisProfile?.businessFocus,
       analysisProfile?.targetAudience,
@@ -3941,6 +4343,10 @@ export function ImageCreator({
       productName,
     ]
   );
+  useEffect(() => {
+    autoBackdropHintRef.current = autoBackdropHint;
+  }, [autoBackdropHint]);
+  // ── Smart Vision Auto-Compose ──────────────────────────────────────────────
   const selectionDrivenVisionLines = useMemo(() => {
     const lines: string[] = [];
     const safeBusinessFocus = sanitizeVisualText(analysisProfile?.businessFocus || '', 120);
@@ -3959,6 +4365,7 @@ export function ImageCreator({
     lines.push(
       `Use the ${activeTheme.label} theme as the layout and composition direction. ${sanitizeVisualText(activeTheme.description, 160)}`
     );
+    lines.push(deriveThemeLayoutHint(selectedThemeId));
 
     if (safeBusinessFocus) {
       lines.push(`Client category: ${safeBusinessFocus}.`);
@@ -4053,21 +4460,6 @@ export function ImageCreator({
         : '',
     [selectionDrivenVisionLines]
   );
-  const effectiveVisionPrompt = useMemo(
-    () =>
-      [autoVisionBrief, hasUserVisionNotes ? `USER REFINEMENT:\n${customPrompt.trim()}` : '']
-        .filter(Boolean)
-        .join('\n\n')
-        .trim(),
-    [autoVisionBrief, customPrompt, hasUserVisionNotes]
-  );
-  const visionPreviewText = useMemo(
-    () =>
-      hasUserVisionNotes
-        ? customPrompt.trim()
-        : selectionDrivenVisionLines.slice(0, 4).join(' '),
-    [customPrompt, hasUserVisionNotes, selectionDrivenVisionLines]
-  );
   const themePaletteRoles = useMemo(
     () => [
       { label: 'Primary', value: derivedThemePalette.bgStart, hint: 'Main backgrounds and headings' },
@@ -4077,6 +4469,327 @@ export function ImageCreator({
     ],
     [derivedThemePalette]
   );
+  const themeVisionOptions = useMemo<Record<VisionComponentKey, VisionComponentOption[]>>(() => {
+    const baselineBrandColors = baselineBrandColorsRef.current;
+    const paletteActionOptions = [
+      {
+        id: 'saved-brand',
+        label: 'Restore Saved',
+        description: 'Go back to the saved brand palette.',
+        colors: baselineBrandColors,
+      },
+      {
+        id: 'balanced-theme',
+        label: 'Balanced Theme',
+        description: 'Dark base plus cleaner accent balance.',
+        colors: dedupeBrandColorList([
+          baselineBrandColors[0] || derivedThemePalette.bgStart,
+          baselineBrandColors[1] || derivedThemePalette.bgEnd,
+          derivedThemePalette.accent,
+          derivedThemePalette.support,
+        ]),
+      },
+      {
+        id: 'high-contrast',
+        label: 'High Contrast',
+        description: 'Stronger contrast for sharper templates.',
+        colors: dedupeBrandColorList([
+          derivedThemePalette.bgStart,
+          '#ffffff',
+          derivedThemePalette.accent,
+          derivedThemePalette.support,
+        ]),
+      },
+    ].filter((action) => action.colors.length > 0);
+    const toneLabel = currentTone?.label || selectedTone || 'Professional';
+    const styleLabel = currentStyle?.label || selectedStyle || 'Split Layout';
+    const safeHeroSubject =
+      selectedReferenceSummary?.detail ||
+      selectedPdfImage?.title ||
+      selectedSiteImage?.source ||
+      productName ||
+      brandName ||
+      'brand-led subject';
+    const paletteSignature = themePaletteRoles
+      .map((swatch) => `${swatch.label} ${swatch.value}`)
+      .join(', ');
+    const footerLockup = [footerWebsite, footerEmail].filter(Boolean).join(' | ') || brandName || 'brand signature';
+    const bulletSummary =
+      previewFeatureLines.slice(0, selectedThemeId === 'industrial-campaign' ? 4 : 3).join('; ') ||
+      'short proof-led bullet stack';
+    const logoPresence = hasReadyLogo ? 'selected main logo is available' : 'no logo has been uploaded yet';
+    const overlayOpacity =
+      selectedStyle === 'cinematic'
+        ? '62%'
+        : selectedStyle === 'text-overlay'
+          ? '68%'
+          : selectedStyle === 'photo-blend'
+            ? '54%'
+            : '58%';
+
+    return {
+      heroImage: [
+        {
+          id: 'hero-reference-led',
+          label: 'Reference-Led Hero',
+          summary: 'Uses the chosen reference as the focal subject with a cleaner crop and stronger staging.',
+          details: [
+            `Style: ${themeUsesHeroReference || selectedReferenceImage ? 'reference-led photographic hero' : `${styleLabel.toLowerCase()} hero composition`}`,
+            `Mood: ${toneLabel.toLowerCase()} with ${sanitizeVisualText(activeTheme.label, 42).toLowerCase()} energy`,
+            `Subject: ${sanitizeVisualText(safeHeroSubject, 72)}`,
+            `Placement: ${selectedThemeId === 'alliance-poster' || selectedThemeId === 'industrial-campaign' ? 'left hero bay with protected headline lane' : 'primary focal zone inside the theme layout'}`,
+          ],
+          autoText: `Use a ${toneLabel.toLowerCase()} hero image built around ${sanitizeVisualText(safeHeroSubject, 96)}. Keep the crop disciplined, preserve the subject focal point, and stage it so the ${activeTheme.label} layout still has calm text-safe space.`,
+        },
+        {
+          id: 'hero-cinematic',
+          label: 'Cinematic Focus',
+          summary: 'Pushes the hero toward deeper contrast, stronger depth, and more atmospheric lighting.',
+          details: [
+            'Style: cinematic photographic treatment',
+            `Mood: dramatic ${sanitizeVisualText(toneLabel, 32).toLowerCase()} atmosphere`,
+            `Subject: ${sanitizeVisualText(safeHeroSubject, 72)}`,
+            'Placement: full-bleed focal subject with a deliberately quieter copy side',
+          ],
+          autoText: `Treat the hero image like a cinematic focal frame: sharper lighting, deeper contrast, and richer atmosphere around ${sanitizeVisualText(safeHeroSubject, 96)} while protecting a calm area for copy.`,
+        },
+        {
+          id: 'hero-contextual',
+          label: 'Contextual Story',
+          summary: 'Shows more environment and category context so the image feels specific to the client, not generic stock.',
+          details: [
+            `Style: ${styleLabel.toLowerCase()} with environmental context`,
+            `Mood: ${sanitizeVisualText(autoBackdropHint, 80)}`,
+            `Subject: ${sanitizeVisualText(safeHeroSubject, 72)}`,
+            'Placement: wider environmental framing with secondary detail in the background',
+          ],
+          autoText: `Show ${sanitizeVisualText(safeHeroSubject, 96)} inside a believable client-specific environment. Keep enough context to communicate category and industry while still preserving a strong focal point.`,
+        },
+      ],
+      header: [
+        {
+          id: 'header-brand-band',
+          label: 'Brand Band',
+          summary: 'A disciplined header band with clear brand lockup and headline rhythm.',
+          details: [
+            'Font: bold sans-serif, 44-60px equivalent headline scale',
+            `Placement: ${selectedThemeId === 'launch-banner' || selectedThemeId === 'hiring-banner' ? 'centered top band' : 'structured top header lane'}`,
+            `Style: ${sanitizeVisualText(deriveThemeLayoutHint(selectedThemeId), 92)}`,
+          ],
+          autoText: `Use a disciplined header band. The brand lockup and headline should feel intentional, aligned, and clearly separated from the hero image, with bold sans-serif hierarchy and premium spacing.`,
+        },
+        {
+          id: 'header-editorial',
+          label: 'Editorial Masthead',
+          summary: 'Keeps the top treatment more editorial and less template-like, with cleaner whitespace.',
+          details: [
+            'Font: bold editorial sans with tighter tracking',
+            'Placement: headline-led top lane with restrained brand support',
+            'Style: premium masthead rhythm with calmer whitespace',
+          ],
+          autoText: `Make the header feel editorial rather than templated: use a strong masthead-like headline treatment, tighter rhythm, and enough whitespace that the top of the composition feels premium.`,
+        },
+        {
+          id: 'header-minimal',
+          label: 'Minimal Ribbon',
+          summary: 'Uses a lighter-weight ribbon so the hero image carries more of the visual drama.',
+          details: [
+            'Font: medium-to-bold sans, controlled scale',
+            'Placement: slim top ribbon or corner-led lockup',
+            'Style: restrained and brand-native, with minimal chrome',
+          ],
+          autoText: `Keep the header minimal and calm. Use a restrained ribbon or lockup rather than a heavy banner so the image keeps more of the attention without losing brand clarity.`,
+        },
+      ],
+      footer: [
+        {
+          id: 'footer-split-strip',
+          label: 'Split Contact Strip',
+          summary: 'A clean footer that separates website and email into a disciplined contact lane.',
+          details: [
+            'Layout: slim split footer bar',
+            `Content blocks: ${sanitizeVisualText(footerLockup, 88)}`,
+            'Style: low-noise informational strip with consistent baseline rhythm',
+          ],
+          autoText: `Use a slim split footer strip for ${sanitizeVisualText(footerLockup, 120)}. Keep it readable, low-noise, and visually aligned with the header so both feel like one system.`,
+        },
+        {
+          id: 'footer-signature',
+          label: 'Signature Footer',
+          summary: 'Uses a quieter footer treatment that feels like a signature instead of a utility bar.',
+          details: [
+            'Layout: single-line signature footer',
+            `Content blocks: ${sanitizeVisualText(footerLockup, 88)}`,
+            'Style: premium restrained signature aligned to one side',
+          ],
+          autoText: `Use a restrained signature footer with ${sanitizeVisualText(footerLockup, 120)}. It should feel elegant and secondary, never like a crowded utility bar.`,
+        },
+        {
+          id: 'footer-branded',
+          label: 'Branded Footer Band',
+          summary: 'Turns the footer into a more visible brand-colored closing band when the theme needs more structure.',
+          details: [
+            'Layout: visible brand-colored footer band',
+            `Content blocks: ${sanitizeVisualText(footerLockup, 88)}`,
+            'Style: stronger closure with a clearer design-system edge',
+          ],
+          autoText: `Finish the composition with a branded footer band. Use ${sanitizeVisualText(footerLockup, 120)} inside a stronger closing lane that still stays clean and readable.`,
+        },
+      ],
+      body: [
+        {
+          id: 'body-proof-stack',
+          label: 'Proof Stack',
+          summary: 'Uses stacked proof bullets or cards for fast-scanning LinkedIn readability.',
+          details: [
+            'Typography: 14-18px equivalent bullets with medium-to-bold weight',
+            'Spacing: 12-16px vertical rhythm between proof items',
+            `Visual style: proof-led stack using ${sanitizeVisualText(bulletSummary, 100)}`,
+          ],
+          autoText: `Use a proof-stack body treatment with short, high-signal bullet points such as ${sanitizeVisualText(bulletSummary, 120)}. Keep the vertical rhythm deliberate and the bullets easy to scan at feed size.`,
+        },
+        {
+          id: 'body-editorial',
+          label: 'Editorial Copy Block',
+          summary: 'Reduces bullet density and uses a cleaner narrative block with stronger hierarchy.',
+          details: [
+            'Typography: large supporting copy with lighter density',
+            'Spacing: generous line-height and calmer separation from the headline',
+            'Visual style: narrative-led copy lane with one or two emphasized proof points',
+          ],
+          autoText: `Use an editorial body style: fewer bullets, more narrative hierarchy, and deliberate spacing so the supporting text feels written and art-directed rather than stuffed into the layout.`,
+        },
+        {
+          id: 'body-cards',
+          label: 'Callout Cards',
+          summary: 'Turns the body area into modular callout cards with more visible separation.',
+          details: [
+            'Typography: short labels and concise support text',
+            'Spacing: modular card rhythm with protected gutters',
+            'Visual style: separated proof modules instead of one continuous text block',
+          ],
+          autoText: `Break the body zone into modular callout cards. Each card should carry one clean proof point or benefit with generous gutters and clear hierarchy.`,
+        },
+      ],
+      logo: [
+        {
+          id: 'logo-corner-lockup',
+          label: 'Corner Lockup',
+          summary: 'Places the logo in a clean brand plate so it feels premium and highly legible.',
+          details: [
+            `Position: ${selectedThemeId === 'alliance-poster' ? 'top-left brand card' : 'top-left corner lockup'}`,
+            'Background: white or light brand plate with soft edge separation',
+            `Treatment: ${logoPresence}`,
+          ],
+          autoText: `Use the selected logo in a premium corner lockup with its own clean plate and enough breathing room that it feels intentionally placed, not pasted on top.`,
+          apply: { logoPlacement: hasReadyLogo ? 'overlay' : 'none' },
+        },
+        {
+          id: 'logo-native-infusion',
+          label: 'Native Infusion',
+          summary: 'Treats the logo as part of the composition language, not a separate sticker.',
+          details: [
+            `Position: integrated into a header or brand lane`,
+            'Background: native to the composition, with colors and shadows tuned around it',
+            'Treatment: blend the mark into the surrounding design system',
+          ],
+          autoText: `Infuse the selected logo into the composition. Adjust surrounding colors, spacing, and shadow language so the mark feels designed into the layout rather than dropped on top.`,
+          apply: { logoPlacement: hasReadyLogo ? 'infuse' : 'none' },
+        },
+        {
+          id: 'logo-minimal',
+          label: 'Minimal Mark',
+          summary: 'Keeps the logo quieter so the content system or hero image stays dominant.',
+          details: [
+            'Position: reduced-size supporting brand zone',
+            'Background: minimal or no container treatment',
+            'Treatment: low-noise brand presence with careful contrast',
+          ],
+          autoText: `Keep the logo treatment restrained. Use the mark as a quiet supporting brand cue rather than a dominant element, but maintain enough contrast for trust and recognition.`,
+          apply: { logoPlacement: hasReadyLogo ? logoPlacement : 'none' },
+        },
+      ],
+      palette: [
+        {
+          id: 'palette-current',
+          label: 'Current Brand Palette',
+          summary: 'Uses the currently active saved/edited palette as the main color system.',
+          details: themePaletteRoles.map((swatch) => `${swatch.label}: ${swatch.value}`),
+          autoText: `Use the active brand palette exactly as shown: ${paletteSignature}. Treat these swatches as the main design system for backgrounds, accents, text-safe zones, and supporting UI.`,
+          apply: { paletteColors: normalizedBrandColors },
+        },
+        ...paletteActionOptions.slice(0, 2).map((action) => ({
+          id: `palette-${action.id}`,
+          label: action.label,
+          summary: action.description,
+          details: action.colors.slice(0, 4).map((color, index) => `Swatch ${index + 1}: ${color}`),
+          autoText: `Use the ${action.label.toLowerCase()} palette direction: ${action.colors.slice(0, 4).join(', ')}. Keep the theme colors coherent across hero, overlay, header, and footer.`,
+          apply: { paletteColors: action.colors },
+        })),
+      ],
+      overlay: [
+        {
+          id: 'overlay-brand-gradient',
+          label: 'Brand Gradient Shield',
+          summary: 'A brand-tinted gradient overlay that protects readability while keeping the hero personality visible.',
+          details: [
+            'Type: gradient',
+            `Opacity: approximately ${overlayOpacity}`,
+            `Bias: built from ${derivedThemePalette.bgStart} into ${derivedThemePalette.accent}`,
+          ],
+          autoText: `Use a brand-tinted gradient overlay at roughly ${overlayOpacity}. It should preserve the hero image personality, but protect headline and body readability with colors pulled from the active brand palette.`,
+        },
+        {
+          id: 'overlay-contrast-veil',
+          label: 'Contrast Veil',
+          summary: 'A softer contrast-correction veil for busy photography or higher-detail backgrounds.',
+          details: [
+            'Type: soft solid-to-transparent veil',
+            'Opacity: approximately 52%',
+            'Bias: tuned for WCAG-friendly text contrast over busy detail',
+          ],
+          autoText: `Use a softer contrast veil instead of a heavy generic dark wash. Correct for busy detail, keep the image alive, and make the copy zones comfortably readable without flattening the scene.`,
+        },
+        {
+          id: 'overlay-minimal',
+          label: 'Minimal Overlay',
+          summary: 'Uses the lightest overlay touch when the image already has strong natural text-safe space.',
+          details: [
+            'Type: minimal gradient or none',
+            'Opacity: 24-32%',
+            'Bias: preserve natural image tonality with only a small text-safe correction',
+          ],
+          autoText: `Keep the overlay minimal. Only add enough of a brand-matched wash to preserve readability while letting the natural hero tonality lead.`,
+        },
+      ],
+    };
+  }, [
+    activeTheme.label,
+    autoBackdropHint,
+    brandName,
+    currentStyle?.label,
+    currentTone?.label,
+    derivedThemePalette.accent,
+    derivedThemePalette.bgEnd,
+    derivedThemePalette.bgStart,
+    derivedThemePalette.support,
+    footerEmail,
+    footerWebsite,
+    hasReadyLogo,
+    logoPlacement,
+    normalizedBrandColors,
+    previewFeatureLines,
+    productName,
+    selectedPdfImage?.title,
+    selectedReferenceImage,
+    selectedReferenceSummary?.detail,
+    selectedSiteImage?.source,
+    selectedStyle,
+    selectedThemeId,
+    selectedTone,
+    themePaletteRoles,
+    themeUsesHeroReference,
+  ]);
   const suggestedBrandColors = useMemo(
     () =>
       dedupeBrandColorList([
@@ -4126,6 +4839,194 @@ export function ImageCreator({
       ].filter((action) => action.colors.length > 0),
     [baselineBrandColors, derivedThemePalette]
   );
+  useEffect(() => {
+    setVisionSelections((prev) => {
+      const next: Partial<Record<VisionComponentKey, string>> = { ...prev };
+      let changed = false;
+
+      for (const key of VISION_COMPONENT_ORDER) {
+        const options = themeVisionOptions[key] || [];
+        if (options.length === 0) continue;
+        const currentId = prev[key];
+        if (!currentId || !options.some((option) => option.id === currentId)) {
+          next[key] = options[0].id;
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [themeVisionOptions]);
+
+  useEffect(() => {
+    setAcceptedVisionComponents(createVisionAcceptedState(false));
+    setVisionOverrides(createVisionOverrideState());
+    setVisionSelections({});
+  }, [brandId, selectedThemeId]);
+
+  const themeVisionEntries = useMemo<VisionComponentEntry[]>(() => {
+    return VISION_COMPONENT_ORDER.map((key) => {
+      const options = themeVisionOptions[key] || [];
+      const selectedOptionId = visionSelections[key];
+      const option =
+        options.find((item) => item.id === selectedOptionId) ||
+        options[0] || {
+          id: `${key}-fallback`,
+          label: 'Default',
+          summary: 'Default component state',
+          details: [],
+          autoText: '',
+        };
+      const overrideText = visionOverrides[key] || '';
+      return {
+        key,
+        label: VISION_COMPONENT_LABELS[key],
+        option,
+        accepted: acceptedVisionComponents[key],
+        overrideText,
+        resolvedText: (overrideText.trim() || option.autoText || '').trim(),
+      };
+    });
+  }, [acceptedVisionComponents, themeVisionOptions, visionOverrides, visionSelections]);
+
+  useEffect(() => {
+    themeVisionOptionsRef.current = themeVisionOptions;
+  }, [themeVisionOptions]);
+
+  useEffect(() => {
+    themeVisionEntriesRef.current = themeVisionEntries;
+  }, [themeVisionEntries]);
+
+  const orderedVisionEntries = useMemo(
+    () =>
+      [...themeVisionEntries].sort((left, right) => {
+        if (left.accepted === right.accepted) {
+          return VISION_COMPONENT_ORDER.indexOf(left.key) - VISION_COMPONENT_ORDER.indexOf(right.key);
+        }
+        return left.accepted ? -1 : 1;
+      }),
+    [themeVisionEntries]
+  );
+
+  const acceptedVisionCount = useMemo(
+    () => themeVisionEntries.filter((entry) => entry.accepted).length,
+    [themeVisionEntries]
+  );
+  const composedVision = useMemo(
+    () => {
+      const baselineVision = composeSmartVision({
+        industry,
+        businessFocus: analysisProfile?.businessFocus,
+        brandDescription: analysisProfile?.brandDescription,
+        targetAudience: analysisProfile?.targetAudience,
+        brandName,
+        productName,
+        tagline: analysisProfile?.tagline,
+        tone: analysisProfile?.tone,
+        imageStyle: analysisProfile?.imageStyle,
+        themeLabel: activeTheme.label,
+        themeLayoutHint: deriveThemeLayoutHint(selectedThemeId),
+        headline: activeHeadlineText || undefined,
+        taglineText: activeTaglineText || undefined,
+        featureBullets: previewFeatureLines.length > 0 ? previewFeatureLines : undefined,
+        hasLogo: hasReadyLogo,
+        partnerName: partnerName || undefined,
+        footerWebsite: footerWebsite || undefined,
+        footerEmail: footerEmail || undefined,
+        brandColors: normalizedBrandColors.length > 0 ? normalizedBrandColors : undefined,
+        toneName: currentTone?.label,
+        styleName: currentStyle?.label,
+        referenceDetail:
+          selectedReferenceSummary?.detail ||
+          selectedPdfImage?.title ||
+          selectedSiteImage?.source ||
+          undefined,
+      });
+      const componentLines = themeVisionEntries.map((entry) => {
+        const status = entry.accepted ? 'Approved' : 'Draft';
+        return `${status} ${entry.label}: ${sanitizeVisualText(entry.resolvedText, 160)}.`;
+      });
+
+      return [baselineVision, 'My Vision components:', ...componentLines]
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 1800);
+    },
+    [
+      industry,
+      analysisProfile?.businessFocus,
+      analysisProfile?.brandDescription,
+      analysisProfile?.targetAudience,
+      analysisProfile?.tagline,
+      analysisProfile?.tone,
+      analysisProfile?.imageStyle,
+      brandName,
+      productName,
+      activeTheme.label,
+      selectedThemeId,
+      activeHeadlineText,
+      activeTaglineText,
+      previewFeatureLines,
+      hasReadyLogo,
+      partnerName,
+      footerWebsite,
+      footerEmail,
+      normalizedBrandColors,
+      currentTone?.label,
+      currentStyle?.label,
+      selectedReferenceSummary?.detail,
+      selectedPdfImage?.title,
+      selectedSiteImage?.source,
+      themeVisionEntries,
+    ]
+  );
+  const effectiveVisionPrompt = useMemo(
+    () => {
+      if (!isVisionUserEdited && customPrompt.trim()) {
+        return `AUTO-COMPOSED CREATIVE BRIEF:\n${customPrompt.trim()}`;
+      }
+      return [
+        buildVisionBriefBlock(themeVisionEntries),
+        autoVisionBrief,
+        hasUserVisionNotes ? `MASTER BRIEF OVERRIDE:\n${customPrompt.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+        .trim();
+    },
+    [autoVisionBrief, customPrompt, hasUserVisionNotes, isVisionUserEdited, themeVisionEntries]
+  );
+  const visionPreviewText = useMemo(
+    () =>
+      hasUserVisionNotes
+        ? customPrompt.trim()
+        : themeVisionEntries.slice(0, 4).map((entry) => entry.resolvedText).join(' '),
+    [customPrompt, hasUserVisionNotes, themeVisionEntries]
+  );
+
+  useEffect(() => {
+    if (isVisionUserEdited) return;
+    if (visionComposeTimerRef.current) {
+      clearTimeout(visionComposeTimerRef.current);
+    }
+    visionComposeTimerRef.current = setTimeout(() => {
+      setCustomPrompt(composedVision);
+    }, 300);
+    return () => {
+      if (visionComposeTimerRef.current) {
+        clearTimeout(visionComposeTimerRef.current);
+      }
+    };
+  }, [composedVision, isVisionUserEdited]);
+
+  useEffect(() => {
+    setIsVisionUserEdited(false);
+  }, [brandId]);
+
+  useEffect(() => {
+    setIsVisionUserEdited(false);
+  }, [selectedThemeId]);
+
   const canRestoreBrandColors =
     baselineBrandColors.length > 0 &&
     colorListSignature(baselineBrandColors) !== colorListSignature(normalizedBrandColors);
@@ -4346,6 +5247,91 @@ export function ImageCreator({
             <div className="rounded-lg border border-fuchsia-200/60 bg-fuchsia-50/40 px-3 py-2 flex items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-fuchsia-500 flex-shrink-0" />
               <p className="text-[11px] text-fuchsia-700 font-medium truncate">{activeTheme.label}: {activeTheme.summary}</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Stage 1 · Theme Breakdown
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    Review each theme component, then accept or swap it before you generate.
+                  </p>
+                </div>
+                <Badge className="border border-slate-200 bg-slate-50 text-slate-600 text-[9px]">
+                  {acceptedVisionCount}/{VISION_COMPONENT_ORDER.length} accepted
+                </Badge>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2">
+                {themeVisionEntries.map((entry) => {
+                  const isPalette = entry.key === 'palette';
+                  return (
+                    <div
+                      key={`theme-component-${entry.key}`}
+                      className={`rounded-xl border px-3 py-3 transition-all ${
+                        entry.accepted
+                          ? 'border-emerald-200 bg-emerald-50/60 shadow-sm'
+                          : 'border-slate-200 bg-slate-50/60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {entry.label}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{entry.option.label}</p>
+                        </div>
+                        <Badge className={`text-[9px] ${entry.accepted ? 'border-emerald-300 bg-emerald-100 text-emerald-700' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          {entry.accepted ? 'Accepted' : 'Draft'}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-5 text-slate-600">{entry.option.summary}</p>
+                      <div className="mt-2 space-y-1">
+                        {entry.option.details.slice(0, 4).map((detail) => (
+                          <p key={`${entry.key}-${detail}`} className="text-[11px] leading-5 text-slate-700">
+                            <span className="mr-1 text-fuchsia-500">•</span>
+                            {detail}
+                          </p>
+                        ))}
+                      </div>
+                      {isPalette && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {themePaletteRoles.map((swatch) => (
+                            <div
+                              key={`${entry.key}-${swatch.label}`}
+                              className="h-6 w-6 rounded-md border border-white shadow-sm ring-1 ring-slate-200/70"
+                              style={{ backgroundColor: swatch.value }}
+                              title={`${swatch.label}: ${swatch.value}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSwapVisionOption(entry.key)}
+                          className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition-colors hover:border-fuchsia-200 hover:bg-fuchsia-50"
+                        >
+                          Swap
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVisionAcceptance(entry.key)}
+                          className={`inline-flex items-center justify-center rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
+                            entry.accepted
+                              ? 'border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              : 'border border-slate-200 bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          {entry.accepted ? 'Accepted' : 'Accept'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* ── Theme Palette & Brand Colors ── */}
@@ -4585,8 +5571,8 @@ export function ImageCreator({
                           </p>
                           <p className="mt-1 text-[10px] text-indigo-600">
                             {themeUsesHeroReference
-                              ? `This image fills the hero area automatically for ${activeTheme.label}.`
-                              : 'This reference guides the AI composition directly.'}
+                              ? `Reference image active — AI will use this as hero for ${activeTheme.label}.`
+                              : 'Reference image active — AI will use this as hero.'}
                           </p>
                         </div>
                         <Button
@@ -5185,7 +6171,7 @@ export function ImageCreator({
                   {selectedReferenceSummary?.detail || selectedPdfImage?.title || selectedReferenceImage}
                 </p>
                 <p className="mt-0.5 text-[10px] text-indigo-600">
-                  This image is currently driving the hero area.
+                  Reference image active — AI will use this as hero.
                 </p>
               </div>
               <Button
@@ -5699,7 +6685,7 @@ export function ImageCreator({
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-violet-500" />
             <h3 className="font-semibold text-sm text-slate-900">
-              {isAiGuidedTheme ? 'Your Vision' : 'Creative Notes'} <span className="text-[10px] font-normal text-gray-400">(optional)</span>
+              My Vision <span className="text-[10px] font-normal text-gray-400">(live brief)</span>
             </h3>
             <Badge className="border border-violet-200 bg-violet-100 text-violet-700 text-[9px]">
               Selection-fed
@@ -5754,9 +6740,106 @@ export function ImageCreator({
               </p>
             </div>
           )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  Stage 2 · My Vision
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                  This brief grows as you approve components. Edit any field to override the auto direction.
+                </p>
+              </div>
+              <Badge className="border border-slate-200 bg-white text-slate-600 text-[9px]">
+                {acceptedVisionCount} approved
+              </Badge>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <AnimatePresence initial={false}>
+                {orderedVisionEntries.map((entry) => (
+                  <motion.div
+                    key={`vision-entry-${entry.key}-${entry.option.id}-${entry.accepted ? 'accepted' : 'draft'}`}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
+                    className={`rounded-xl border p-3 ${
+                      entry.accepted
+                        ? 'border-emerald-200 bg-white shadow-sm'
+                        : 'border-slate-200 bg-white/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          {entry.label}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{entry.option.label}</p>
+                        <p className="mt-1 text-[11px] leading-5 text-slate-600">{entry.option.summary}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSwapVisionOption(entry.key)}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 transition-colors hover:border-fuchsia-200 hover:bg-fuchsia-50"
+                        >
+                          Swap
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVisionAcceptance(entry.key)}
+                          className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
+                            entry.accepted
+                              ? 'border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              : 'border border-slate-200 bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          {entry.accepted ? 'Approved' : 'Approve'}
+                        </button>
+                      </div>
+                    </div>
+                    <Textarea
+                      value={entry.overrideText || entry.option.autoText}
+                      onChange={(e) => handleVisionOverrideChange(entry.key, e.target.value)}
+                      rows={2}
+                      className="mt-3 resize-none border-slate-200 bg-white text-sm text-slate-900"
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1.5">
+              <Badge className={`text-[9px] ${isVisionUserEdited ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}`}>
+                {isVisionUserEdited ? 'Custom' : 'Auto-composed'}
+              </Badge>
+            </div>
+            {isVisionUserEdited && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVisionUserEdited(false);
+                  setCustomPrompt(composedVision);
+                }}
+                className="flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-800 font-medium transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Reset to auto-vision
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] leading-5 text-slate-500">
+            Master brief. This is the combined prompt that goes to the AI. Edit it directly if you want to override the structured vision cards above.
+          </p>
           <Textarea
             value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
+            onChange={(e) => {
+              setCustomPrompt(e.target.value);
+              if (!isVisionUserEdited) setIsVisionUserEdited(true);
+            }}
             placeholder={activeTheme.promptHint || 'Describe the image you want.'}
             rows={isAiGuidedTheme ? 5 : 3}
             className="text-sm resize-none bg-slate-50 border-slate-300 text-slate-900 placeholder:text-gray-400"
@@ -6149,34 +7232,81 @@ export function ImageCreator({
           )}
         </Card>
 
-        {latestBlendPreview && (
-          <Card className="p-3 border border-sky-200/70 bg-sky-50/50">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-sky-800">Blend comparison</p>
-              <Badge className="bg-sky-100 text-sky-700 border border-sky-200 text-[10px]">
-                {BLEND_MODE_OPTIONS.find((mode) => mode.id === latestBlendPreview.mode)?.label || 'Blend'}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+        {selectedArtifactMeta && (
+          <Card className="p-3 border border-sky-200/70 bg-sky-50/50 space-y-3">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] text-gray-400 mb-1">Raw AI</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={latestBlendPreview.rawUrl}
-                  alt="Raw AI output"
-                  className="w-full h-24 rounded-md object-cover border border-slate-200 bg-white"
-                />
+                <p className="text-xs font-semibold text-sky-800">Stage 3 · AI Enhancement Pass</p>
+                <p className="mt-1 text-[11px] leading-5 text-sky-900">{selectedArtifactMeta.rationale}</p>
               </div>
-              <div>
-                <p className="text-[10px] text-gray-400 mb-1">Blended</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={latestBlendPreview.blendedUrl}
-                  alt="Blended output"
-                  className="w-full h-24 rounded-md object-cover border border-sky-200 bg-gray-50"
-                />
+              <div className="flex items-center gap-1 rounded-lg border border-sky-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setArtifactCompareView('before')}
+                  className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
+                    artifactCompareView === 'before'
+                      ? 'bg-sky-600 text-white'
+                      : 'text-slate-600 hover:bg-sky-50'
+                  }`}
+                >
+                  Before
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArtifactCompareView('after')}
+                  className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
+                    artifactCompareView === 'after'
+                      ? 'bg-sky-600 text-white'
+                      : 'text-slate-600 hover:bg-sky-50'
+                  }`}
+                >
+                  After
+                </button>
               </div>
             </div>
+
+            <div className="overflow-hidden rounded-xl border border-sky-200 bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={artifactCompareView === 'before' ? selectedArtifactMeta.baseUrl : selectedArtifactMeta.finalUrl}
+                alt={artifactCompareView === 'before' ? 'Before enhancement' : 'After enhancement'}
+                className="w-full h-auto block"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
+              <span>{artifactCompareView === 'before' ? 'Before: raw/base composition pass' : 'After: enhanced final output'}</span>
+              {selectedArtifactMeta.revisionTarget && (
+                <Badge className="border border-sky-200 bg-white text-sky-700 text-[9px]">
+                  Revision focus: {VISION_COMPONENT_LABELS[selectedArtifactMeta.revisionTarget]}
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Regenerate This Element
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {themeVisionEntries.map((entry) => (
+                  <button
+                    key={`regen-${entry.key}`}
+                    type="button"
+                    onClick={() => handleRegenerateComponent(entry.key)}
+                    disabled={isGenerating || isApplyingBlend}
+                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition-colors hover:border-sky-200 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {latestBlendPreview && (
+              <div className="rounded-lg border border-sky-100 bg-white/70 px-3 py-2 text-[10px] leading-5 text-slate-600">
+                Additional blend pass: {BLEND_MODE_OPTIONS.find((mode) => mode.id === latestBlendPreview.mode)?.label || 'Blend'}.
+              </div>
+            )}
           </Card>
         )}
 
