@@ -23,6 +23,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['sharp', 'pdf-parse'],
   images: {
     remotePatterns: [
       {
