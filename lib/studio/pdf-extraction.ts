@@ -10,7 +10,7 @@ import { createPdfParser } from '@/lib/pdf-parse-config';
 export const EVIDENCE_STORAGE_BUCKET =
   process.env.STUDIO_EVIDENCE_BUCKET?.trim() || 'brand-evidence';
 
-export const MAX_PDF_IMAGE_EXTRACTION_BYTES = 220 * 1024 * 1024;
+export const MAX_PDF_IMAGE_EXTRACTION_BYTES = 1024 * 1024 * 1024;
 export const MAX_EXTRACTED_IMAGES_PER_PDF = 1200;
 const MIN_EXTRACTED_IMAGE_SIZE_PX = 0;
 const MAX_EXTRACTED_IMAGE_BYTES = 24 * 1024 * 1024;

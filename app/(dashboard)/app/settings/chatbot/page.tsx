@@ -473,8 +473,8 @@ export default function ChatbotSettingsPage() {
         if (!isPdfMime && !isPdfByName) {
             return 'Only PDF files are supported';
         }
-        if (file.size > 200 * 1024 * 1024) {
-            return 'PDF must be 200MB or smaller';
+        if (file.size > 1024 * 1024 * 1024) {
+            return 'PDF must be 1GB or smaller';
         }
         return null;
     }

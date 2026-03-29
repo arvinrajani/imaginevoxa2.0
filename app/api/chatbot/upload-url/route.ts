@@ -11,7 +11,7 @@ import {
 const requestSchema = z.object({
   brandId: z.string().trim().min(1, 'brandId is required'),
   fileName: z.string().trim().min(1, 'fileName is required'),
-  fileSize: z.number().int().positive().max(200 * 1024 * 1024).optional(),
+  fileSize: z.number().int().positive().max(1024 * 1024 * 1024).optional(),
   contentType: z.string().trim().optional(),
 });
 
