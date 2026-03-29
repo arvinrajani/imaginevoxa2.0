@@ -1560,7 +1560,7 @@ export function PostGenerator({
       const data = await requestPostOptions({
         prompt: normalizedPrompt,
         channel: primaryChannel,
-        count: 3,
+        count: 2,
       });
       const {
         options,

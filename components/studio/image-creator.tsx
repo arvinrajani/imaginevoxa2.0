@@ -24,6 +24,7 @@ import {
   Trash2,
   Building2,
   Mail,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -680,7 +681,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the single main message and any whitespace, restraint, or premium editorial cues the composition must preserve.',
     recommendedTone: 'minimal',
     recommendedStyle: 'text-overlay',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'industrial-campaign',
@@ -692,7 +693,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Mention the industrial setting, equipment, scale, and whether the result should feel like a premium electrical campaign poster.',
     recommendedTone: 'bold',
     recommendedStyle: 'cinematic',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'datasheet-frame',
@@ -704,7 +705,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the product, key specifications, technical proof points, and whether the result should feel like a datasheet, diagram, or brochure cover.',
     recommendedTone: 'tech',
     recommendedStyle: 'infographic',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'proof-stack',
@@ -716,7 +717,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the proof you want to show: metrics, certifications, product reliability, client trust, or evidence-led features.',
     recommendedTone: 'professional',
     recommendedStyle: 'split-layout',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'launch-banner',
@@ -728,7 +729,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe what is being announced, who it is for, and whether the reveal should feel urgent, premium, or high-energy.',
     recommendedTone: 'bold',
     recommendedStyle: 'text-overlay',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'sector-collage',
@@ -740,7 +741,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'List the sectors or environments that should appear and what the audience should understand about their applications.',
     recommendedTone: 'tech',
     recommendedStyle: 'split-layout',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'brand-story',
@@ -752,7 +753,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the story, values, or positioning you want to communicate and whether the image should feel personal, premium, or visionary.',
     recommendedTone: 'warm',
     recommendedStyle: 'photo-blend',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'offer-card',
@@ -764,7 +765,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the offer, promotion, or service highlight and whether the image should feel urgent, premium, or brand-forward.',
     recommendedTone: 'bold',
     recommendedStyle: 'text-overlay',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'comparison-board',
@@ -776,7 +777,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Mention what is being compared and what the viewer should understand immediately from the visual contrast.',
     recommendedTone: 'professional',
     recommendedStyle: 'infographic',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'premium-editorial',
@@ -788,7 +789,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the premium mood, materials, lighting, and subject so the image feels editorial rather than generic.',
     recommendedTone: 'luxury',
     recommendedStyle: 'cinematic',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'job-posting',
@@ -800,7 +801,7 @@ const THEME_OPTIONS: ThemeOption[] = [
       'Describe the role title, key requirements, location, and what makes this opportunity stand out.',
     recommendedTone: 'professional',
     recommendedStyle: 'corporate',
-    recommendedLogoPlacement: 'overlay',
+    recommendedLogoPlacement: 'infuse',
   },
   {
     id: 'hiring-banner',
@@ -840,6 +841,13 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
 ];
 
+function getThemeRecommendedLogoPlacement(themeId: ThemeId) {
+  return (
+    THEME_OPTIONS.find((theme) => theme.id === themeId)?.recommendedLogoPlacement ||
+    'overlay'
+  );
+}
+
 const THEME_CATEGORY_ORDER: Array<ThemeOption['category']> = [
   'General',
   'Campaign',
@@ -857,9 +865,9 @@ const BLEND_MODE_OPTIONS: Array<{ id: BlendModeId; label: string; description: s
 ];
 
 const ASPECT_DIMENSIONS: Record<'landscape' | 'square' | 'portrait', { width: number; height: number }> = {
-  landscape: { width: 1200, height: 628 },
-  square: { width: 1080, height: 1080 },
-  portrait: { width: 1080, height: 1350 },
+  landscape: { width: 1536, height: 1024 },
+  square: { width: 1024, height: 1024 },
+  portrait: { width: 1024, height: 1536 },
 };
 
 const VISION_COMPONENT_ORDER: VisionComponentKey[] = [
@@ -1213,28 +1221,46 @@ function ThemePreviewMini({
 
   if ((themeId as string) === 'alliance-poster') {
     return (
-      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0a1e3d] via-[#0f4180] to-[#0a4a8a] p-2 shadow-sm ${ringClass}`}>
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2">
-            <div className="h-5 w-14 rounded bg-white/95" />
-            <div className="flex-1">
-              <div className="h-2.5 w-36 rounded bg-white/90" />
-              <div className="mt-1 h-2.5 w-28 rounded bg-amber-300" />
+      <div className={`mb-3 h-20 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-[#08172f] via-[#0e3d73] to-[#0c5d88] p-2 shadow-sm ${ringClass}`}>
+        <div className="relative flex h-full flex-col">
+          <div className="flex h-[28%] items-center gap-2 rounded-md border border-white/10 bg-black/15 px-1.5">
+            <div className="relative h-5 w-14 overflow-hidden rounded-md border border-white/12 bg-slate-950/18">
+              <div className="absolute inset-y-0 left-0 w-1 bg-amber-300/90" />
+              <div className="absolute inset-[3px] rounded-[4px] bg-white/95" />
             </div>
-            <div className="flex gap-1">
-              <div className="h-5 w-8 rounded bg-white/90" />
-              <div className="h-5 w-8 rounded bg-white/75" />
+            <div className="flex-1 space-y-1">
+              <div className="h-2.5 w-28 rounded bg-white/92" />
+              <div className="h-2 w-20 rounded bg-amber-300/95" />
+            </div>
+            <div className="flex gap-1.5">
+              <div className="relative h-5 w-8 overflow-hidden rounded-md border border-white/10 bg-slate-950/26">
+                <div className="absolute inset-y-[20%] left-[10%] w-[10%] rounded-full bg-amber-300/80" />
+                <div className="absolute inset-[3px] rounded-[4px] bg-white/90" />
+              </div>
+              <div className="relative h-5 w-8 overflow-hidden rounded-md border border-white/10 bg-slate-950/26">
+                <div className="absolute inset-y-[20%] left-[10%] w-[10%] rounded-full bg-amber-300/70" />
+                <div className="absolute inset-[3px] rounded-[4px] bg-white/82" />
+              </div>
             </div>
           </div>
           <div className="mt-2 flex flex-1 gap-2">
-            <div className="h-full w-16 rounded-xl bg-white/18" />
-            <div className="flex-1 space-y-1.5 pt-1">
-              <div className="h-2.5 w-full rounded bg-white/75" />
-              <div className="h-2.5 w-11/12 rounded bg-white/75" />
-              <div className="h-2.5 w-10/12 rounded bg-white/75" />
+            <div className="relative w-[34%] overflow-hidden rounded-xl border border-white/12 bg-white/12">
+              <div className="absolute left-[14%] top-[10%] rounded-full border border-white/10 bg-black/24 px-1.5 py-0.5 text-[5px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                Hero
+              </div>
+            </div>
+            <div className="flex-1 rounded-xl border border-white/10 bg-slate-950/28 p-2">
+              <div className="h-2 w-20 rounded bg-white/58" />
+              <div className="mt-2 space-y-1.5">
+                <div className="h-3 rounded-lg bg-white/18" />
+                <div className="h-3 rounded-lg bg-white/18" />
+                <div className="h-3 w-11/12 rounded-lg bg-white/18" />
+              </div>
             </div>
           </div>
-          <div className="mt-2 h-3 rounded bg-sky-200/80" />
+          <div className="mt-2 h-2.5 rounded-full bg-slate-950/26">
+            <div className="h-full w-1/2 rounded-full bg-white/78" />
+          </div>
         </div>
       </div>
     );
@@ -1244,7 +1270,7 @@ function ThemePreviewMini({
     return (
       <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-white to-slate-200 p-2 shadow-sm ${ringClass}`}>
         <div className="flex h-full items-center gap-3">
-          <div className="h-14 w-14 rounded-full bg-slate-700 shadow-lg" />
+          <div className="h-14 w-14 rounded-full bg-slate-700 shadow-lg ring-2 ring-white/20" />
           <div className="flex-1 space-y-2">
             <div className="h-3 w-3/4 rounded bg-slate-800" />
             <div className="h-2.5 w-1/2 rounded bg-slate-400" />
@@ -1273,11 +1299,11 @@ function ThemePreviewMini({
 
   if (themeId === 'clean-brand') {
     return (
-      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-2 shadow-sm ${ringClass}`}>
+      <div className={`mb-3 h-20 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-2 shadow-sm ${ringClass}`}>
         <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white p-2">
           <div className="h-2.5 w-16 rounded bg-slate-300" />
           <div className="mt-3 h-3 w-40 rounded bg-slate-900" />
-          <div className="mt-1.5 h-2.5 w-24 rounded bg-slate-400" />
+          <div className="mt-1.5 h-2.5 w-24 rounded bg-slate-600" />
           <div className="mt-auto flex justify-end">
             <div className="h-5 w-12 rounded bg-slate-900" />
           </div>
@@ -1288,16 +1314,33 @@ function ThemePreviewMini({
 
   if ((themeId as string) === 'industrial-campaign') {
     return (
-      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-950 via-[#13325e] to-[#1d5aa8] p-2 shadow-sm ${ringClass}`}>
-        <div className="flex h-full gap-2">
-          <div className="w-[42%] rounded-xl bg-white/12" />
-          <div className="flex-1 space-y-1.5 rounded-xl bg-black/18 p-2">
-            <div className="h-2.5 w-4/5 rounded bg-white/90" />
-            <div className="h-2.5 w-3/5 rounded bg-amber-300" />
-            <div className="mt-2 h-3 w-full rounded bg-white/55" />
-            <div className="h-3 w-11/12 rounded bg-white/55" />
-            <div className="h-3 w-9/12 rounded bg-white/55" />
+      <div className={`mb-3 h-20 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-slate-950 via-[#13325e] to-[#1d5aa8] p-2 shadow-sm ${ringClass}`}>
+        <div className="relative flex h-full flex-col">
+          <div className="flex h-[27%] items-center gap-2 rounded-md border border-white/10 bg-black/16 px-1.5">
+            <div className="relative h-5 w-14 overflow-hidden rounded-md border border-white/12 bg-slate-950/22">
+              <div className="absolute inset-y-0 left-0 w-1 bg-cyan-300/90" />
+              <div className="absolute inset-[3px] rounded-[4px] bg-white/94" />
+            </div>
+            <div className="flex-1">
+              <div className="h-2 w-24 rounded bg-white/55" />
+            </div>
+            <div className="h-4 w-16 rounded-full border border-white/10 bg-black/24" />
           </div>
+          <div className="mt-2 flex flex-1 gap-2">
+            <div className="relative w-[36%] overflow-hidden rounded-xl border border-white/12 bg-white/10">
+              <div className="absolute inset-x-[15%] bottom-[10%] h-2 rounded-full bg-slate-950/30 blur-[2px]" />
+            </div>
+            <div className="flex-1 rounded-xl border border-white/10 bg-slate-950/34 p-2">
+              <div className="h-2.5 w-4/5 rounded bg-white/92" />
+              <div className="mt-1.5 h-2 w-3/5 rounded bg-cyan-300/95" />
+              <div className="mt-2 space-y-1.5">
+                <div className="h-3 rounded-lg bg-white/18" />
+                <div className="h-3 rounded-lg bg-white/18" />
+                <div className="h-3 w-10/12 rounded-lg bg-white/18" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 h-2.5 rounded-full bg-white/12" />
         </div>
       </div>
     );
@@ -1367,17 +1410,19 @@ function ThemePreviewMini({
 
   if (themeId === 'sector-collage') {
     return (
-      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#0d203f] via-[#214d7e] to-[#7bb2d8] p-2 shadow-sm ${ringClass}`}>
-        <div className="grid h-full grid-cols-3 gap-2">
-          <div className="rounded-xl bg-white/14" />
-          <div className="rounded-xl bg-white/10" />
-          <div className="rounded-xl bg-white/14" />
-        </div>
-        <div className="mt-2 grid grid-cols-4 gap-1.5">
-          <div className="h-2.5 rounded bg-white/70" />
-          <div className="h-2.5 rounded bg-white/70" />
-          <div className="h-2.5 rounded bg-white/70" />
-          <div className="h-2.5 rounded bg-white/70" />
+      <div className={`mb-3 h-20 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-[#0d203f] via-[#214d7e] to-[#7bb2d8] p-2 shadow-sm ${ringClass}`}>
+        <div className="flex h-full flex-col gap-1">
+          <div className="grid flex-1 grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white/14" />
+            <div className="rounded-xl bg-white/10" />
+            <div className="rounded-xl bg-white/14" />
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            <div className="h-2 rounded bg-white/70" />
+            <div className="h-2 rounded bg-white/70" />
+            <div className="h-2 rounded bg-white/70" />
+            <div className="h-2 rounded bg-white/70" />
+          </div>
         </div>
       </div>
     );
@@ -1448,7 +1493,7 @@ function ThemePreviewMini({
 
   if (themeId === 'job-posting') {
     return (
-      <div className={`mb-3 h-20 rounded-lg border border-slate-200 bg-gradient-to-br from-[#1a2744] via-[#2d4a7a] to-[#4a90d9] p-2 shadow-sm ${ringClass}`}>
+      <div className={`mb-3 h-20 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-[#1a2744] via-[#2d4a7a] to-[#4a90d9] p-2 shadow-sm ${ringClass}`}>
         <div className="mb-1 h-3 w-full rounded-t bg-blue-500/80">
           <p className="text-center text-[6px] font-bold leading-[12px] text-white">WE&apos;RE HIRING</p>
         </div>
@@ -1615,7 +1660,7 @@ function ThemePreviewLarge({
   const launchTaglineLines = fitPreviewText(safeTagline, [22, 26, 30], 2);
   const footerLine = [safeFooterWebsite, safeFooterEmail].filter(Boolean).join(' | ');
   const footerPreviewLines = fitPreviewText(footerLine, [30, 34, 38, 42], 2);
-  const allianceTaglineLines = wrapPreviewText(safeTagline || partnerName || '', 24, 2);
+  const allianceTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 1);
   const hasAllianceHeaderContent =
     allianceHeaderLogos.length > 0 || Boolean((partnerName || '').trim() || (partnerTagline || '').trim());
   const previewTone = sanitizeVisualText(selectedToneLabel || '', 24);
@@ -1634,8 +1679,7 @@ function ThemePreviewLarge({
     }
   ) {
     const fitClass = options?.fit === 'cover' ? 'object-cover' : 'object-contain';
-    const paddingClass =
-      options?.fit === 'cover' ? options?.imagePaddingClass || '' : options?.imagePaddingClass || 'p-3';
+    const paddingClass = options?.imagePaddingClass || 'p-2';
     return (
       <div className={`flex items-center justify-center overflow-hidden ${className}`}>
         {showHero ? (
@@ -1643,6 +1687,7 @@ function ThemePreviewLarge({
             src={heroSrc!}
             alt="Reference"
             className={`h-full w-full ${fitClass} ${paddingClass} drop-shadow-lg`}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         ) : (
           <div className="flex flex-col items-center gap-2 text-white/30">
@@ -1685,6 +1730,72 @@ function ThemePreviewLarge({
           >
             {brandName || 'Brand'}
           </span>
+        )}
+      </div>
+    );
+  }
+
+  function renderHeaderBrandLockup(className: string) {
+    return (
+      <div className={`relative overflow-hidden ${className}`}>
+        <div className="absolute inset-0 rounded-[18px] border border-white/12 bg-black/16" />
+        <div
+          className="absolute inset-y-0 left-0 w-[4%] rounded-l-[18px]"
+          style={{ backgroundColor: `${previewPalette.accent}e0` }}
+        />
+        <div className="absolute inset-[8%] rounded-[14px] bg-white/[0.96] shadow-[inset_0_1px_0_rgba(255,255,255,0.78)]" />
+        <div className="absolute inset-[8%] flex items-center justify-center px-[11%]">
+          {uploadedLogo ? (
+            <img
+              src={uploadedLogo}
+              alt="Brand logo preview"
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-700">
+              {brandName || 'Brand'}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderHeaderPartnerLockup(
+    className: string,
+    fallbackTitle = 'Alliance partner',
+    fallbackSubline = 'Co-branded header rail'
+  ) {
+    return (
+      <div className={`relative overflow-hidden ${className}`}>
+        <div className="absolute inset-0 rounded-[18px] border border-white/10 bg-slate-950/26 backdrop-blur-sm" />
+        <div
+          className="absolute inset-y-[14%] left-[3.5%] w-[1.8%] rounded-full"
+          style={{ backgroundColor: `${previewPalette.accent}d6` }}
+        />
+        {allianceHeaderLogos.length > 0 ? (
+          <div className="absolute inset-[8%] flex items-center gap-2">
+            {allianceHeaderLogos.slice(0, 3).map((logo) => (
+              <div
+                key={logo.id}
+                className="flex h-full flex-1 items-center justify-center rounded-[12px] border border-white/8 bg-white/92 px-2 py-1"
+              >
+                <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="absolute inset-[8%] flex flex-col items-center justify-center px-3 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/58">
+              Partner Lockup
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-white">
+              {partnerName || fallbackTitle}
+            </p>
+            <p className="mt-0.5 text-[10px] leading-tight text-white/68">
+              {partnerTagline || fallbackSubline}
+            </p>
+          </div>
         )}
       </div>
     );
@@ -1762,7 +1873,7 @@ function ThemePreviewLarge({
           <div className="rounded-[28px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm">
             <div className="relative h-full overflow-hidden rounded-[22px] border border-white/10 bg-slate-950/20">
               {showHero ? (
-                <img src={heroSrc!} alt="Reference" className="h-full w-full object-cover" />
+                <img src={heroSrc!} alt="Reference" className="h-full w-full object-contain p-2" />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-3 text-white/55">
                   <ImageIcon className="h-10 w-10" />
@@ -1792,59 +1903,72 @@ function ThemePreviewLarge({
   }
 
   if ((themeId as string) === 'alliance-poster') {
-    const allianceHeadlineLines = fitPreviewText(safeHeadline, [22, 24, 26], 2);
+    const allianceHeaderHeadlineLines = fitPreviewText(safeHeadline, [22, 24, 26], 2);
+    const allianceSupportLines = fitPreviewText(
+      safeTagline || `${brandName || 'Brand'} partnership creative`,
+      [28, 32, 36],
+      2
+    );
     const allianceFeatureLines = (
-      safeFeatureLines.length > 0 ? safeFeatureLines : ['Product proof points appear here']
-    ).slice(0, 5);
+      safeFeatureLines.length > 0
+        ? safeFeatureLines
+        : [
+            'Premium co-branded campaign hierarchy',
+            'Native logo lockup with protected breathing room',
+            'Product-led hero bay with cleaner proof rhythm',
+            'Footer lockup stays readable at feed size',
+          ]
+    ).slice(0, 4);
     return (
       <div className={`${previewAspectClass} overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div
           className="relative h-full w-full text-white"
           style={{
-            backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)`,
+            backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 72%, ${previewPalette.accent}1c 100%)`,
           }}
         >
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: `radial-gradient(circle at 18% 48%, ${previewPalette.muted}30, transparent 26%), radial-gradient(circle at 74% 18%, rgba(255,255,255,0.08), transparent 18%)`,
+              backgroundImage: `radial-gradient(circle at 18% 48%, ${previewPalette.accent}1c, transparent 28%), radial-gradient(circle at 76% 18%, rgba(255,255,255,0.10), transparent 18%)`,
             }}
           />
-          <div className="absolute inset-x-0 top-0 h-[17.5%] border-b border-white/20 bg-black/12" />
-          <div className="absolute inset-x-0 bottom-0 h-[8.5%] border-t border-white/20" style={{ backgroundColor: previewPalette.footer }} />
+          <div
+            className="absolute inset-x-0 top-0 h-[16.5%] border-b border-white/10"
+            style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}f2 0%, ${previewPalette.bgEnd}d8 100%)` }}
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 h-[9.5%] border-t border-white/10"
+            style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.footer}f1 0%, ${previewPalette.bgEnd}d1 100%)` }}
+          />
 
-          <div className="absolute left-[3%] top-[3.2%] flex h-[9%] w-[19%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
-            {uploadedLogo ? (
-              <img src={uploadedLogo} alt="Primary logo preview" className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-[11px] font-bold text-slate-700">{brandName || 'Your brand'}</span>
+          <div className="absolute left-[3.2%] top-[3%] h-[9.4%] w-[20%]">
+            {renderHeaderBrandLockup('h-full w-full')}
+          </div>
+
+          <div className="absolute right-[3%] top-[3%] h-[9.4%] w-[22%]">
+            {renderHeaderPartnerLockup(
+              'h-full w-full',
+              'Alliance partner',
+              'Co-branded header rail'
             )}
           </div>
 
-          {hasAllianceHeaderContent && (
-            <div
-              className="absolute right-[2.5%] top-[3.2%] flex h-[9%] w-[22%] items-center justify-center gap-2 rounded-xl px-2 backdrop-blur-sm"
-              style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
-            >
-              {allianceHeaderLogos.length > 0 ? (
-                allianceHeaderLogos.map((logo) => (
-                  <div key={logo.id} className="flex h-[72%] flex-1 items-center justify-center rounded-lg bg-white/92 p-1">
-                    <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
-                  </div>
-                ))
-              ) : (
-                <div className="text-center">
-                  <p className="text-[11px] font-semibold">{partnerName || 'Partner logo'}</p>
-                  <p className="text-[9px] text-white/70">{partnerTagline || 'Alliance header zone'}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="absolute left-[24%] right-[25%] top-[4.2%] text-center">
-            <div className="space-y-1">
-              {allianceHeadlineLines.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-[19px] font-semibold italic leading-tight text-white drop-shadow-sm">
+          <div className="absolute left-[25.4%] right-[25.8%] top-[3.2%] text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-white/62">
+              Alliance Campaign
+            </p>
+            <div className="mt-1 space-y-0.5">
+              {allianceHeaderHeadlineLines.map((line, index) => (
+                <p
+                  key={`${line}-${index}`}
+                  className="font-black text-white"
+                  style={{
+                    fontSize: allianceHeaderHeadlineLines.length > 1 ? '20px' : '22px',
+                    lineHeight: allianceHeaderHeadlineLines.length > 1 ? 1.05 : 1.08,
+                    textShadow: '0 2px 10px rgba(0,0,0,0.34)',
+                  }}
+                >
                   {line}
                 </p>
               ))}
@@ -1854,7 +1978,7 @@ function ThemePreviewLarge({
                 {allianceTaglineLines.map((line, index) => (
                   <p
                     key={`${line}-${index}`}
-                    className="text-[25px] font-black italic leading-none drop-shadow-sm"
+                    className="text-[10px] font-semibold uppercase tracking-[0.22em]"
                     style={{ color: previewPalette.accent }}
                   >
                     {line}
@@ -1864,35 +1988,66 @@ function ThemePreviewLarge({
             )}
           </div>
 
-          <div className="absolute bottom-[11%] left-[5.5%] top-[28%] w-[25%]">
-            <div className="absolute bottom-[4%] left-[1%] right-[8%] h-[10%] rounded-[18px] bg-white/[16%] blur-sm" />
-            <div className="absolute bottom-[1%] left-[3%] right-[9%] h-[10%] rounded-[18px] border border-white/20 bg-white/10" />
-            <div className="absolute inset-0 rounded-[24px] border border-white/10 bg-white/5">
-              {renderHeroZone('absolute inset-0 rounded-[24px]')}
+          <div className="absolute left-[4.2%] top-[21%] bottom-[12%] w-[33.5%]">
+            <div className="absolute inset-0 rounded-[28px] border border-white/16 bg-white/[0.10] shadow-[0_24px_54px_rgba(0,0,0,0.26)]" />
+            <div className="absolute inset-[4%] overflow-hidden rounded-[24px] border border-white/12 bg-slate-950/16">
+              <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
+              {renderHeroZone('absolute inset-0 rounded-[24px]', {
+                fit: 'contain',
+                imagePaddingClass: 'p-3',
+                fallbackLabel: 'Product hero',
+              })}
             </div>
           </div>
 
-          <div className="absolute right-[4%] top-[28%] w-[41%] space-y-2.5">
-            {allianceFeatureLines.map((line, index) => (
-              <div key={`${line}-${index}`} className="flex items-center gap-3 rounded-r-full bg-slate-950/[28%] px-4 py-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg shadow" style={{ backgroundColor: previewPalette.support }}>
-                  <CheckCircle2 className="h-4 w-4 text-white" />
-                </div>
-                <div className="flex-1">
-                  {fitPreviewText(line, [22, 24, 26], 2).map((chunk, chunkIndex) => (
-                    <p key={`${chunk}-${chunkIndex}`} className="text-[12px] font-semibold italic leading-tight text-white">
-                      {chunk}
-                    </p>
-                  ))}
-                </div>
+          <div className="absolute right-[4%] top-[21%] bottom-[12%] w-[55%]">
+            <div className="absolute inset-0 rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-950/34 via-slate-950/16 to-transparent shadow-[0_22px_48px_rgba(0,0,0,0.18)]" />
+            <div
+              className="absolute inset-y-[8.5%] left-0 w-[1.2%] rounded-full"
+              style={{ backgroundColor: `${previewPalette.accent}d2` }}
+            />
+            <div className="relative flex h-full flex-col px-[5%] py-[4%]">
+              <div className="space-y-1">
+                {allianceSupportLines.map((line, index) => (
+                  <p key={`${line}-${index}`} className="text-[11px] font-medium leading-snug text-white/86">
+                    {line}
+                  </p>
+                ))}
               </div>
-            ))}
+              <div className="mt-1.5 h-px w-[74%] bg-white/10" />
+              <div className="mt-2 space-y-1.5">
+                {allianceFeatureLines.map((line, index) => (
+                  <div
+                    key={`${line}-${index}`}
+                    className="relative flex items-start gap-2 rounded-xl border border-white/10 bg-slate-950/26 px-2.5 py-1.5"
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 w-[1.3%] rounded-l-xl"
+                      style={{ backgroundColor: `${previewPalette.accent}d8` }}
+                    />
+                    <div
+                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
+                      style={{ backgroundColor: previewPalette.accent }}
+                    >
+                      <CheckCircle2 className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {fitPreviewText(line, [28, 32, 36], 2).map((chunk, chunkIndex) => (
+                        <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-white/94">
+                          {chunk}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="absolute inset-x-[6%] bottom-[2.2%] flex flex-col items-center justify-center gap-0.5 text-[11px] font-semibold tracking-wide text-white">
-            {(footerPreviewLines.length > 0 ? footerPreviewLines : ['www.yoursite.com | info@yoursite.com']).map((line, index) => (
-              <span key={`${line}-${index}`}>{line}</span>
-            ))}
+          <div className="absolute inset-x-0 bottom-0 flex h-[9.5%] items-center justify-between px-[5%] text-[10px] font-semibold uppercase tracking-[0.18em] text-white/78">
+            <span className="max-w-[42%] truncate">{safeFooterWebsite || brandName || 'Brand site'}</span>
+            <span className="h-px w-[12%] bg-white/12" />
+            <span className="max-w-[42%] truncate text-right">{safeFooterEmail || 'info@brand.com'}</span>
           </div>
         </div>
       </div>
@@ -1900,21 +2055,26 @@ function ThemePreviewLarge({
   }
 
   if ((themeId as string) === 'industrial-campaign') {
-    const industrialHeaderHeadlineLines = fitPreviewText(safeHeadline, [24, 26, 28], 2);
-    const industrialHeaderTaglineLines = fitPreviewText(safeTagline, [34, 38, 42], 1);
+    const industrialHeadlineLines = fitPreviewText(safeHeadline, [22, 26, 30], 2);
+    const industrialTaglineLines = fitPreviewText(safeTagline, [28, 32, 36], 1);
     const industrialFeatures = (
       safeFeatureLines.length > 0
         ? safeFeatureLines
-        : ['Performance-led proof point', 'Operational benefit', 'Control and protection detail']
-    ).slice(0, 3);
+        : [
+            'Engineered campaign hierarchy with a protected message lane',
+            'Native logo lockup inside the header fascia',
+            'Hero equipment bay staged for premium depth and contrast',
+            'Proof stack reads cleanly at LinkedIn feed size',
+          ]
+    ).slice(0, 4);
     const industrialFooterLeft = safeFooterWebsite || brandName || 'Brand site';
     const industrialFooterRight = safeFooterEmail || '';
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
-        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 70%, ${previewPalette.accent}22 100%)` }} />
-        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}22, transparent 50%), radial-gradient(circle at 82% 18%, rgba(255,255,255,0.12), transparent 16%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 68%, ${previewPalette.accent}26 100%)` }} />
+        <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(ellipse at 20% 52%, ${previewPalette.accent}20, transparent 50%), radial-gradient(circle at 82% 18%, rgba(255,255,255,0.12), transparent 16%)` }} />
         <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 26%, transparent 100%)' }} />
-        <div className="absolute inset-x-0 top-0 h-[14%] border-b border-white/10" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}dd 0%, ${previewPalette.bgEnd}bb 100%)` }} />
+        <div className="absolute inset-x-0 top-0 h-[14.5%] border-b border-white/10" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}f0 0%, ${previewPalette.bgEnd}c8 100%)` }} />
         <div className="absolute inset-x-0 bottom-0 h-[8.5%]" style={{ backgroundImage: `linear-gradient(90deg, ${previewPalette.bgStart}ee 0%, ${previewPalette.bgEnd}dd 100%)` }} />
         <div className="absolute left-[24%] top-[4.8%] h-[7.2%] w-[1.1%] -skew-x-[18deg] bg-white/25" />
         <div className="absolute left-[26%] top-[4.8%] h-[7.2%] w-[0.7%] -skew-x-[18deg]" style={{ backgroundColor: previewPalette.accent }} />
@@ -1942,125 +2102,95 @@ function ThemePreviewLarge({
           />
         ))}
 
-        <div className="absolute left-[3%] top-[2.8%] flex h-[9%] w-[18%] items-center justify-center rounded-xl bg-white/95 p-2 shadow-lg">
-          {uploadedLogo ? (
-            <img src={uploadedLogo} alt="Brand logo" className="h-full w-full object-contain" />
-          ) : (
-            <span className="text-[10px] font-bold text-slate-700">{brandName || 'Brand'}</span>
-          )}
+        <div className="absolute left-[3%] top-[2.8%] h-[9%] w-[18.5%]">
+          {renderHeaderBrandLockup('h-full w-full')}
         </div>
 
-        {hasAllianceHeaderContent && (
-          <div
-            className="absolute right-[2.6%] top-[2.8%] flex h-[9%] w-[22%] items-center justify-center gap-2 rounded-xl px-2 backdrop-blur-sm"
-            style={{ backgroundColor: `${previewPalette.headerPanel}bb` }}
-          >
-            {allianceHeaderLogos.length > 0 ? (
-              allianceHeaderLogos.map((logo) => (
-                <div key={logo.id} className="flex h-[72%] flex-1 items-center justify-center rounded-lg bg-white/92 p-1">
-                  <img src={logo.url} alt={logo.name} className="h-full w-full object-contain" />
-                </div>
-              ))
-            ) : (
-              <div className="text-center">
-                <p className="text-[11px] font-semibold text-white">{partnerName || 'Partner brand'}</p>
-                <p className="text-[9px] text-white/70">{partnerTagline || 'Header lockup'}</p>
-              </div>
-            )}
+        {hasAllianceHeaderContent ? (
+          <div className="absolute right-[2.6%] top-[2.8%] h-[9%] w-[22%]">
+            {renderHeaderPartnerLockup('h-full w-full', 'Partner brand', 'Header lockup')}
+          </div>
+        ) : (
+          <div className="absolute right-[3.2%] top-[4.2%] rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
+            Industrial Campaign
           </div>
         )}
 
         <div className="absolute left-[24%] right-[25%] top-[3.8%] text-center">
-          <div className="space-y-0.5">
-            {industrialHeaderHeadlineLines.map((line, index) => (
-              <p
-                key={`${line}-${index}`}
-                className="font-black text-white"
-                style={{
-                  fontSize: industrialHeaderHeadlineLines.length > 1 ? '18px' : '20px',
-                  lineHeight: industrialHeaderHeadlineLines.length > 1 ? 1.04 : 1.08,
-                  textShadow: '0 2px 10px rgba(0,0,0,0.34)',
-                }}
-              >
-                {line}
+          <div className="space-y-1">
+            {industrialHeadlineLines.length <= 2 && (
+              <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-white/58">
+                Campaign
               </p>
-            ))}
+            )}
           </div>
-          {industrialHeaderTaglineLines.length > 0 && (
-            <div className="mt-1">
-              {industrialHeaderTaglineLines.map((line, index) => (
+        </div>
+
+        <div className="absolute bottom-[12%] left-[3.5%] top-[21%] w-[32.5%]">
+          <div className="absolute inset-0 rounded-[28px] border border-white/16 bg-white/[0.10] shadow-[0_24px_54px_rgba(0,0,0,0.28)]" />
+          <div className="absolute inset-[4%] overflow-hidden rounded-[24px] border border-white/12 bg-white/[0.06]">
+            <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
+            {renderHeroZone('absolute inset-0 rounded-[22px]', {
+              fit: 'contain',
+              imagePaddingClass: 'p-3',
+            })}
+          </div>
+        </div>
+
+        <div className="absolute bottom-[12%] right-[3.2%] top-[21%] w-[58.5%]">
+          <div className="absolute inset-0 rounded-[28px] border border-white/10 px-[4.8%] py-[5.2%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(135deg, rgba(7,18,36,0.52), rgba(4,11,24,0.82))' }} />
+          <div className="absolute inset-y-[8.5%] left-0 w-[1.4%] rounded-full" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
+          <div className="relative flex h-full flex-col px-[5%] py-[4%]">
+            <div className="space-y-0.5">
+              {industrialHeadlineLines.map((line, index) => (
                 <p
                   key={`${line}-${index}`}
-                  className="text-[9px] font-semibold uppercase tracking-[0.18em]"
-                  style={{ color: previewPalette.accent }}
+                  className="font-black text-white"
+                  style={{
+                    fontSize: industrialHeadlineLines.length > 1 ? '17px' : '20px',
+                    lineHeight: 1.12,
+                    textShadow: '0 2px 10px rgba(0,0,0,0.34)',
+                  }}
                 >
                   {line}
                 </p>
               ))}
             </div>
-          )}
-        </div>
-
-        <div className="absolute bottom-[12%] left-[3.5%] top-[21%] w-[31%] overflow-hidden rounded-[24px] border border-white/18 bg-white/94 shadow-[0_22px_48px_rgba(0,0,0,0.24)]">
-          <div className="absolute bottom-[1.5%] left-[14%] right-[14%] h-[7%] rounded-full bg-slate-950/20 blur-sm" />
-          <div className="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent pointer-events-none" />
-          {renderHeroZone('absolute inset-0 rounded-[22px]', {
-            fit: 'contain',
-            imagePaddingClass: 'p-3',
-          })}
-        </div>
-
-        <div className="absolute bottom-[12%] right-[3.2%] top-[21%] flex w-[59.5%] flex-col gap-2.5 rounded-[24px] border border-white/10 px-[4.8%] py-[5.2%] shadow-[0_20px_45px_rgba(0,0,0,0.18)]" style={{ backgroundImage: 'linear-gradient(135deg, rgba(7,18,36,0.48), rgba(4,11,24,0.78))' }}>
-          <div className="absolute inset-y-0 left-0 w-[1.6%] rounded-l-[24px]" style={{ backgroundColor: `${previewPalette.accent}cc` }} />
-          <div className="space-y-1.5">
-            {compactHeadlineLines.map((line, index) => (
-              <p
-                key={`${line}-${index}`}
-                className="font-black text-white"
-                style={{
-                  fontSize: compactHeadlineLines.length > 3 ? '15px' : '18px',
-                  lineHeight: compactHeadlineLines.length > 3 ? 1.13 : 1.08,
-                  textShadow: '0 2px 10px rgba(0,0,0,0.34)',
-                }}
-              >
-                {line}
-              </p>
-            ))}
-          </div>
-          {shortTaglineLines.length > 0 && (
-            <div className="space-y-0.5 pt-0.5">
-              {shortTaglineLines.map((line, index) => (
-                <p
-                  key={`${line}-${index}`}
-                  className="text-[9px] font-semibold uppercase tracking-[0.18em]"
-                  style={{ color: previewPalette.accent }}
-                >
-                  {line}
-                </p>
-              ))}
-            </div>
-          )}
-          <div className="h-1 w-[20%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-          <div className="mt-auto space-y-2.5">
-            {industrialFeatures.map((line, index) => (
-              <div key={`${line}-${index}`} className="relative flex items-start gap-3 rounded-[20px] border border-white/10 bg-slate-950/30 px-3 py-2.5">
-                <div className="absolute inset-y-0 left-0 w-[1.4%] rounded-l-[20px]" style={{ backgroundColor: `${previewPalette.accent}dd` }} />
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: previewPalette.accent }}>
-                  <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  {fitPreviewText(line, [24, 26, 28], 2).map((chunk, chunkIndex) => (
-                    <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-[1.32] text-white/95">
-                      {chunk}
-                    </p>
-                  ))}
-                </div>
+            {industrialTaglineLines.length > 0 && (
+              <div className="space-y-0.5 pt-1">
+                {industrialTaglineLines.map((line, index) => (
+                  <p
+                    key={`${line}-${index}`}
+                    className="text-[10px] font-semibold uppercase tracking-[0.20em]"
+                    style={{ color: previewPalette.accent }}
+                  >
+                    {line}
+                  </p>
+                ))}
               </div>
-            ))}
+            )}
+            <div className="mt-1.5 h-0.5 w-[20%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+            <div className="mt-2 space-y-1.5">
+              {industrialFeatures.map((line, index) => (
+                <div key={`${line}-${index}`} className="relative flex items-start gap-2 rounded-xl border border-white/10 bg-slate-950/32 px-2.5 py-1.5">
+                  <div className="absolute inset-y-0 left-0 w-[1.3%] rounded-l-xl" style={{ backgroundColor: `${previewPalette.accent}dd` }} />
+                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: previewPalette.accent }}>
+                    <CheckCircle2 className="h-3 w-3 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    {fitPreviewText(line, [28, 32, 36], 2).map((chunk, chunkIndex) => (
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-white/95">
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 flex h-[8.5%] items-center justify-between border-t border-white/10 px-[5%] text-[8px] font-semibold text-white/80">
+        <div className="absolute inset-x-0 bottom-0 flex h-[8.5%] items-center justify-between border-t border-white/10 px-[5%] text-[10px] font-semibold text-white/80">
           <span className="max-w-[42%] truncate text-left">{industrialFooterLeft}</span>
           {industrialFooterRight ? <span className="max-w-[42%] truncate text-right">{industrialFooterRight}</span> : <span />}
         </div>
@@ -2069,7 +2199,8 @@ function ThemePreviewLarge({
   }
 
   // ── Alliance Poster ──────────────────────────────────────────────────────────
-  if ((themeId as string) === 'alliance-poster') {
+  // Legacy duplicate Alliance preview branch kept inert for safe cleanup.
+  if ((themeId as string) === '__legacy-alliance-preview') {
     return (
       <div className={`${previewAspectClass} overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div
@@ -2170,9 +2301,9 @@ function ThemePreviewLarge({
         <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100" />
         <div className="absolute inset-x-0 top-0 flex h-[14%] items-center justify-between border-b border-slate-100 px-[5%]">
           {renderLogoBox('h-[65%] w-[13%] rounded-lg border border-slate-200 bg-white shadow-sm')}
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Clean Brand</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{brandName || 'Brand'}</p>
         </div>
-        <div className="absolute bottom-[12%] left-[6%] top-[18%] flex w-[54%] flex-col justify-center gap-3">
+        <div className="absolute bottom-[12%] left-[6%] top-[18%] flex w-[48%] flex-col justify-center gap-2">
           <div className="flex items-center gap-2">
             <div className="h-1 w-8 rounded-full" style={{ backgroundColor: previewPalette.bgStart }} />
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>
@@ -2186,7 +2317,7 @@ function ThemePreviewLarge({
                 className="font-black"
                 style={{
                   color: previewPalette.bgStart,
-                  fontSize: standardHeadlineLines.length > 2 ? '18px' : '21px',
+                  fontSize: standardHeadlineLines.length > 2 ? '20px' : '23px',
                   lineHeight: standardHeadlineLines.length > 2 ? 1.16 : 1.1,
                 }}
               >
@@ -2201,11 +2332,21 @@ function ThemePreviewLarge({
               </p>
             ))}
           </div>
+          {safeFeatureLines.length > 0 && (
+            <div className="space-y-1.5">
+              {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                  <p className="text-[10px] font-medium leading-tight" style={{ color: previewPalette.muted }}>{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
-            Brand Focus
+            Learn More
           </div>
         </div>
-        <div className="absolute bottom-[12%] right-[4%] top-[16%] w-[36%] rounded-2xl border border-slate-200 bg-slate-100">
+        <div className="absolute bottom-[12%] right-[4%] top-[16%] left-[60%] rounded-2xl border border-slate-200 bg-slate-100">
           {renderHeroZone('absolute inset-0 rounded-2xl')}
         </div>
         <div className="absolute inset-x-0 bottom-0 flex h-[10%] items-center border-t border-slate-100 px-[6%]">
@@ -2227,12 +2368,18 @@ function ThemePreviewLarge({
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.surface} 0%, white 50%, ${previewPalette.muted}33 100%)` }} />
         <div className="absolute bottom-[8%] left-[4%] top-[8%] w-[40%] flex items-center justify-center">
           <div className="h-[80%] w-[76%] rounded-[40%] shadow-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.bgStart}cc` }}>
-            {showHero && <img src={heroSrc!} alt="Story" className="h-full w-full object-cover" />}
+            {showHero ? (
+              <img src={heroSrc!} alt="Story" className="h-full w-full object-contain p-2" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <ImageIcon className="h-8 w-8" style={{ color: `${previewPalette.muted}44` }} />
+              </div>
+            )}
           </div>
         </div>
-        <div className="absolute bottom-[10%] right-[4%] top-[10%] flex w-[52%] flex-col justify-center gap-3">
-          {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
-          <div className="space-y-2">
+        <div className="absolute bottom-[10%] right-[4%] top-[10%] flex w-[52%] flex-col justify-center gap-2">
+          {renderLogoBox('h-10 w-14 rounded-lg border border-slate-200 bg-white shadow-sm')}
+          <div className="space-y-1">
             {storyHeadlineLines.map((line, index) => (
               <p
                 key={`${line}-${index}`}
@@ -2240,23 +2387,33 @@ function ThemePreviewLarge({
                 style={{
                   color: previewPalette.bgStart,
                   fontSize: storyHeadlineLines.length > 2 ? '17px' : '20px',
-                  lineHeight: 1.12,
+                  lineHeight: 1.14,
                 }}
               >
                 {line}
               </p>
             ))}
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {(storyTaglineLines.length > 0 ? storyTaglineLines : ['Use this layout for thoughtful storytelling and a more editorial tone.']).map((line, index) => (
               <p key={`${line}-${index}`} className="text-[11px] leading-snug" style={{ color: `${previewPalette.muted}dd` }}>
                 {line}
               </p>
             ))}
           </div>
+          {safeFeatureLines.length > 0 && (
+            <div className="space-y-1">
+              {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                  <p className="text-[10px] font-medium leading-tight" style={{ color: previewPalette.muted }}>{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-28 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
-              Story Highlight
+              Read More
             </div>
             <div className="h-1.5 w-16 rounded-full" style={{ backgroundColor: previewPalette.muted }} />
           </div>
@@ -2273,9 +2430,9 @@ function ThemePreviewLarge({
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(180deg, ${previewPalette.surface} 0%, white 48%, ${previewPalette.muted}44 100%)` }} />
         {renderLogoBox('absolute left-[4%] top-[4%] h-[10%] w-[13%] rounded-xl border border-slate-200 bg-white shadow-sm')}
         <div className="absolute left-[6%] top-[19%] h-1 w-[42%] rounded-full" style={{ backgroundColor: previewPalette.accent }} />
-        <div className="absolute bottom-[16%] left-[6%] top-[24%] flex w-[44%] flex-col justify-center gap-3">
+        <div className="absolute bottom-[16%] left-[6%] top-[24%] flex w-[44%] flex-col justify-center gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>
-            Product Hero
+            {brandName || 'Product'}
           </p>
           {productHeadlineLines.map((line, index) => (
             <p
@@ -2283,7 +2440,7 @@ function ThemePreviewLarge({
               className="font-black leading-tight"
               style={{
                 color: previewPalette.text,
-                fontSize: productHeadlineLines.length > 2 ? '17px' : '19px',
+                fontSize: productHeadlineLines.length > 2 ? '19px' : '22px',
               }}
             >
               {line}
@@ -2294,11 +2451,21 @@ function ThemePreviewLarge({
               {line}
             </p>
           ))}
+          {safeFeatureLines.length > 0 && (
+            <div className="space-y-1.5">
+              {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                  <p className="text-[10px] font-medium leading-tight" style={{ color: previewPalette.muted }}>{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-2 flex h-8 w-32 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
-            Product Spotlight
+            Learn More
           </div>
         </div>
-        <div className="absolute bottom-[12%] right-[5%] top-[14%] w-[34%] rounded-[26px] border border-slate-200 bg-white/92 shadow-lg">
+        <div className="absolute bottom-[12%] right-[5%] top-[14%] w-[38%] rounded-[26px] border border-slate-200 bg-white/92 shadow-lg">
           {renderHeroZone('absolute inset-[5%] rounded-[20px]', { fit: 'contain', imagePaddingClass: 'p-2' })}
         </div>
         {generateCta}
@@ -2315,7 +2482,7 @@ function ThemePreviewLarge({
           <div className="rounded-xl border border-white/20 overflow-hidden bg-white/88">
             {renderHeroZone('h-full w-full rounded-xl', { fit: 'contain', imagePaddingClass: 'p-2' })}
           </div>
-          <div className="flex flex-col justify-center gap-2.5 rounded-xl p-4" style={{ border: `1px solid ${previewPalette.accent}88`, backgroundColor: `${previewPalette.accent}40` }}>
+          <div className="flex flex-col justify-center gap-2 rounded-xl p-3" style={{ border: `1px solid ${previewPalette.accent}88`, backgroundColor: `${previewPalette.accent}40` }}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>{brandName || 'Brand'}</p>
             {knowledgeHeadlineLines.map((line, index) => (
               <p
@@ -2323,7 +2490,7 @@ function ThemePreviewLarge({
                 className="font-black leading-tight"
                 style={{
                   color: previewPalette.text,
-                  fontSize: knowledgeHeadlineLines.length > 2 ? '15px' : '16px',
+                  fontSize: knowledgeHeadlineLines.length > 2 ? '19px' : '22px',
                 }}
               >
                 {line}
@@ -2337,7 +2504,7 @@ function ThemePreviewLarge({
             <div className="mt-2 space-y-2">
               {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Key proof point', 'Operational benefit', 'Control detail']).slice(0, 3).map((line, index) => (
                 <div key={`${line}-${index}`} className="flex items-start gap-2">
-                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
+                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
                     {index + 1}
                   </div>
                   <div className="flex-1">
@@ -2350,8 +2517,8 @@ function ThemePreviewLarge({
                 </div>
               ))}
             </div>
-            <div className="mt-1 flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
-              Knowledge Brief
+            <div className="mt-1 flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
+              Learn More
             </div>
           </div>
         </div>
@@ -2372,11 +2539,11 @@ function ThemePreviewLarge({
           <div className="flex flex-col gap-[4%]">
             <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
               <div className="mb-1.5 flex items-center gap-2">
-                {renderLogoBox('h-6 w-10 rounded border border-slate-200')}
-                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Datasheet Frame</p>
+                {renderLogoBox('h-8 w-12 rounded border border-slate-200')}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{brandName || 'Datasheet'}</p>
               </div>
               {datasheetHeadlineLines.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-[13px] font-black leading-tight text-slate-900">
+                <p key={`${line}-${index}`} className="font-black leading-tight text-slate-900" style={{ fontSize: datasheetHeadlineLines.length > 1 ? '17px' : '20px' }}>
                   {line}
                 </p>
               ))}
@@ -2389,7 +2556,7 @@ function ThemePreviewLarge({
             <div className="grid flex-1 grid-cols-2 gap-[5%]">
               {(safeFeatureLines.length > 0 ? safeFeatureLines : ['Key specification', 'Product benefit', 'Protection detail', 'Application fit']).slice(0, 4).map((line, i) => (
                 <div key={`${line}-${i}`} className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.support }}>
                     {i + 1}
                   </div>
                   {fitPreviewText(line, [16, 18, 20], 3).map((chunk, index) => (
@@ -2429,10 +2596,11 @@ function ThemePreviewLarge({
               </div>
             ))}
           </div>
-          <div className="flex flex-col justify-center gap-3 rounded-xl border border-slate-200 p-4" style={{ backgroundColor: previewPalette.bgStart }}>
+          <div className="flex flex-col justify-center gap-2 rounded-xl border border-slate-200 p-3" style={{ backgroundColor: previewPalette.bgStart }}>
+            {renderLogoBox('h-7 w-12 rounded-lg bg-white/15 mb-1', true)}
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: previewPalette.muted }}>{brandName || 'Brand'}</p>
             {proofHeadlineLines.map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[16px] font-black leading-tight text-white">
+              <p key={`${line}-${index}`} className="text-[19px] font-black leading-tight text-white">
                 {line}
               </p>
             ))}
@@ -2443,8 +2611,8 @@ function ThemePreviewLarge({
                 </p>
               ))}
             </div>
-            <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
-              Proof Snapshot
+            <div className="flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.support }}>
+              View Details
             </div>
           </div>
         </div>
@@ -2464,11 +2632,11 @@ function ThemePreviewLarge({
             {uploadedLogo ? (
               <img src={uploadedLogo} alt="Logo" className="h-full w-full object-contain p-0.5" />
             ) : (
-              <span className="text-[8px] font-bold text-slate-700">{brandName || 'Brand'}</span>
+              <span className="text-[10px] font-bold text-slate-700">{brandName || 'Brand'}</span>
             )}
           </div>
-          <div className="flex h-6 w-24 items-center justify-center rounded-full px-2 text-[9px] font-bold uppercase tracking-[0.14em]" style={{ backgroundColor: previewPalette.accent, color: previewPalette.text }}>
-            Launch Mode
+          <div className="flex h-6 w-24 items-center justify-center rounded-full px-2 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ backgroundColor: previewPalette.accent, color: previewPalette.text }}>
+            {brandName || 'Launch'}
           </div>
         </div>
         <div className="absolute inset-x-[8%] top-[22%] space-y-2">
@@ -2486,13 +2654,23 @@ function ThemePreviewLarge({
               {line}
             </p>
           ))}
+          {safeFeatureLines.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                  <p className="text-[10px] text-white/80 font-medium leading-tight">{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="absolute bottom-[8%] inset-x-[8%] flex items-center justify-between">
           <div className="rounded-full px-4 py-2 text-[11px] font-semibold" style={{ backgroundColor: `${previewPalette.surface}44`, color: previewPalette.text }}>
             {brandName || 'Brand'}
           </div>
           <div className="flex h-8 w-28 items-center justify-center rounded-xl bg-white/90 text-[10px] font-bold text-slate-800">
-            Launch Update
+            Learn More
           </div>
         </div>
         {generateCta}
@@ -2514,7 +2692,7 @@ function ThemePreviewLarge({
           {renderLogoBox('h-[65%] w-[13%] rounded bg-white/90 p-1', true)}
           <div className="space-y-1.5 text-right">
             {fitPreviewText(safeHeadline, [20, 22, 24], 2).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[13px] font-black leading-tight text-white">
+              <p key={`${line}-${index}`} className="text-[18px] font-black leading-tight text-white">
                 {line}
               </p>
             ))}
@@ -2527,7 +2705,7 @@ function ThemePreviewLarge({
             return (
               <div key={i} className="flex-1 rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}22` }}>
                 {src ? (
-                  <img src={src} alt={`Sector ${i + 1}`} className="h-full w-full object-cover rounded-xl" />
+                  <img src={src} alt={`Sector ${i + 1}`} className="h-full w-full object-contain rounded-xl p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-white/25">
                     <ImageIcon className="h-6 w-6" />
@@ -2544,7 +2722,7 @@ function ThemePreviewLarge({
                 {i + 1}
               </div>
               {fitPreviewText(label, [16, 18, 20], 2).map((line, index) => (
-                <p key={`${line}-${index}`} className="mt-1 text-[9px] font-semibold leading-snug text-white/88">
+                <p key={`${line}-${index}`} className="mt-1 text-[10px] font-semibold leading-snug text-white/88">
                   {line}
                 </p>
               ))}
@@ -2564,7 +2742,8 @@ function ThemePreviewLarge({
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 50%, ${previewPalette.accent}88 100%)` }} />
         <div className="absolute inset-[4%] grid grid-cols-[1.4fr_1fr] gap-[3%]">
           <div className="flex flex-col justify-center gap-3 rounded-xl p-4" style={{ backgroundColor: `${previewPalette.surface}18` }}>
-            <div className="flex h-5 w-24 items-center justify-center rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ backgroundColor: `${previewPalette.accent}e6`, color: previewPalette.text }}>
+            {renderLogoBox('h-7 w-12 rounded-lg mb-1', true)}
+            <div className="flex h-5 w-24 items-center justify-center rounded-full text-[10px] font-bold uppercase tracking-[0.16em]" style={{ backgroundColor: `${previewPalette.accent}e6`, color: previewPalette.text }}>
               Special Offer
             </div>
             <div className="space-y-1.5">
@@ -2572,19 +2751,29 @@ function ThemePreviewLarge({
                 <p
                   key={`${line}-${index}`}
                   className="font-black text-white"
-                  style={{ fontSize: standardHeadlineLines.length > 2 ? '18px' : '21px', lineHeight: 1.12 }}
+                  style={{ fontSize: standardHeadlineLines.length > 2 ? '20px' : '24px', lineHeight: 1.12 }}
                 >
                   {line}
                 </p>
               ))}
             </div>
             {offerTaglineLines.map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[11px] font-medium leading-snug" style={{ color: `${previewPalette.accent}` }}>
+              <p key={`${line}-${index}`} className="text-[11px] font-medium leading-snug text-white/75">
                 {line}
               </p>
             ))}
+            {safeFeatureLines.length > 0 && (
+              <div className="space-y-1.5">
+                {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-white/60" />
+                    <p className="text-[10px] text-white/80 leading-tight">{bullet}</p>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex h-8 w-32 items-center justify-center rounded-xl bg-white/90 text-[10px] font-bold text-slate-800">
-              Offer Spotlight
+              Learn More
             </div>
           </div>
           <div className="rounded-xl overflow-hidden bg-white/92">
@@ -2609,10 +2798,10 @@ function ThemePreviewLarge({
       <div className={`${previewAspectClass} relative overflow-hidden bg-white`}>
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
         <div className="absolute inset-x-[4%] top-[4%] flex items-center gap-3">
-          {renderLogoBox('h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm')}
+          {renderLogoBox('h-10 w-14 rounded-lg border border-slate-200 bg-white shadow-sm')}
           <div className="space-y-1">
             {fitPreviewText(safeHeadline, [22, 24, 26], 2).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[12px] font-black leading-tight text-slate-900">
+              <p key={`${line}-${index}`} className="text-[18px] font-black leading-tight text-slate-900">
                 {line}
               </p>
             ))}
@@ -2621,20 +2810,22 @@ function ThemePreviewLarge({
         <div className="absolute inset-x-[4%] top-[18%] grid grid-cols-2 gap-[3%]" style={{ bottom: '8%' }}>
           <div className="flex flex-col gap-2 rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
             <p className="text-[11px] font-bold text-slate-900">Operational Value</p>
-            <div className="flex-1 rounded-xl bg-slate-100 overflow-hidden">
+            <div className="flex-1 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center">
               {getSlotSrc('panel-left') ? (
-                <img src={getSlotSrc('panel-left')!} alt="Option A" className="h-full w-full object-cover rounded-xl" />
-              ) : null}
+                <img src={getSlotSrc('panel-left')!} alt="Option A" className="h-full w-full object-contain rounded-xl p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <ImageIcon className="w-6 h-6 text-slate-300" />
+              )}
             </div>
             <div className="space-y-1.5">
               {leftBullets.map((line, index) => (
                 <div key={`${line}-${index}`} className="flex items-start gap-2">
-                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">
+                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">
                     {index + 1}
                   </div>
                   <div className="flex-1">
                     {fitPreviewText(line, [18, 20, 22], 2).map((chunk, chunkIndex) => (
-                      <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-snug text-slate-700">
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-slate-700">
                         {chunk}
                       </p>
                     ))}
@@ -2645,20 +2836,22 @@ function ThemePreviewLarge({
           </div>
           <div className="flex flex-col gap-2 rounded-2xl p-3 shadow-sm" style={{ border: `1px solid ${previewPalette.accent}77`, backgroundColor: `${previewPalette.accent}15` }}>
             <p className="text-[11px] font-bold text-slate-900">Protection &amp; Control</p>
-            <div className="flex-1 rounded-xl overflow-hidden" style={{ backgroundColor: `${previewPalette.accent}44` }}>
+            <div className="flex-1 rounded-xl overflow-hidden flex items-center justify-center" style={{ backgroundColor: `${previewPalette.accent}44` }}>
               {getSlotSrc('panel-right') ? (
-                <img src={getSlotSrc('panel-right')!} alt="Option B" className="h-full w-full object-cover rounded-xl" />
-              ) : null}
+                <img src={getSlotSrc('panel-right')!} alt="Option B" className="h-full w-full object-contain rounded-xl p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <ImageIcon className="w-6 h-6 text-slate-300" />
+              )}
             </div>
             <div className="space-y-1.5">
               {rightBullets.map((line, index) => (
                 <div key={`${line}-${index}`} className="flex items-start gap-2">
-                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black text-white" style={{ backgroundColor: previewPalette.accent }}>
+                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ backgroundColor: previewPalette.accent }}>
                     {index + 1}
                   </div>
                   <div className="flex-1">
                     {fitPreviewText(line, [18, 20, 22], 2).map((chunk, chunkIndex) => (
-                      <p key={`${chunk}-${chunkIndex}`} className="text-[9px] font-semibold leading-snug text-slate-700">
+                      <p key={`${chunk}-${chunkIndex}`} className="text-[10px] font-semibold leading-snug text-slate-700">
                         {chunk}
                       </p>
                     ))}
@@ -2675,7 +2868,7 @@ function ThemePreviewLarge({
 
   // ── Premium Editorial ────────────────────────────────────────────────────────
   if (themeId === 'premium-editorial') {
-    const editorialHeadlineLines = fitPreviewText(safeHeadline, [20, 22, 24], 3);
+    const editorialHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 3);
     const editorialTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 4);
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
@@ -2683,7 +2876,7 @@ function ThemePreviewLarge({
         <div className="absolute inset-[3%] grid grid-cols-[0.45fr_1fr] gap-[3%]">
           <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: `${previewPalette.surface}22` }}>
             {showHero ? (
-              <img src={heroSrc!} alt="Editorial" className="h-full w-full rounded-2xl object-cover" />
+              <img src={heroSrc!} alt="Editorial" className="h-full w-full rounded-2xl object-contain p-2" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-white/20">
                 <ImageIcon className="h-8 w-8" />
@@ -2700,7 +2893,7 @@ function ThemePreviewLarge({
                 <p
                   key={`${line}-${index}`}
                   className="font-black text-white"
-                  style={{ fontFamily: 'Georgia, serif', fontSize: editorialHeadlineLines.length > 2 ? '18px' : '20px', lineHeight: 1.14 }}
+                  style={{ fontFamily: 'Georgia, serif', fontSize: editorialHeadlineLines.length > 2 ? '20px' : '24px', lineHeight: 1.14 }}
                 >
                   {line}
                 </p>
@@ -2714,10 +2907,20 @@ function ThemePreviewLarge({
                 </p>
               ))}
             </div>
+            {safeFeatureLines.length > 0 && (
+              <div className="space-y-1.5">
+                {safeFeatureLines.slice(0, 3).map((bullet, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: previewPalette.accent }} />
+                    <p className="text-[10px] text-white/75 font-medium leading-tight">{bullet}</p>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="mt-auto flex items-center justify-between">
               <p className="text-[10px] font-semibold text-white/45">{brandName || 'Brand editorial'}</p>
-              <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
-                Editorial Feature
+              <div className="flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+                Read More
               </div>
             </div>
           </div>
@@ -2743,14 +2946,14 @@ function ThemePreviewLarge({
         <div className="absolute bottom-[8%] left-[4%] top-[16%] flex w-[50%] flex-col justify-start gap-2 rounded-2xl px-[3%] py-[3%]" style={{ backgroundColor: `${previewPalette.surface}55` }}>
           <div className="space-y-1.5 mt-2">
             {jpHeadlineLines.map((line, index) => (
-              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: jpHeadlineLines.length > 1 ? '18px' : '22px', lineHeight: 1.12 }}>
+              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: jpHeadlineLines.length > 1 ? '20px' : '24px', lineHeight: 1.12 }}>
                 {line}
               </p>
             ))}
           </div>
           <div className="space-y-1">
             {(jpTaglineLines.length > 0 ? jpTaglineLines : ['Join our team and make an impact.']).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/65">{line}</p>
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/72">{line}</p>
             ))}
           </div>
           {featureLines.length > 0 && (
@@ -2763,7 +2966,7 @@ function ThemePreviewLarge({
               ))}
             </div>
           )}
-          <div className="mt-auto flex h-7 w-24 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+          <div className="mt-auto flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
             Apply Now
           </div>
         </div>
@@ -2771,7 +2974,7 @@ function ThemePreviewLarge({
           {renderHeroZone('h-full w-full rounded-2xl', { fit: 'cover', fallbackLabel: 'Office / Team photo' })}
         </div>
         <div className="absolute inset-x-0 bottom-0 flex h-[6%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}aa` }}>
-          <p className="text-[9px] text-white/60">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
+          <p className="text-[10px] text-white/60">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
         </div>
         {generateCta}
       </div>
@@ -2798,16 +3001,25 @@ function ThemePreviewLarge({
         <div className="absolute inset-x-[10%] top-[32%] flex flex-col items-center gap-2">
           <div className="text-center space-y-1.5">
             {hbHeadlineLines.map((line, index) => (
-              <p key={`${line}-${index}`} className="font-black text-white text-center" style={{ fontSize: hbHeadlineLines.length > 1 ? '22px' : '28px', lineHeight: 1.1 }}>
+              <p key={`${line}-${index}`} className="font-black text-white text-center" style={{ fontSize: hbHeadlineLines.length > 1 ? '24px' : '30px', lineHeight: 1.1 }}>
                 {line}
               </p>
             ))}
           </div>
           <div className="text-center space-y-1">
             {(hbTaglineLines.length > 0 ? hbTaglineLines : ['Be part of something extraordinary.']).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/65 text-center">{line}</p>
+              <p key={`${line}-${index}`} className="text-[11px] leading-snug text-white/72 text-center">{line}</p>
             ))}
           </div>
+          {featureLines.length > 0 && (
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {featureLines.slice(0, 3).map((bullet, i) => (
+                <div key={i} className="rounded-full px-3 py-1" style={{ backgroundColor: `${previewPalette.surface}30` }}>
+                  <p className="text-[10px] text-white/80 font-medium">{bullet}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="absolute inset-x-0 bottom-[14%] flex justify-center">
           <div className="flex h-8 w-32 items-center justify-center rounded-xl text-[11px] font-bold" style={{ backgroundColor: `${previewPalette.surface}ee`, color: previewPalette.bgStart }}>
@@ -2815,7 +3027,7 @@ function ThemePreviewLarge({
           </div>
         </div>
         <div className="absolute inset-x-0 bottom-0 flex h-[7%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}80` }}>
-          <p className="text-[9px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
+          <p className="text-[10px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'careers.company.com'}</p>
         </div>
         {generateCta}
       </div>
@@ -2829,10 +3041,10 @@ function ThemePreviewLarge({
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
         <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(160deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
-        <div className="absolute left-[4%] top-[14%] flex h-[72%] w-[40%] items-center justify-center">
-          <div className="relative h-[75%] aspect-square rounded-full overflow-hidden ring-4 ring-white/20" style={{ boxShadow: `0 0 0 4px ${previewPalette.accent}55` }}>
+        <div className="absolute left-[4%] top-[8%] bottom-[8%] w-[42%] flex items-center justify-center">
+          <div className="relative h-[70%] aspect-square rounded-full overflow-hidden ring-4 ring-white/20" style={{ boxShadow: `0 0 0 4px ${previewPalette.accent}55` }}>
             {showHero ? (
-              <img src={heroSrc!} alt="Team" className="h-full w-full object-cover" />
+              <img src={heroSrc!} alt="Team" className="h-full w-full object-contain p-2" />
             ) : (
               <div className="flex h-full w-full items-center justify-center rounded-full" style={{ backgroundColor: `${previewPalette.surface}33` }}>
                 <div className="flex flex-col items-center gap-1 text-white/25">
@@ -2847,36 +3059,36 @@ function ThemePreviewLarge({
           <div className="mb-1">
             {renderLogoBox('h-[10%] w-[20%] rounded-lg', true)}
           </div>
-          <p className="text-[9px] font-bold tracking-[0.15em] mb-2" style={{ color: previewPalette.accent }}>JOIN OUR TEAM</p>
+          <p className="text-[10px] font-bold tracking-[0.15em] mb-2" style={{ color: previewPalette.accent }}>JOIN OUR TEAM</p>
           <div className="space-y-1.5">
             {tsHeadlineLines.map((line, index) => (
-              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: tsHeadlineLines.length > 1 ? '16px' : '19px', lineHeight: 1.14 }}>
+              <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: tsHeadlineLines.length > 1 ? '18px' : '21px', lineHeight: 1.14 }}>
                 {line}
               </p>
             ))}
           </div>
           <div className="space-y-1 mt-2">
             {(tsTaglineLines.length > 0 ? tsTaglineLines : ['Great people build great products.', 'Come join us.']).map((line, index) => (
-              <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/60">{line}</p>
+              <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/72">{line}</p>
             ))}
           </div>
           {featureLines.length > 0 && (
             <div className="space-y-1.5 mt-2">
               {featureLines.slice(0, 3).map((bullet, i) => (
                 <div key={i} className="rounded-lg px-2 py-1.5" style={{ backgroundColor: `${previewPalette.surface}28` }}>
-                  <p className="text-[9px] text-white/75 font-medium">{bullet}</p>
+                  <p className="text-[10px] text-white/75 font-medium">{bullet}</p>
                 </div>
               ))}
             </div>
           )}
           <div className="absolute bottom-[8%] left-[3%]">
-            <div className="flex h-6 w-20 items-center justify-center rounded-lg text-[9px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+            <div className="flex h-8 w-24 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
               Join Us
             </div>
           </div>
         </div>
         <div className="absolute inset-x-0 bottom-0 flex h-[6%] items-center justify-center" style={{ backgroundColor: `${previewPalette.bgStart}88` }}>
-          <p className="text-[9px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'Company'}</p>
+          <p className="text-[10px] text-white/55">{footerPreviewLines[0] || safeFooterWebsite || brandName || 'Company'}</p>
         </div>
         {generateCta}
       </div>
@@ -2895,23 +3107,23 @@ function ThemePreviewLarge({
         <div className="absolute left-[5%] top-[4%]">
           {renderLogoBox('h-[6%] w-[10%] rounded-lg', true)}
         </div>
-        <p className="absolute left-[5%] top-[13%] text-[9px] font-bold tracking-[0.15em]" style={{ color: previewPalette.accent }}>CAREER OPPORTUNITY</p>
+        <p className="absolute left-[5%] top-[13%] text-[10px] font-bold tracking-[0.15em]" style={{ color: previewPalette.accent }}>CAREER OPPORTUNITY</p>
         <div className="absolute left-[5%] top-[18%] w-[48%] space-y-1.5">
           {cgHeadlineLines.map((line, index) => (
-            <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: cgHeadlineLines.length > 1 ? '18px' : '22px', lineHeight: 1.12 }}>
+            <p key={`${line}-${index}`} className="font-black text-white" style={{ fontSize: cgHeadlineLines.length > 1 ? '20px' : '24px', lineHeight: 1.12 }}>
               {line}
             </p>
           ))}
         </div>
         <div className="absolute left-[5%] top-[34%] w-[48%] space-y-1">
           {(cgTaglineLines.length > 0 ? cgTaglineLines : ['Build your career with us.']).map((line, index) => (
-            <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/60">{line}</p>
+            <p key={`${line}-${index}`} className="text-[10px] leading-snug text-white/72">{line}</p>
           ))}
         </div>
         <div className="absolute left-[4%] top-[44%] w-[48%] space-y-2">
           {benefitItems.map((benefit, i) => (
             <div key={i} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: `${previewPalette.surface}30` }}>
-              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
                 {i + 1}
               </div>
               <p className="text-[10px] text-white/80 font-medium leading-tight">{benefit}</p>
@@ -2922,11 +3134,11 @@ function ThemePreviewLarge({
           {renderHeroZone('h-full w-full rounded-2xl', { fit: 'cover', fallbackLabel: 'Workplace photo' })}
         </div>
         <div className="absolute bottom-[4%] left-[5%]">
-          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+          <div className="flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
             Explore Roles
           </div>
         </div>
-        <p className="absolute bottom-[5%] right-[4%] text-[9px] text-white/45">{footerPreviewLines[0] || safeFooterWebsite || brandName || ''}</p>
+        <p className="absolute bottom-[5%] right-[4%] text-[10px] text-white/45">{footerPreviewLines[0] || safeFooterWebsite || brandName || ''}</p>
         {generateCta}
       </div>
     );
@@ -2943,7 +3155,7 @@ function ThemePreviewLarge({
         </div>
         <div className="flex flex-col justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-4">
           {standardHeadlineLines.map((line, index) => (
-            <p key={`${line}-${index}`} className="text-[18px] font-black leading-tight text-white">
+            <p key={`${line}-${index}`} className="text-[20px] font-black leading-tight text-white">
               {line}
             </p>
           ))}
@@ -2954,8 +3166,8 @@ function ThemePreviewLarge({
               </p>
             ))}
           </div>
-          <div className="flex h-7 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
-            Theme Preview
+          <div className="flex h-8 w-28 items-center justify-center rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: previewPalette.accent }}>
+            Learn More
           </div>
         </div>
       </div>
@@ -3085,7 +3297,7 @@ export function ImageCreator({
   const visionComposeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(primaryBrandLogoUrl);
   const [logoPlacement, setLogoPlacement] = useState<'overlay' | 'infuse' | 'none'>(
-    primaryBrandLogoUrl ? 'overlay' : 'none'
+    primaryBrandLogoUrl ? getThemeRecommendedLogoPlacement('guided-auto') : 'none'
   );
   const [allianceLogos, setAllianceLogos] = useState<UploadedLogoAsset[]>([]);
   const [partnerName, setPartnerName] = useState('');
@@ -3094,7 +3306,7 @@ export function ImageCreator({
   const [footerEmail, setFooterEmail] = useState('');
   const [benefitsText, setBenefitsText] = useState('');
   const [benefitsTouched, setBenefitsTouched] = useState(false);
-  const [selectedBlendMode] = useState<BlendModeId>('normal');
+  const [selectedBlendMode] = useState<BlendModeId>('soft-light');
   const [imageAspect, setImageAspect] = useState<'landscape' | 'square' | 'portrait'>('landscape');
   const [referenceSelectionTouched, setReferenceSelectionTouched] = useState(false);
 
@@ -3106,6 +3318,18 @@ export function ImageCreator({
   const [isFetchingSiteImages, setIsFetchingSiteImages] = useState(false);
   const [fetchedSiteImages, setFetchedSiteImages] = useState<Array<{ url: string; source: string; width: number | null; height: number | null }>>([]);
   const [selectedReferenceImage, setSelectedReferenceImage] = useState<string | null>(null);
+
+  // Image source tab for unified card
+  const [imageSourceTab, setImageSourceTab] = useState<'upload' | 'pdf' | 'url'>('upload');
+
+  // Additional reference images for AI Guided multi-image mode
+  const [additionalReferenceImages, setAdditionalReferenceImages] = useState<string[]>([]);
+  const additionalImagesInputRef = useRef<HTMLInputElement>(null);
+  const unifiedUploadRef = useRef<HTMLInputElement>(null);
+
+  // Per-slot image upload
+  const slotUploadInputRef = useRef<HTMLInputElement>(null);
+  const [slotUploadTarget, setSlotUploadTarget] = useState<string | null>(null);
 
   // PDF-extracted brand images (from Evidence Locker)
   const [pdfEvidenceImages, setPdfEvidenceImages] = useState<PdfImageReference[]>([]);
@@ -3411,6 +3635,11 @@ export function ImageCreator({
     () => activeThemeSlots.filter((slot) => slot.id !== 'hero'),
     [activeThemeSlots]
   );
+  const maxReferenceImages = useMemo(() => {
+    if (selectedThemeId === 'guided-auto' || selectedThemeId === 'alliance-poster') return 5;
+    return Math.max(1, activeThemeSlots.length);
+  }, [selectedThemeId, activeThemeSlots]);
+  const totalSelectedImages = (selectedReferenceImage ? 1 : 0) + additionalReferenceImages.length;
   const nonHeroSlotAssignments = useMemo(
     () =>
       Object.fromEntries(
@@ -3568,7 +3797,7 @@ export function ImageCreator({
     setIsVisionUserEdited(Boolean(preset.customPrompt));
     setSelectedTone(preset.selectedTone || 'professional');
     setSelectedStyle(preset.selectedStyle || 'split-layout');
-    setLogoPlacement(preset.logoPlacement || 'overlay');
+    setLogoPlacement(preset.logoPlacement || getThemeRecommendedLogoPlacement(preset.themeId));
     setImageAspect(preset.imageAspect || 'landscape');
     setPartnerName(preset.partnerName || '');
     setPartnerTagline(preset.partnerTagline || '');
@@ -3736,6 +3965,160 @@ export function ImageCreator({
     reader.readAsDataURL(file);
     e.target.value = '';
   }, []);
+
+  // ── Per-slot image upload handler ──
+  const handleSlotImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const targetSlot = slotUploadTarget;
+    e.target.value = '';
+    if (!file || !targetSlot) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be under 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSlotAssignments((prev) => ({ ...prev, [targetSlot]: reader.result as string }));
+      toast.success('Image assigned to slot');
+    };
+    reader.readAsDataURL(file);
+  }, [slotUploadTarget]);
+
+  const triggerSlotUpload = useCallback((slotId: string) => {
+    setSlotUploadTarget(slotId);
+    // Use setTimeout to ensure state is set before triggering click
+    setTimeout(() => slotUploadInputRef.current?.click(), 0);
+  }, []);
+
+  // ── Upload multiple additional reference images (AI Guided) ──
+  const handleAdditionalImagesUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const maxTotal = 5;
+    const available = maxTotal - additionalReferenceImages.length;
+    if (available <= 0) {
+      toast.error(`Maximum ${maxTotal} additional images allowed`);
+      e.target.value = '';
+      return;
+    }
+
+    const filesToProcess = files.slice(0, available);
+    let processed = 0;
+
+    for (const file of filesToProcess) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is over 10MB — skipped`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAdditionalReferenceImages((prev) => {
+          if (prev.length >= maxTotal) return prev;
+          return [...prev, reader.result as string];
+        });
+        processed++;
+        if (processed === filesToProcess.length) {
+          toast.success(`${processed} image${processed > 1 ? 's' : ''} added`);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  }, [additionalReferenceImages.length]);
+
+  // ── Add image from PDF/fetched to additional references ──
+  const addToAdditionalReferences = useCallback((url: string) => {
+    const current = (selectedReferenceImage ? 1 : 0) + additionalReferenceImages.length;
+    if (current >= maxReferenceImages) {
+      toast.error(`Maximum ${maxReferenceImages} image${maxReferenceImages !== 1 ? 's' : ''} for this theme`);
+      return;
+    }
+    if (additionalReferenceImages.includes(url)) {
+      toast('Image already added');
+      return;
+    }
+    setAdditionalReferenceImages((prev) => [...prev, url]);
+    toast.success('Added to references');
+  }, [additionalReferenceImages, selectedReferenceImage, maxReferenceImages]);
+
+  const removeAdditionalReference = useCallback((index: number) => {
+    setAdditionalReferenceImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // ── Unified image selection handler (for any source tab) ──
+  const handleUnifiedImageSelect = useCallback((url: string) => {
+    // Deselect if already selected
+    if (selectedReferenceImage === url) {
+      setReferenceSelectionTouched(true);
+      setSelectedReferenceImage(null);
+      return;
+    }
+    const addIdx = additionalReferenceImages.indexOf(url);
+    if (addIdx >= 0) {
+      setAdditionalReferenceImages((prev) => prev.filter((_, i) => i !== addIdx));
+      return;
+    }
+    // Check max
+    const current = (selectedReferenceImage ? 1 : 0) + additionalReferenceImages.length;
+    if (current >= maxReferenceImages) {
+      toast.error(`Maximum ${maxReferenceImages} image${maxReferenceImages !== 1 ? 's' : ''} for this theme`);
+      return;
+    }
+    // Add: hero first, then additional
+    if (!selectedReferenceImage) {
+      setReferenceSelectionTouched(true);
+      setSelectedReferenceImage(url);
+    } else {
+      setAdditionalReferenceImages((prev) => [...prev, url]);
+    }
+  }, [selectedReferenceImage, additionalReferenceImages, maxReferenceImages]);
+
+  // ── Unified upload handler (any images, respects slot limit) ──
+  const handleUnifiedUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const current = (selectedReferenceImage ? 1 : 0) + additionalReferenceImages.length;
+    const available = maxReferenceImages - current;
+    if (available <= 0) {
+      toast.error(`Maximum ${maxReferenceImages} image${maxReferenceImages !== 1 ? 's' : ''} for this theme`);
+      e.target.value = '';
+      return;
+    }
+    const filesToProcess = files.slice(0, available);
+    let processed = 0;
+    for (const file of filesToProcess) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is over 10MB — skipped`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = reader.result as string;
+        if (!selectedReferenceImage && processed === 0) {
+          setReferenceSelectionTouched(true);
+          setSelectedReferenceImage(url);
+        } else {
+          setAdditionalReferenceImages((prev) => {
+            if (prev.length >= maxReferenceImages - 1) return prev;
+            return [...prev, url];
+          });
+        }
+        processed++;
+        if (processed === filesToProcess.length) {
+          toast.success(`${processed} image${processed > 1 ? 's' : ''} added`);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  }, [selectedReferenceImage, additionalReferenceImages.length, maxReferenceImages]);
 
   // ── Fetch Images from URL ──
   const handlePdfUploadSelection = useCallback(
@@ -4080,6 +4463,7 @@ export function ImageCreator({
             generationNonce: nonce,
             imageAspect,
             referenceImageUrl: selectedReferenceImage || undefined,
+            additionalReferenceUrls: additionalReferenceImages.length > 0 ? additionalReferenceImages : undefined,
           }),
         });
 
@@ -4100,11 +4484,9 @@ export function ImageCreator({
           const rawImageUrl = (typeof data.baseUrl === 'string' && data.baseUrl.trim()) || data.url;
           let finalImageUrl: string = data.url;
 
-          const shouldApplyBlend =
-            selectedThemeId !== 'alliance-poster' &&
-            selectedBlendMode !== 'normal' &&
-            logoPlacement !== 'none' &&
-            Boolean(effectiveLogoForGeneration);
+          // AI integrates the logo directly via the edit endpoint —
+          // no additional client-side blend needed (prevents double-logo).
+          const shouldApplyBlend = false;
 
           if (shouldApplyBlend) {
             setIsApplyingBlend(true);
@@ -4121,8 +4503,8 @@ export function ImageCreator({
                   logoUrl: effectiveLogoForGeneration,
                   blendMode: selectedBlendMode,
                   logoPlacement: placement,
-                  logoOpacity: logoPlacement === 'infuse' ? 0.42 : 0.92,
-                  logoScale: logoPlacement === 'infuse' ? 1.1 : 1,
+                  logoOpacity: logoPlacement === 'infuse' ? 0.80 : 0.92,
+                  logoScale: logoPlacement === 'infuse' ? 1.0 : 1,
                   canvasWidth: aspectSize.width,
                   canvasHeight: aspectSize.height,
                   overlayOpacity: 0,
@@ -4674,14 +5056,14 @@ export function ImageCreator({
       logo: [
         {
           id: 'logo-corner-lockup',
-          label: 'Corner Lockup',
-          summary: 'Places the logo in a clean brand plate so it feels premium and highly legible.',
+          label: 'Header Lockup',
+          summary: 'Places the logo in a disciplined header rail so it feels integrated and highly legible.',
           details: [
-            `Position: ${selectedThemeId === 'alliance-poster' ? 'top-left brand card' : 'top-left corner lockup'}`,
-            'Background: white or light brand plate with soft edge separation',
-            `Treatment: ${logoPresence}`,
+            `Position: ${selectedThemeId === 'alliance-poster' || selectedThemeId === 'industrial-campaign' ? 'top-left header fascia' : 'top-left structured brand rail'}`,
+            'Background: native header surface or restrained plated lockup with clear separation',
+            `Treatment: refined and readable without looking stickered on`,
           ],
-          autoText: `Use the selected logo in a premium corner lockup with its own clean plate and enough breathing room that it feels intentionally placed, not pasted on top.`,
+          autoText: `Use the selected logo in a disciplined header lockup with a native brand surface and enough breathing room that it feels built into the composition, not pasted on top.`,
           apply: { logoPlacement: hasReadyLogo ? 'overlay' : 'none' },
         },
         {
@@ -5628,13 +6010,25 @@ export function ImageCreator({
                             </button>
                           </div>
                         ) : (
-                          <div className="w-full aspect-square rounded-md border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center gap-1">
-                            <ImageIcon className="w-5 h-5 text-slate-300" />
-                            <span className="text-[9px] text-slate-400">No image</span>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => triggerSlotUpload(slot.id)}
+                            className="w-full aspect-square rounded-md border-2 border-dashed border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center gap-1 hover:bg-indigo-100/60 hover:border-indigo-400 transition-colors cursor-pointer"
+                          >
+                            <Upload className="w-5 h-5 text-indigo-400" />
+                            <span className="text-[9px] text-indigo-500 font-medium">Upload</span>
+                          </button>
                         )}
-                        {/* Quick-pick from available images */}
-                        <div className="flex flex-wrap gap-1 max-h-[80px] overflow-y-auto">
+                        {/* Quick-pick from available images + upload */}
+                        <div className="flex flex-wrap gap-1 max-h-[96px] overflow-y-auto">
+                          <button
+                            type="button"
+                            onClick={() => triggerSlotUpload(slot.id)}
+                            className="w-10 h-10 rounded border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center flex-shrink-0 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                            title="Upload image for this slot"
+                          >
+                            <Upload className="w-3.5 h-3.5 text-slate-400" />
+                          </button>
                           {effectivePdfImages.slice(0, 6).map((img) => (
                             <button
                               key={img.id}
@@ -5645,9 +6039,9 @@ export function ImageCreator({
                                   [slot.id]: img.signed_url,
                                 }))
                               }
-                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                              className={`w-10 h-10 rounded border overflow-hidden flex-shrink-0 transition-all ${
                                 assigned === img.signed_url
-                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  ? 'border-indigo-400 ring-2 ring-indigo-300'
                                   : 'border-slate-200 hover:border-indigo-300'
                               }`}
                             >
@@ -5671,9 +6065,9 @@ export function ImageCreator({
                                   [slot.id]: img.url,
                                 }))
                               }
-                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                              className={`w-10 h-10 rounded border overflow-hidden flex-shrink-0 transition-all ${
                                 assigned === img.url
-                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  ? 'border-indigo-400 ring-2 ring-indigo-300'
                                   : 'border-slate-200 hover:border-indigo-300'
                               }`}
                             >
@@ -5696,9 +6090,9 @@ export function ImageCreator({
                                   [slot.id]: selectedReferenceImage,
                                 }))
                               }
-                              className={`w-8 h-8 rounded border overflow-hidden flex-shrink-0 transition-all ${
+                              className={`w-10 h-10 rounded border overflow-hidden flex-shrink-0 transition-all ${
                                 assigned === selectedReferenceImage
-                                  ? 'border-indigo-400 ring-1 ring-indigo-300'
+                                  ? 'border-indigo-400 ring-2 ring-indigo-300'
                                   : 'border-slate-200 hover:border-indigo-300'
                               }`}
                             >
@@ -5949,6 +6343,32 @@ export function ImageCreator({
               className="hidden"
             />
 
+            <input
+              ref={additionalImagesInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleAdditionalImagesUpload}
+              className="hidden"
+            />
+
+            <input
+              ref={unifiedUploadRef}
+              type="file"
+              accept="image/*"
+              multiple={maxReferenceImages > 1}
+              onChange={handleUnifiedUpload}
+              className="hidden"
+            />
+
+            <input
+              ref={slotUploadInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSlotImageUpload}
+              className="hidden"
+            />
+
             {additionalAllianceLogos.length > 0 ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {additionalAllianceLogos.map((logo) => (
@@ -6062,153 +6482,68 @@ export function ImageCreator({
         </Card>
 
 
-        {/* Reference Image — Upload or URL */}
+        {/* ── Reference Images — Unified (Upload / PDF / URL) ── */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors">
+          {/* Header */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
                 <ImageIcon className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm text-slate-900">Additional References</h3>
-                <p className="text-[11px] text-gray-400">Upload your own image or fetch from a URL. Any selected image here becomes the hero visual automatically.</p>
+                <h3 className="font-semibold text-sm text-slate-900">
+                  Reference Images
+                  {totalSelectedImages > 0 && (
+                    <span className="ml-1.5 text-[10px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                      {totalSelectedImages} / {maxReferenceImages}
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-gray-400">
+                  Select up to {maxReferenceImages} image{maxReferenceImages !== 1 ? 's' : ''} for {activeTheme.label}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Upload your own reference image */}
-          <button
-            type="button"
-            onClick={() => referenceImageInputRef.current?.click()}
-            className="w-full rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/50 py-4 text-center transition-all hover:border-indigo-400 hover:bg-indigo-50"
-          >
-            <Upload className="mx-auto mb-1 h-5 w-5 text-indigo-500" />
-            <p className="text-sm font-medium text-indigo-700">Upload reference image</p>
-            <p className="text-[10px] text-indigo-400">PNG, JPG, or WebP — up to 10MB</p>
-          </button>
-
-          {/* Or fetch from URL */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">or from URL</span>
-            <div className="flex-1 h-px bg-slate-200" />
-          </div>
-
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
-              <Input
-                value={siteUrl}
-                onChange={(e) => setSiteUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleFetchSiteImages()}
-                placeholder="https://example.com"
-                className="text-sm h-9 pl-8 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleFetchSiteImages}
-              disabled={isFetchingSiteImages || !siteUrl.trim()}
-              className="h-9 px-4 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
-            >
-              {isFetchingSiteImages ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                'Fetch'
+          {/* Tab bar */}
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
+            <button type="button" onClick={() => setImageSourceTab('upload')} className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-md transition-all ${imageSourceTab === 'upload' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <Upload className="w-3.5 h-3.5" />
+              Upload
+            </button>
+            <button type="button" onClick={() => setImageSourceTab('pdf')} className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-md transition-all ${imageSourceTab === 'pdf' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <FileText className="w-3.5 h-3.5" />
+              From PDF
+              {effectivePdfImages.length > 0 && (
+                <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded-full">{effectivePdfImages.length}</span>
               )}
-            </Button>
+            </button>
+            <button type="button" onClick={() => setImageSourceTab('url')} className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-md transition-all ${imageSourceTab === 'url' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <Link2 className="w-3.5 h-3.5" />
+              From URL
+            </button>
           </div>
 
-          {fetchedSiteImages.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-slate-700 font-semibold">
-                {fetchedSiteImages.length} image{fetchedSiteImages.length !== 1 ? 's' : ''} found — click to select as reference
+          {/* Upload tab */}
+          {imageSourceTab === 'upload' && (
+            <button
+              type="button"
+              onClick={() => unifiedUploadRef.current?.click()}
+              className="w-full rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/50 py-6 text-center transition-all hover:border-indigo-400 hover:bg-indigo-50"
+            >
+              <Upload className="mx-auto mb-1 h-5 w-5 text-indigo-500" />
+              <p className="text-sm font-medium text-indigo-700">
+                {maxReferenceImages > 1 ? 'Upload images' : 'Upload image'}
               </p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {fetchedSiteImages.map((img, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setReferenceSelectionTouched(true);
-                      setSelectedReferenceImage(
-                        selectedReferenceImage === img.url ? null : img.url
-                      );
-                    }}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                      selectedReferenceImage === img.url
-                        ? 'border-indigo-50 ring-2 ring-indigo-300'
-                        : 'border-slate-200 hover:border-indigo-300'
-                    }`}
-                  >
-                    <img
-                      src={img.url}
-                      alt={`Site image ${i + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                    {selectedReferenceImage === img.url && (
-                      <div className="absolute inset-0 bg-indigo-50/20 flex items-center justify-center">
-                        <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+              <p className="text-[10px] text-indigo-400">PNG, JPG, or WebP — up to 10MB</p>
+            </button>
           )}
 
-          {selectedReferenceImage && (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-              <img
-                src={selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage}
-                alt="Selected reference"
-                className="w-10 h-10 rounded object-cover"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-900">
-                  {selectedReferenceSummary?.title || (selectedPdfImage ? 'PDF reference selected' : 'Reference image selected')}
-                </p>
-                <p className="text-[10px] text-slate-500 truncate">
-                  {selectedReferenceSummary?.detail || selectedPdfImage?.title || selectedReferenceImage}
-                </p>
-                <p className="mt-0.5 text-[10px] text-indigo-600">
-                  Reference image active — AI will use this as hero.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setReferenceSelectionTouched(true);
-                  setSelectedReferenceImage(null);
-                }}
-                className="h-6 w-6 p-0 text-gray-500 hover:text-red-500"
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        {/* ── Brand PDF Images ── */}
-        <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-emerald-300 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <ImageIcon className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-slate-900">
-                    PDF Visual Library
-                    {effectivePdfImages.length > 0 && (
-                      <span className="ml-1.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                        {effectivePdfImages.length}
-                      </span>
-                    )}
-                  </h3>
-                  <p className="text-[11px] text-gray-400">Images auto-extracted from your uploaded PDFs — select one as a visual reference for AI generation</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          {/* PDF tab */}
+          {imageSourceTab === 'pdf' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 {onUploadPdfFiles && (
                   <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
                     {isUploadingPdfImages ? (
@@ -6233,451 +6568,157 @@ export function ImageCreator({
                   </label>
                 )}
                 {onRefreshEvidence && (
-                  <button
-                    type="button"
-                    onClick={onRefreshEvidence}
-                    className="text-[10px] text-slate-400 hover:text-emerald-600 font-medium flex items-center gap-1 transition-colors"
-                    title="Refresh PDF images"
-                  >
+                  <button type="button" onClick={onRefreshEvidence} className="text-[10px] text-slate-400 hover:text-emerald-600 font-medium flex items-center gap-1 transition-colors">
                     <RefreshCw className="w-3 h-3" />
                     Refresh
                   </button>
                 )}
-                {selectedPdfImage && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReferenceSelectionTouched(true);
-                      setSelectedReferenceImage(null);
-                    }}
-                    className="text-[10px] text-red-500 hover:text-red-700 font-medium"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
-            </div>
 
-            {selectedPdfs.length > 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold text-emerald-900">
-                      Selected PDFs for this post
-                    </p>
-                    <p className="mt-1 text-[10px] text-emerald-700">
-                      {selectedPdfs.length} selected PDF{selectedPdfs.length === 1 ? '' : 's'} •{' '}
-                      {selectedPdfVisualCount} extracted visual
-                      {selectedPdfVisualCount === 1 ? '' : 's'} ready in scope
-                    </p>
-                  </div>
-                  {reextractableSelectedPdfIds.length > 0 && onReextractPdfs && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={handleReextractSelectedPdfs}
-                      disabled={isReextractingPdfImages || isUploadingPdfImages}
-                      className="h-8 border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100"
-                    >
-                      {isReextractingPdfImages ? (
-                        <>
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          Extracting...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                          Extract Missing
-                        </>
-                      )}
-                    </Button>
-                  )}
+              {(isUploadingPdfImages || isReextractingPdfImages) && (
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>{isUploadingPdfImages ? 'Uploading PDFs and extracting visuals...' : 'Re-extracting visuals...'}</span>
                 </div>
+              )}
 
-                <div className="space-y-2">
-                  {selectedPdfs.map((pdf) => {
-                    const missingVisuals = pdf.extractedCount <= 0;
-                    const reextractingThisPdf =
-                      pdfLibraryActionState?.kind === 'reextract-pdf' &&
-                      pdfLibraryActionState.targetId === pdf.id;
-
-                    return (
-                      <div
-                        key={pdf.id}
-                        className="flex items-start justify-between gap-3 rounded-lg border border-white/80 bg-white/80 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-[11px] font-medium text-slate-800">
-                            {pdf.title}
-                          </p>
-                          <p
-                            className={`mt-1 text-[10px] ${
-                              missingVisuals ? 'text-amber-700' : 'text-emerald-700'
-                            }`}
-                          >
-                            {missingVisuals
-                              ? pdf.canReextract
-                                ? 'No visuals saved yet. Re-extract to populate the image panel.'
-                                : 'No visuals saved yet. Re-upload this PDF because the stored file is unavailable.'
-                              : `${pdf.extractedCount} extracted visual${pdf.extractedCount === 1 ? '' : 's'} ready.`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {pdf.canReextract && onReextractPdfs && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handleReextractSinglePdf(pdf.id)}
-                              disabled={isUploadingPdfImages || Boolean(pdfLibraryActionState)}
-                              className="h-7 border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                            >
-                              {reextractingThisPdf ? (
-                                <>
-                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                  Redo
-                                </>
-                              ) : (
-                                <>
-                                  <RefreshCw className="mr-1 h-3 w-3" />
-                                  Redo
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          <Badge
-                            className={
-                              missingVisuals
-                                ? 'border border-amber-200 bg-amber-100 text-amber-800'
-                                : 'border border-emerald-200 bg-emerald-100 text-emerald-800'
-                            }
-                          >
-                            {missingVisuals ? 'Needs visuals' : `${pdf.extractedCount} ready`}
-                          </Badge>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {isLoadingPdf ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Scanning PDFs for images...
                 </div>
-              </div>
-            )}
-
-            {(isUploadingPdfImages || isReextractingPdfImages || pdfLibraryActionState) && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>
-                  {isUploadingPdfImages
-                    ? 'Uploading PDFs and extracting visuals...'
-                    : isReextractingPdfImages
-                      ? 'Re-extracting visuals from selected PDFs...'
-                      : pdfLibraryActionState?.kind === 'delete-image'
-                        ? 'Removing extracted image from the library...'
-                        : 'Refreshing extracted visuals from the source PDF...'}
-                </span>
-              </div>
-            )}
-
-            {isLoadingPdf ? (
-              <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Scanning PDFs for images...
-              </div>
-            ) : effectivePdfImages.length > 0 ? (
-              <>
-                {previewedPdfImage && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
-                    <div className="mb-2 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Large Preview
-                        </p>
-                        <p className="mt-1 truncate text-xs font-medium text-slate-800">
-                          {previewedPdfImage.title}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {selectedReferenceImage === previewedPdfImage.signed_url && (
-                          <Badge className="bg-emerald-600/90 text-white text-[9px]">
-                            Hero
-                          </Badge>
-                        )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setPreviewedPdfImageId(previewedPdfImage.id);
-                            toggleReferenceSelection(previewedPdfImage.signed_url);
-                          }}
-                          className="h-7 px-2 text-[10px]"
-                        >
-                          {selectedReferenceImage === previewedPdfImage.signed_url
-                            ? 'Deselect hero'
-                            : 'Use as hero'}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className={`overflow-hidden rounded-lg border border-slate-200 ${isPdfPageLike(previewedPdfImage) ? 'bg-white' : 'bg-slate-50'}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={previewedPdfImage.signed_url}
-                        alt={previewedPdfImage.title}
-                        className={`w-full ${isPdfPageLike(previewedPdfImage) ? 'h-64 object-contain object-top p-2' : 'h-64 object-contain p-4'}`}
-                      />
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <Badge className="border border-slate-200 bg-white text-[9px] text-slate-700">
-                        {getPdfImageMetaLabel(previewedPdfImage).kindLabel}
-                      </Badge>
-                      {getPdfImageMetaLabel(previewedPdfImage).sizeLabel && (
-                        <Badge className="border border-slate-200 bg-white text-[9px] text-slate-600">
-                          {getPdfImageMetaLabel(previewedPdfImage).sizeLabel}
-                        </Badge>
-                      )}
-                      {isPdfPageLike(previewedPdfImage) && (
-                        <span className="text-[10px] text-amber-700">
-                          Page renders are usually weaker hero visuals than extracted product images.
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Grid thumbnail view */}
-                <div className="grid grid-cols-2 gap-2.5 max-h-80 overflow-y-auto pr-1">
-                  {effectivePdfImages.map((img, index) => {
-                    const selected = selectedReferenceImage === img.signed_url;
-                    const inPrompt = normalizedPrompt.includes(normalizeReferenceText(img.title));
-                    const displayTitle = getPdfImageDisplayTitle(img.title);
-                    const imageMeta = getPdfImageMetaLabel(img);
-                    const isDefaultHero = !referenceSelectionTouched && index === 0;
-                    const deletingThisImage =
-                      pdfLibraryActionState?.kind === 'delete-image' &&
-                      pdfLibraryActionState.targetId === img.id;
-                    const reextractingSourcePdf =
-                      pdfLibraryActionState?.kind === 'reextract-pdf' &&
-                      Boolean(img.sourceEvidenceId) &&
-                      pdfLibraryActionState.targetId === img.sourceEvidenceId;
-                    const tileActionBusy = deletingThisImage || reextractingSourcePdf;
-
+              ) : effectivePdfImages.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {effectivePdfImages.map((img) => {
+                    const isSelected = selectedReferenceImage === img.signed_url || additionalReferenceImages.includes(img.signed_url);
                     return (
-                      <div
+                      <button
                         key={img.id}
-                        onMouseEnter={() => setPreviewedPdfImageId(img.id)}
-                        className={`group relative rounded-xl border-2 transition-all overflow-hidden ${
-                          selected
-                            ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md'
-                            : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm'
+                        type="button"
+                        onClick={() => handleUnifiedImageSelect(img.signed_url)}
+                        className={`relative aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all ${
+                          isSelected
+                            ? 'border-indigo-400 ring-2 ring-indigo-200 shadow-md'
+                            : 'border-slate-200 hover:border-indigo-300'
                         }`}
                       >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPreviewedPdfImageId(img.id);
-                            toggleReferenceSelection(img.signed_url);
-                          }}
-                          title={`${selected ? 'Deselect' : 'Select'}: ${img.title}`}
-                          className="w-full text-left"
-                          onFocus={() => setPreviewedPdfImageId(img.id)}
-                        >
-                          <div className="relative aspect-[4/3] overflow-hidden bg-white">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={img.signed_url}
-                              alt={img.title}
-                              className={`h-full w-full transition-transform group-hover:scale-[1.03] object-contain ${isPdfPageLike(img) ? 'object-top p-1.5' : 'p-2'}`}
-                              onError={(e) => {
-                                const target = e.currentTarget;
-                                target.style.display = 'none';
-                                const parent = target.parentElement;
-                                if (parent && !parent.querySelector('.img-error-msg')) {
-                                  const errorDiv = document.createElement('div');
-                                  errorDiv.className = 'img-error-msg absolute inset-0 flex flex-col items-center justify-center p-2 text-center';
-                                  errorDiv.innerHTML = '<svg class="w-5 h-5 text-slate-300 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-[8px] text-slate-400">Failed to load</span>';
-                                  parent.appendChild(errorDiv);
-                                }
-                              }}
-                            />
-                            {selected && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-emerald-500/30 backdrop-blur-[1px]">
-                                <CheckCircle2 className="h-6 w-6 text-white drop-shadow-lg" />
-                              </div>
-                            )}
-                            {isDefaultHero && !selected && (
-                              <div className="absolute top-1 left-1">
-                                <Badge className="bg-emerald-600/85 text-white text-[8px] px-1 py-0">
-                                  Auto hero
-                                </Badge>
-                              </div>
-                            )}
-                            {inPrompt && !selected && (
-                              <div className="absolute top-1 right-1">
-                                <Badge className="bg-slate-800/70 text-white text-[8px] px-1 py-0">
-                                  In prompt
-                                </Badge>
-                              </div>
-                            )}
-                            <div className="absolute bottom-1 left-1">
-                              <Badge className={`text-[8px] px-1 py-0 ${isPdfPageLike(img) ? 'bg-amber-100 text-amber-800' : 'bg-white/90 text-slate-700'}`}>
-                                {imageMeta.kindLabel}
-                              </Badge>
-                            </div>
-                            {tileActionBusy && (
-                              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 backdrop-blur-[1px]">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold text-slate-700 shadow-sm">
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                  {deletingThisImage ? 'Deleting...' : 'Redoing...'}
-                                </div>
-                              </div>
-                            )}
+                        <img src={img.signed_url} alt={img.title || 'PDF image'} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-indigo-500/20 flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
                           </div>
-                          <div className="p-1.5">
-                            <p className="truncate text-[10px] font-medium text-slate-700">
-                              {displayTitle.primary}
-                            </p>
-                            {imageMeta.sizeLabel && (
-                              <p className="truncate text-[9px] text-slate-400">
-                                {imageMeta.sizeLabel}
-                              </p>
-                            )}
-                            {displayTitle.secondary && (
-                              <p className="truncate text-[9px] text-slate-400">
-                                {displayTitle.secondary}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                        <div className="grid grid-cols-4 gap-1 border-t border-slate-100 bg-white p-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPreviewedPdfImageId(img.id)}
-                            disabled={Boolean(pdfLibraryActionState)}
-                            className="h-6 px-1 text-[10px]"
-                            title="Preview this image"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={inPrompt ? 'secondary' : 'outline'}
-                            onClick={() => insertPdfImageIntoPrompt(img)}
-                            disabled={Boolean(pdfLibraryActionState)}
-                            className="h-6 px-1 text-[10px]"
-                          >
-                            {inPrompt ? '✓ In prompt' : '+ Add to prompt'}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              img.sourceEvidenceId
-                                ? void handleReextractSinglePdf(img.sourceEvidenceId)
-                                : undefined
-                            }
-                            disabled={
-                              !img.sourceEvidenceId ||
-                              !onReextractPdfs ||
-                              isUploadingPdfImages ||
-                              Boolean(pdfLibraryActionState)
-                            }
-                            className="h-6 px-1 text-[10px]"
-                          >
-                            {reextractingSourcePdf ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              'Redo'
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void handleDeletePdfImage(img)}
-                            disabled={!onDeleteEvidenceIds || Boolean(pdfLibraryActionState)}
-                            className="h-6 px-1 text-[10px] text-red-600 hover:text-red-700"
-                          >
-                            {deletingThisImage ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3 w-3" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-gray-400">
-                  Click an image to make it the hero source. Use the tile actions to
-                  add it to the prompt, redo extraction from its source PDF, or remove
-                  that extracted visual.
-                </p>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-2.5 py-5 text-center">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-50 to-slate-50 flex items-center justify-center border border-slate-200/60">
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-4 text-center">
                   <ImageIcon className="w-5 h-5 text-slate-300" />
+                  <p className="text-xs text-gray-500">No PDF images found</p>
+                  <p className="text-[10px] text-gray-400">Upload a PDF to extract visuals</p>
                 </div>
-                <p className="text-xs font-medium text-gray-500">
-                  {selectedPdfs.length > 0 ? 'Selected PDFs have no visuals yet' : 'No PDF images found'}
-                </p>
-                <p className="text-[10px] text-gray-400 max-w-[250px]">
-                  {selectedPdfs.length > 0
-                    ? 'Extract visuals for the selected PDFs, or upload a new PDF. Once extraction finishes, those images will appear here automatically.'
-                    : 'Upload a brand PDF — images will be auto-extracted and appear here for use as visual references.'}
-                </p>
-                {reextractableSelectedPdfIds.length > 0 && onReextractPdfs && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReextractSelectedPdfs}
-                    disabled={isReextractingPdfImages || isUploadingPdfImages}
-                    className="h-9 border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                  >
-                    {isReextractingPdfImages ? (
-                      <>
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        Extracting visuals...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                        Extract visuals from selected PDFs
-                      </>
-                    )}
-                  </Button>
-                )}
-                {onUploadPdfFiles && (
-                  <label className="mt-1 cursor-pointer inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
-                    {isUploadingPdfImages ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="w-3.5 h-3.5" />
-                    )}
-                    {isUploadingPdfImages ? 'Uploading...' : 'Upload PDF'}
-                    <input
-                      type="file"
-                      accept=".pdf,application/pdf"
-                      multiple
-                      className="hidden"
-                      onChange={async (e) => {
-                        const files = e.target.files;
-                        if (files && files.length > 0) {
-                          await handlePdfUploadSelection(Array.from(files));
-                          e.target.value = '';
-                        }
-                      }}
-                    />
-                  </label>
-                )}
+              )}
+            </div>
+          )}
+
+          {/* URL tab */}
+          {imageSourceTab === 'url' && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                  <Input
+                    value={siteUrl}
+                    onChange={(e) => setSiteUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleFetchSiteImages()}
+                    placeholder="https://example.com"
+                    className="text-sm h-9 pl-8 bg-white border-slate-300 text-slate-900 placeholder:text-gray-400"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleFetchSiteImages}
+                  disabled={isFetchingSiteImages || !siteUrl.trim()}
+                  className="h-9 px-4 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                >
+                  {isFetchingSiteImages ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Fetch'}
+                </Button>
               </div>
-            )}
-          </Card>
+
+              {fetchedSiteImages.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-slate-700 font-semibold">
+                    {fetchedSiteImages.length} image{fetchedSiteImages.length !== 1 ? 's' : ''} found
+                  </p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {fetchedSiteImages.map((img, i) => {
+                      const isSelected = selectedReferenceImage === img.url || additionalReferenceImages.includes(img.url);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleUnifiedImageSelect(img.url)}
+                          className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                            isSelected
+                              ? 'border-indigo-400 ring-2 ring-indigo-200'
+                              : 'border-slate-200 hover:border-indigo-300'
+                          }`}
+                        >
+                          <img src={img.url} alt={`Site image ${i + 1}`} className="w-full h-full object-cover" />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-indigo-500/20 flex items-center justify-center">
+                              <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Selected images */}
+          {totalSelectedImages > 0 && (
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <p className="text-[11px] font-semibold text-slate-700">
+                {totalSelectedImages} of {maxReferenceImages} selected
+              </p>
+              <div className={`grid gap-2 ${maxReferenceImages >= 3 ? 'grid-cols-3' : maxReferenceImages === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {selectedReferenceImage && (
+                  <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-square">
+                    <img src={selectedPdfImage?.signed_url || selectedSiteImage?.url || selectedReferenceImage} alt="Hero" className="w-full h-full object-cover" />
+                    <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Hero</div>
+                    <button
+                      type="button"
+                      onClick={() => { setReferenceSelectionTouched(true); setSelectedReferenceImage(null); }}
+                      className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                {additionalReferenceImages.map((imgUrl, i) => (
+                  <div key={i} className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-square">
+                    <img src={imgUrl} alt={`Reference ${i + 2}`} className="w-full h-full object-cover" />
+                    <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">{i + 2}</div>
+                    <button
+                      type="button"
+                      onClick={() => removeAdditionalReference(i)}
+                      className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* ── 2. Your Vision / Creative Prompt ── */}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. Your Vision / Creative Prompt Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {/* Your Vision */}
@@ -6960,9 +7001,9 @@ export function ImageCreator({
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Image Size</p>
           <div className="grid grid-cols-3 gap-1.5">
             {[
-              { id: 'landscape' as const, label: 'Landscape', ratio: '1200x628' },
-              { id: 'square' as const, label: 'Square', ratio: '1080x1080' },
-              { id: 'portrait' as const, label: 'Portrait', ratio: '1080x1350' },
+              { id: 'landscape' as const, label: 'Landscape', ratio: '1536x1024' },
+              { id: 'square' as const, label: 'Square', ratio: '1024x1024' },
+              { id: 'portrait' as const, label: 'Portrait', ratio: '1024x1536' },
             ].map((size) => (
               <button
                 key={size.id}
@@ -6996,29 +7037,12 @@ export function ImageCreator({
         )}
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Generate Button Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        {/* ── Image Count Selector ── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3 h-3 text-purple-500" />
-            <p className="text-[11px] font-semibold text-slate-700 truncate">
-              {activeTheme.label} &middot; {imageAspect}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4].map((n) => (
-              <button
-                key={n}
-                onClick={() => setBatchSize(n)}
-                className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
-                  batchSize === n
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'bg-white text-slate-400 border border-slate-200 hover:border-purple-300 hover:text-purple-500'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
+        {/* ── Theme & Aspect Label ── */}
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-3 h-3 text-purple-500" />
+          <p className="text-[11px] font-semibold text-slate-700 truncate">
+            {activeTheme.label} &middot; {imageAspect}
+          </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
@@ -7087,17 +7111,12 @@ export function ImageCreator({
           {isGenerating || isApplyingBlend ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              {isApplyingBlend ? 'Applying blend mode...' : `Generating ${batchSize > 1 ? `${batchSize} images` : 'your image'}...`}
-            </>
-          ) : generatedImages.length > 0 ? (
-            <>
-              <RefreshCw className="w-5 h-5 mr-2" />
-              Regenerate {batchSize > 1 ? `${batchSize} Images` : 'Image'} — {activeTheme.label}
+              {isApplyingBlend ? 'Applying blend mode...' : 'Generating your image...'}
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5 mr-2" />
-              Generate {batchSize > 1 ? `${batchSize} Images` : 'Image'} — {activeTheme.label}
+              Generate Image — {activeTheme.label}
             </>
           )}
         </Button>
@@ -7144,9 +7163,9 @@ export function ImageCreator({
                 </div>
               </div>
               <p className="mt-6 text-base font-semibold text-white">
-                {isApplyingBlend ? 'Applying blend mode...' : batchSize > 1 ? `Creating ${batchSize} ${activeTheme.label} images...` : `Creating your ${activeTheme.label} image...`}
+                {isApplyingBlend ? 'Applying blend mode...' : `Creating your ${activeTheme.label} image...`}
               </p>
-              <p className="text-sm text-purple-300/70 mt-1">{batchSize > 1 ? `Usually takes ${batchSize * 15}–${batchSize * 25} seconds` : 'Usually takes 10–20 seconds'}</p>
+              <p className="text-sm text-purple-300/70 mt-1">Usually takes 10–20 seconds</p>
 
               <div className="mt-5 flex items-center gap-3 text-xs text-purple-400/80">
                 <span className="flex items-center gap-1.5 rounded-full bg-purple-500/20 px-2.5 py-1">
@@ -7163,7 +7182,7 @@ export function ImageCreator({
           ) : selectedImage !== null && generatedImages[selectedImage] ? (
             <div className="relative group">
               {/* Full-size image display — no aspect ratio constraint so the image shows completely */}
-              <div className="relative w-full bg-[#f8f8f8] flex items-center justify-center" style={{ backgroundImage: 'linear-gradient(45deg, #e8e8e8 25%, transparent 25%), linear-gradient(-45deg, #e8e8e8 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e8e8e8 75%), linear-gradient(-45deg, transparent 75%, #e8e8e8 75%)', backgroundSize: '12px 12px', backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px' }}>
+              <div className="relative w-full flex items-center justify-center">
                 <img
                   src={generatedImages[selectedImage]}
                   alt="Generated LinkedIn image"
@@ -7193,15 +7212,6 @@ export function ImageCreator({
                       >
                         <Download className="w-4 h-4" />
                       </a>
-                      <Button
-                        size="sm"
-                        className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 h-9 px-3.5 text-xs shadow-lg"
-                        onClick={handleGenerate}
-                        disabled={isGenerating || isApplyingBlend}
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                        Regenerate
-                      </Button>
                     </div>
                   </div>
                 </div>

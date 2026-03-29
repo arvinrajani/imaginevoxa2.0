@@ -35,6 +35,7 @@ type CreateImageRequest = {
   generationNonce?: number;
   imageAspect?: 'landscape' | 'square' | 'portrait';
   referenceImageUrl?: string;
+  additionalReferenceUrls?: string[];
   slotImages?: Record<string, string>;
 };
 
@@ -219,13 +220,13 @@ function deriveSceneBrief(options: {
 
   const parts: string[] = [matched];
   if (options.brandName) {
-    parts.push(`Reflect ${options.brandName} brand personality in the environment and lighting.`);
+    parts.push(`Reflect ${options.brandName} brand personality in the environment lighting, material palette, and spatial composition.`);
   }
   if (options.productName) {
-    parts.push(`Highlight product context: ${options.productName}.`);
+    parts.push(`Highlight product context: ${options.productName} — show it in a believable professional setting with proper staging and lighting.`);
   }
-  parts.push('Keep the scene concrete and identifiable, never abstract-only.');
-  parts.push('Avoid: generic gradients, blurred bokeh-only backgrounds, stock photography feel, empty color washes. The background must look like it was shot on location for this specific brand.');
+  parts.push('Keep the scene concrete and identifiable, never abstract-only. Every surface must show real material texture and catch light believably.');
+  parts.push('Avoid: generic gradients, blurred bokeh-only backgrounds, empty color washes, flat featureless fills, stock photography poses. The background must look like it was shot on location by a premium commercial photographer specifically for this brand.');
   return parts.join(' ');
 }
 
@@ -267,20 +268,20 @@ function buildThemeSelectionGuidance(options: {
 
   const lines = [
     options.referenceImageUrl
-      ? `- A direct reference image is supplied${options.referenceAsHero ? ' and should be treated as the primary hero/product truth' : ''}.`
+      ? `- The user has provided a direct reference image${options.referenceAsHero ? ' — it IS the primary hero/product and MUST be the visual centerpiece' : ' — it MUST appear prominently in the final poster'}.`
       : null,
     ...selectedSlotLines,
     (options.referenceImageUrl || selectedSlotLines.length)
-      ? `- These selected images are not optional. Use them to anchor the product family, silhouette, materials, environment, and lighting language.`
+      ? `- These are the USER'S CHOSEN images. They are NON-NEGOTIABLE. The poster must be built around showcasing these specific assets — same product, same materials, same identity.`
       : null,
     (options.referenceImageUrl || selectedSlotLines.length)
-      ? `- At least one of the selected visuals should appear clearly and recognizably in the final poster as the hero or a major supporting panel.`
+      ? `- The selected visuals MUST appear clearly, prominently, and recognizably in the final poster as the hero or major supporting panel. They should be the first thing the viewer notices.`
       : null,
     (options.referenceImageUrl || selectedSlotLines.length)
-      ? `- Use the theme slot map as composition guidance for where these visuals belong, but integrate them naturally into a polished final poster instead of a rigid pasted template.`
+      ? `- Use the theme slot map as composition guidance, but the user's selected assets take absolute priority over rigid template adherence.`
       : null,
     (options.referenceImageUrl || selectedSlotLines.length)
-      ? `- You may crop, reframe, stylize, or elevate the selected asset, but never hide it inside vague texture or replace it with an invented product that ignores the user's choice.`
+      ? `- You may elevate the staging, improve lighting, and enhance the presentation, but NEVER hide the asset in vague texture, shrink it to a background element, or replace it with a different invented product.`
       : null,
   ].filter(Boolean);
 
@@ -303,6 +304,31 @@ function collectUniqueImageSources(...groups: Array<Array<string | null | undefi
   }
 
   return ordered;
+}
+
+const NATIVE_LOGO_THEME_IDS = new Set([
+  'guided-auto',
+  'alliance-poster',
+  'product-hero',
+  'knowledge-visual',
+  'clean-brand',
+  'industrial-campaign',
+  'datasheet-frame',
+  'proof-stack',
+  'launch-banner',
+  'sector-collage',
+  'brand-story',
+  'offer-card',
+  'comparison-board',
+  'premium-editorial',
+  'job-posting',
+  'hiring-banner',
+  'team-spotlight',
+  'career-growth',
+]);
+
+function getPreferredLogoPlacement(themeId: string): 'overlay' | 'infuse' | 'none' {
+  return NATIVE_LOGO_THEME_IDS.has(themeId) ? 'infuse' : 'overlay';
 }
 
 function buildThemeDirective(themeId: string) {
@@ -410,92 +436,191 @@ function buildAiThemePosterGuide(themeId: string) {
     'guided-auto': {
       label: 'AI Guided',
       direction:
-        'FULL AI POSTER MODE: Build the complete final LinkedIn poster yourself. Use the selected references, brand palette, headline, tagline, logo, and proof lines to create a bespoke campaign-quality composition with strong hierarchy, premium typography, and believable atmosphere.',
+        'FULL AI POSTER MODE: Build the complete final LinkedIn poster yourself.\n'
+        + '• TOP-LEFT (4% from left, 4% from top): place the brand LOGO in a clean rounded card or negative-space lockup. Make it prominent (12-20% of width).\n'
+        + '• Use the full canvas to create a bespoke campaign-quality composition with strong hierarchy, premium typography, and believable atmosphere.\n'
+        + '• HEADLINE: largest text element, bold sans-serif, placed in a clear text-safe zone.\n'
+        + '• Tagline below headline, proof bullets below tagline, all aligned to one left edge.\n'
+        + '• Use brand palette as dominant color story. Build real depth — not a flat gradient.',
     },
     'alliance-poster': {
       label: 'Alliance Poster',
       direction:
-        'Create a polished alliance-style campaign poster with a disciplined brand header, a powerful left hero product zone, a right-side benefits lane, and a clean footer. The result should feel like a premium electrical campaign board, not a blank background with graphics dropped later.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• TOP HEADER BAND (top 16%): dark brand-colored strip. Place the brand LOGO in a white rounded box at LEFT (3%-24%). Place the headline text CENTERED (25%-75%) in bold white. Place partner/secondary logos at RIGHT (75%-97%) in a dark panel.\n'
+        + '• LEFT HERO BAY (4%-38% width, 20%-88% height): a large rounded panel containing the product/reference image with premium framing.\n'
+        + '• RIGHT PROOF LANE (42%-96% width, 20%-88% height): darker panel with a branded accent bar on the left edge. Contains: tagline at top, a thin divider line, then 4 PROOF BULLET CARDS stacked vertically with equal spacing. Each bullet card has a rounded dark background, a small colored checkmark icon on the left, and white text on the right. All cards must align to the same left edge.\n'
+        + '• FOOTER STRIP (bottom 9%): brand website on left, email on right, separated by a thin line.\n'
+        + 'The overall feel: premium enterprise co-branded campaign creative.',
     },
     'product-hero': {
       label: 'Product Hero',
       direction:
-        'Create a premium product-led poster where the selected product or reference image is the star. Use a controlled studio/editorial layout, strong product lighting, a concise headline block, and elegant brand placement.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• TOP-LEFT: brand LOGO in a white rounded card with border shadow (4% from left, 4% from top, 14-20% of canvas width). Must be the uploaded logo reproduced exactly — large and clearly visible.\n'
+        + '• A horizontal accent line at 19% height spanning the left half.\n'
+        + '• LEFT TEXT COLUMN (6%-50% width, 24%-84% height): brand name label at top in small caps, then the HEADLINE in large bold text (largest element), then tagline in smaller muted text, then feature bullet dots if provided, then a rounded CTA button at bottom.\n'
+        + '• RIGHT HERO PANEL (55%-95% width, 14%-88% height): a large white rounded card with drop shadow containing the product/reference image centered with padding. The product image is the STAR.\n'
+        + 'Background: light brand-tinted surface with subtle gradient. The mood is clean, premium, product-focused.',
     },
     'knowledge-visual': {
       label: 'Knowledge-Led',
       direction:
-        'Create a technical, brochure-aware poster grounded in the selected brochure, datasheet, or reference visuals. Balance a credible product or evidence panel with a clean knowledge-led text column and restrained proof callouts.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Full dark brand-colored background with gradient.\n'
+        + '• TOP-LEFT (4% from left, 4% from top): brand LOGO in a clean rounded card (12-18% width). Must be the uploaded logo reproduced exactly.\n'
+        + '• LEFT IMAGE PANEL (4%-52% width, 14%-96% height): large rounded panel with white/light background containing the reference/product image.\n'
+        + '• RIGHT INFO PANEL (55%-96% width, 4%-96% height): rounded panel with brand accent tint and border. Contains: brand name label in small caps at top, HEADLINE in large bold text, tagline below, then 3 NUMBERED PROOF POINTS stacked vertically. Each proof point has a small colored numbered circle (1, 2, 3) on the left and text on the right. A CTA button at the bottom.\n'
+        + 'The mood is analytical, knowledge-led, enterprise-quality.',
     },
     'clean-brand': {
       label: 'Clean Brand',
       direction:
-        'Create a minimal, premium branded poster with disciplined whitespace, one clear hero visual, elegant typography, subtle brand accents, and no clutter. The feeling should be refined, current, and intentional.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• WHITE/LIGHT background with very subtle gradient.\n'
+        + '• TOP HEADER BAR (top 14%): brand LOGO in a rounded bordered card at left (12-18% of canvas width), clearly visible and prominent. Brand name text at right. Thin bottom border line.\n'
+        + '• LEFT TEXT COLUMN (6%-54% width, 18%-88% height): brand name label with accent bar at top, HEADLINE in large bold dark text (largest element), tagline in muted text below, feature bullet dots if provided (small accent-colored dots with text), then a rounded accent-colored CTA button.\n'
+        + '• RIGHT HERO PANEL (60%-96% width, 16%-88% height): rounded bordered card with light background containing the product/reference image.\n'
+        + '• FOOTER (bottom 10%): thin top border, footer text in muted color.\n'
+        + 'The mood is minimal, Apple-style clean, premium whitespace.',
     },
     'industrial-campaign': {
       label: 'Industrial Campaign',
       direction:
-        'Create a dramatic industrial campaign poster with a layered electrification or infrastructure backdrop, a strong product bay, a premium headline block, and clean proof bullets. The composition should feel like a real enterprise power-systems campaign, not a template mockup.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• TOP HEADER BAND (top 14%): dark brand-colored strip with subtle industrial accents (skewed bars). Brand LOGO in a white rounded box at LEFT (3%-22%). Decorative skewed accent bars between logo and right edge. Partner/secondary logos or "Industrial Campaign" label at RIGHT.\n'
+        + '• LEFT HERO BAY (3%-36% width, 18%-88% height): large rounded panel with subtle border and glow, containing the product/reference image.\n'
+        + '• RIGHT INFO PANEL (42%-96% width, 18%-88% height): dark semi-transparent panel with branded accent bar on left edge. Contains: HEADLINE at top in large bold white text, tagline in brand accent color below, a short accent-colored divider bar, then 4 PROOF BULLET CARDS stacked with equal spacing. Each card has a dark rounded background, an accent-colored checkmark icon on left, white text on right. All cards align to the same left edge.\n'
+        + '• FOOTER STRIP (bottom 8%): brand website on left, contact on right.\n'
+        + '• BACKGROUND: rich industrial atmosphere with brand-colored gradient, subtle energy arc lines, infrastructure depth.\n'
+        + 'The feel: premium electrification campaign, Siemens/ABB quality.',
     },
     'datasheet-frame': {
       label: 'Datasheet Frame',
       direction:
-        'Create a brochure-quality technical poster with modular information framing, disciplined product presentation, crisp hierarchy, and clear evidence-led structure. It should feel like a modern technical sell-sheet reimagined for LinkedIn.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Light/white background with subtle brand tint.\n'
+        + '• LEFT PRODUCT PANEL (4%-46% width, 4%-96% height): rounded panel with brand-colored dark background containing the product/reference image.\n'
+        + '• TOP-RIGHT INFO CARD (50%-96% width, 4%-28% height): white rounded card with border. Contains: brand LOGO (12-16% of canvas width) prominently at top-left corner of this card, clearly visible. Brand name beside it, HEADLINE in bold dark text below, tagline below that.\n'
+        + '• BOTTOM-RIGHT SPEC GRID (50%-96% width, 32%-96% height): 2x2 grid of white rounded cards with borders. Each card has a small numbered circle badge (1-4) and specification text below.\n'
+        + 'The mood is technical datasheet, brochure-quality, catalog precision.',
     },
     'proof-stack': {
       label: 'Proof Stack',
       direction:
-        'Create a trust-led poster with 2-3 refined proof or credibility cards, a clean supporting visual, and a confident information panel. The mood should be evidence-driven, premium, and enterprise-ready.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Light background with subtle brand tint.\n'
+        + '• LEFT PROOF COLUMN (4%-50% width, 4%-96% height): 3 stacked proof cards filling the height equally with gaps. Each card is a rounded bordered panel with brand accent tint. Contains: a numbered badge circle (1, 2, 3) on the left and proof point text on the right.\n'
+        + '• RIGHT INFO PANEL (52%-96% width, 4%-96% height): dark brand-colored rounded panel. Contains: brand LOGO prominently at top (12-18% of canvas width, clearly visible with breathing room), brand name label below it, HEADLINE in large bold white text, tagline in lighter text, then a CTA button at bottom.\n'
+        + 'The mood is evidence-driven, trustworthy, enterprise-ready.',
     },
     'launch-banner': {
       label: 'Launch Banner',
       direction:
-        'Create a launch-ready reveal poster with a dominant headline, bold brand energy, one hero subject, and a strong sense of motion and announcement. It should stop the scroll without looking like a cheap ad.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• VIBRANT brand-colored gradient background with energy (diagonal sweeps, radial glow).\n'
+        + '• TOP ROW: brand LOGO in a white rounded pill at left (4% from left, 5% from top, 14-20% of canvas width — large and clearly visible), brand name badge in accent color at right.\n'
+        + '• CENTER-LEFT (8% from left, 22% from top): HEADLINE in very large bold white text (the dominant element). Tagline in smaller white/muted text below.\n'
+        + '• Feature bullet dots below tagline if provided (small accent-colored dots with white text).\n'
+        + '• BOTTOM ROW (8% from bottom): brand name pill at left, white rounded CTA button at right.\n'
+        + 'The energy: launch announcement, conference keynote reveal, momentum.',
     },
     'sector-collage': {
       label: 'Sector Collage',
       direction:
-        'Create a multi-scene sector poster that clearly shows several served industries or application environments in one coherent campaign composition, with polished labels and a disciplined central headline.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• DARK brand-colored gradient background.\n'
+        + '• TOP HEADER BAND (top 16%): dark brand panel. Brand LOGO in a white rounded box at LEFT. HEADLINE in large bold white text at RIGHT side of header. Tagline in smaller text below headline.\n'
+        + '• THREE EQUAL IMAGE PANELS side by side (3% gap between, spanning 3%-97% width, 19%-74% height): each is a rounded panel showing a different product/application/sector image. If only one reference image is available, show it in the center panel and use related industry imagery for the other two.\n'
+        + '• THREE INFO CARDS at bottom (3%-97% width, 78%-94% height): each is a dark rounded card with a small numbered circle badge (1, 2, 3) at top center and a label/feature text below.\n'
+        + 'The mood is industry overview, trade show quality, multi-sector capability showcase.',
     },
     'brand-story': {
       label: 'Brand Story',
       direction:
-        'Create an editorial brand-narrative poster with a warm human or founder-led visual, refined typography, and premium story cues. It should feel like a magazine feature or high-end company story visual.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Light warm editorial background with subtle brand tint.\n'
+        + '• LEFT: large oval/rounded portrait or product image (centered at 24% width, 50% height, taking ~36% width) with shadow.\n'
+        + '• RIGHT COLUMN (52%-96% width, 10%-90% height): brand LOGO prominently at top (12-18% of canvas width, clearly visible), HEADLINE in large bold dark text, tagline in muted text, feature bullet dots if provided, then CTA button + accent line at bottom.\n'
+        + 'The mood is editorial, storytelling, magazine-feature quality.',
     },
     'offer-card': {
       label: 'Offer Card',
       direction:
-        'Create a crisp offer or service spotlight poster with a clear hero proposition, refined product or service visual, and premium supporting hierarchy. Avoid hard-sell ecommerce energy or generic CTA clutter.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Rich brand-colored gradient background.\n'
+        + '• LEFT INFO ZONE (4%-56% width, 4%-96% height): rounded panel with semi-transparent background. Contains: brand LOGO prominently at top (12-18% of canvas width, clearly visible with clean contrast), "Special Offer" badge in accent color, HEADLINE in large bold white text, tagline, feature bullet dots if provided, then white CTA button.\n'
+        + '• RIGHT HERO PANEL (58%-96% width, 4%-96% height): white/light rounded panel containing the product/reference image.\n'
+        + 'The mood is bold, product-spotlight, premium commercial.',
     },
     'comparison-board': {
       label: 'Comparison Board',
       direction:
-        'Create a structured comparison poster with two clearly separated lanes, disciplined typographic hierarchy, and immediate visual understanding of the contrast or before/after story.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• WHITE background with subtle gradient.\n'
+        + '• TOP ROW (4% from top): brand LOGO in a rounded card at left (12-16% of canvas width, clearly visible), HEADLINE in bold dark text next to it.\n'
+        + '• TWO EQUAL COLUMNS (4%-48% and 52%-96% width, 18%-92% height): LEFT column is a white rounded card with border containing "Operational Value" label, an image area, and 2 numbered bullet points. RIGHT column is a rounded card with accent-color tint and border containing "Protection & Control" label, an image area, and 2 numbered bullet points.\n'
+        + 'The mood is analytical, structured, comparison-focused.',
     },
     'premium-editorial': {
       label: 'Premium Editorial',
       direction:
-        'Create a magazine-quality premium poster with art-directed lighting, luxury-grade finishing, a strong editorial image area, and elegant text hierarchy. Every surface should feel intentional and expensive.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• DARK luxurious brand-colored background.\n'
+        + '• TOP-LEFT (3% from left, 3% from top): brand LOGO in an elegant negative-space lockup (12-18% width). Must be the uploaded logo reproduced exactly.\n'
+        + '• LEFT IMAGE PANEL (3%-33% width, 12%-97% height): rounded panel with the editorial/reference image.\n'
+        + '• RIGHT TEXT AREA (38%-96% width): accent line + "Editorial" label at top, HEADLINE in large bold white serif font, another accent line, tagline text below, feature bullets if provided, then at bottom: brand name on left, CTA button on right.\n'
+        + 'The mood is magazine-quality luxury, Rolex/Porsche editorial.',
     },
     'job-posting': {
       label: 'Job Posting',
       direction:
-        'Create a polished recruitment poster with a credible role title block, a clean employer-brand zone, a professional workplace visual, and concise requirement or opportunity highlights.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Brand-colored gradient background.\n'
+        + '• TOP HEADER BAR (top 12%): solid accent-colored bar with "WE\'RE HIRING" in bold white centered text. Brand LOGO prominently at top-left (12-18% of canvas width, clearly visible).\n'
+        + '• LEFT TEXT COLUMN (4%-52% width, 16%-84% height): rounded semi-transparent panel. HEADLINE (job title) in very large bold white text at top, tagline/description below, feature bullet dots with accent-colored dot markers, CTA button "Apply Now" at bottom.\n'
+        + '• RIGHT PHOTO PANEL (58%-96% width, 18%-84% height): rounded white/light panel for workplace/team photo.\n'
+        + '• FOOTER (bottom 6%): contact info centered in muted text.\n'
+        + 'The mood: professional recruitment, corporate careers page.',
     },
     'hiring-banner': {
       label: 'Hiring Banner',
       direction:
-        'Create a bold hiring poster with strong employer-brand energy, one dominant recruitment headline, a supportive workplace or team visual, and disciplined supporting text. Avoid gimmicky web-ad styling.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• VIBRANT brand gradient background (accent to support color sweep) with subtle radial glow.\n'
+        + '• Rounded border frame inset 3% from edges.\n'
+        + '• Brand LOGO at top-left (4%, 4%, 14-20% of canvas width — large and clearly visible with clean contrast).\n'
+        + '• "WE\'RE HIRING" pill badge centered near top (17% from top) with contrasting background.\n'
+        + '• HEADLINE centered at vertical middle (32%-50% from top): VERY LARGE bold white text, the dominant focal element.\n'
+        + '• Tagline centered below headline in smaller white text.\n'
+        + '• Feature tags as small pills below tagline if provided.\n'
+        + '• CTA button "View Openings" centered at 70% height.\n'
+        + '• FOOTER (bottom 7%): semi-transparent bar with contact info.\n'
+        + 'The energy: ambitious tech recruitment, scroll-stopping.',
     },
     'team-spotlight': {
       label: 'Team Spotlight',
       direction:
-        'Create a warm culture-led poster with a welcoming team or office visual, approachable typography, a clear employer-brand cue, and a balanced message about joining the team.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Dark brand-colored gradient background.\n'
+        + '• LEFT: large circular photo frame (centered at 24% width, 50% height) with ring border, containing team/workplace image.\n'
+        + '• RIGHT PANEL (48%-96% width, 4%-92% height): semi-transparent rounded panel. Brand LOGO prominently at top-left of panel (12-18% of canvas width, clearly visible), "JOIN OUR TEAM" label in accent color, HEADLINE in large bold white text, tagline below, then 2-3 feature value cards as small rounded dark pills, CTA button "Join Us" at bottom.\n'
+        + '• FOOTER (bottom 6%): contact info centered.\n'
+        + 'The mood: warm, team culture, employer brand.',
     },
     'career-growth': {
       label: 'Career Growth',
       direction:
-        'Create an aspirational career-opportunity poster with upward-looking composition, refined benefits framing, a credible workplace visual, and a modern employer-brand presence.',
+        'Create the COMPLETE poster with this EXACT layout structure:\n'
+        + '• Brand-colored gradient background (darker at bottom, lighter at top suggesting growth).\n'
+        + '• Brand LOGO at top-left (5%, 4%, 14-20% of canvas width — large and clearly visible with clean contrast).\n'
+        + '• "CAREER OPPORTUNITY" label in accent color at 13% from top.\n'
+        + '• LEFT TEXT AREA (5%-52% width): HEADLINE in large bold white text at 18% from top, tagline below at 34%.\n'
+        + '• LEFT BENEFIT CARDS (4%-52% width, 44%-80% height): 4 stacked rounded cards with semi-transparent background. Each has a numbered accent-colored circle (1-4) and benefit text.\n'
+        + '• RIGHT PHOTO PANEL (56%-96% width, 14%-86% height): rounded white panel for workplace photo.\n'
+        + '• CTA button "Explore Roles" at bottom-left.\n'
+        + '• Footer text at bottom-right.\n'
+        + 'The mood: aspirational career, upward growth, professional ambition.',
     },
   };
 
@@ -503,102 +628,218 @@ function buildAiThemePosterGuide(themeId: string) {
 }
 
 function buildAiThemeStructureGuide(themeId: string, hasStructuredBranding: boolean) {
-  if (!hasStructuredBranding) return '';
-
-  const shared = [
-    'STRUCTURAL BRAND LANES (MANDATORY):',
-    '- A finishing pass will lock the exact selected logo(s), partner marks, and footer/contact details into disciplined brand lanes after you render the main poster.',
-    '- Reserve those lanes by keeping them visually calm, high-contrast, and free of critical subject matter, dense props, or tiny text.',
-    '- Do not place the hero subject, product edges, headline block, or bullet stack where the locked brand/header/footer treatment must sit.',
-    '- Do not invent duplicate floating logos, duplicate footer strips, or alternate brand badges outside the reserved structure.',
-  ];
+  const shared = hasStructuredBranding
+    ? [
+        'STRUCTURAL BRAND LANES (MANDATORY):',
+        '- A structured composition pass will lock the exact selected logo(s), partner marks, and footer/contact details into disciplined brand lanes after you render the main poster.',
+        '- Reserve those lanes by keeping them visually calm, high-contrast, and free of critical subject matter, dense props, or tiny text.',
+        '- Do not place the hero subject, product edges, headline block, or bullet stack where the locked brand/header/footer treatment must sit.',
+        '- Do not invent duplicate floating logos, duplicate footer strips, or alternate brand badges outside the reserved structure.',
+      ]
+    : [
+        'THEME ZONE MAP (MANDATORY):',
+        '- The selected theme is a placement and portrayal brief for the AI-rendered final poster, not a later SVG overlay.',
+        '- Render the full poster yourself: AI-generated background scene, hero visual, headline hierarchy, proof bullets, footer details when they fit, and the exact supplied logo integrated into the design.',
+        '- Put the supplied logo in a crisp top brand/header lane with clean contrast and enough negative space for perfect readability.',
+        '- Make the logo feel native to a real design surface: a header fascia, glass strip, metal plate, printed brand band, negative-space lockup, or structural chrome element.',
+        '- If the theme implies a header band, footer strip, text panel, or proof card system, render those structures visibly with real tonal separation or surfaces so elements do not feel like they are floating.',
+        '- Keep the theme lanes real and disciplined: one clear hero area, one clear text-safe/message lane, and a calm footer edge when contact details are used.',
+        '- Do not turn the logo into a watermark, background texture, tiny corner artifact, pasted sticker, or random floating badge. It should feel intentionally designed into the poster.',
+      ];
 
   const themeSpecificMap: Record<string, string[]> = {
     'alliance-poster': [
       '- Reserve a disciplined top brand band in the top 14% of the canvas.',
+      '- Treat that brand band like a real integrated fascia with believable edge definition, not a floating white card strip.',
       '- Keep a left header lockup zone clear at roughly x 3%-24%, y 3%-12% for the primary brand mark.',
       '- Keep a central headline lane calm at roughly x 24%-74%, y 3%-15%. The main headline should live here, not lower in the frame.',
       '- Keep a right partner-header zone clear at roughly x 75%-97%, y 3%-12% for secondary logos and partner text.',
       '- Reserve a left hero bay at roughly x 4%-42%, y 20%-88% for the main product or reference visual.',
       '- Reserve a right proof lane at roughly x 50%-95%, y 24%-84% for the benefits stack.',
+      '- PROOF BULLETS in the right lane: stack them with a shared left edge at x ~52%. Use identical vertical gaps. Each bullet gets a consistent marker (filled circle or brand accent bar). Keep bullets to one line each.',
+      '- HEADLINE in the right lane: bold, commanding, 2-3x larger than bullet text. Place at top of the proof lane.',
+      '- Avoid generic frosted logo cards unless a restrained plated surface is absolutely required for contrast. Prefer integrated header modules and native lockups.',
       '- Keep the bottom 8% clean for a locked footer strip with website/email.',
     ],
     'industrial-campaign': [
       '- Reserve the top 14% for a disciplined brand/header treatment.',
+      '- Make that header treatment feel engineered: a built-in beam, panel, fascia, or plated strip with believable lighting, not a floating sticker zone.',
       '- Keep the primary brand zone calm at top-left and the partner/logo zone calm at top-right.',
       '- Reserve a strong left hero bay at roughly x 4%-36%, y 18%-88% for the product visual.',
       '- Reserve a right information panel at roughly x 43%-96%, y 18%-88% for the headline and proof bullets.',
+      '- HEADLINE: Place at the top of the right panel, bold 800+ weight, occupying 20-30% of the panel width. Must be the largest text element.',
+      '- PROOF BULLETS in the right panel: stack below the headline with identical spacing. All bullets share one left edge at x ~45%. Use consistent filled-circle or accent-bar markers. Keep each bullet to one clean line.',
+      '- Keep logos native to the header structure. No random corner stamps, no pasted sticker marks, and no default white logo cards unless absolutely necessary for legibility.',
       '- Keep the bottom 8%-9% calm and readable for the footer strip.',
     ],
     'clean-brand': [
       '- Reserve the top 14% for a restrained brand/header treatment and the bottom 10% for footer information.',
       '- Keep the left narrative column clean at roughly x 6%-55%, y 20%-78% for headline and supporting copy.',
+      '- HEADLINE: Place at the top of the left column with bold 800+ weight. It should be the largest, most commanding text element in the entire poster.',
+      '- TAGLINE: Place below headline at 50-60% of headline size, with 1-2 line-heights of space above.',
+      '- PROOF BULLETS: Stack below tagline in the left column. All bullets share one left edge at x ~8%. Identical vertical gaps between each. Use consistent markers. Keep each bullet to one line.',
       '- Keep the right hero zone clean at roughly x 60%-96%, y 18%-86% for the selected product or reference visual.',
     ],
+    'product-hero': [
+      '- Reserve the top 14% for a restrained brand/header treatment with the logo prominently placed.',
+      '- The product/reference image is the STAR — it should occupy 40-60% of the canvas as the commanding hero visual.',
+      '- HEADLINE: Place in a clean text-safe zone opposite or below the product. Bold 800+ weight, 3-4x larger than any supporting text. Must feel like a premium campaign headline.',
+      '- PROOF BULLETS: If included, stack them with consistent markers and identical spacing in the text lane. All share one left edge. Keep each bullet to one line.',
+      '- Keep the bottom 8% clean for footer details if needed.',
+    ],
     'knowledge-visual': [
-      '- Keep a top-left brand card zone clear and calm.',
-      '- Reserve the left evidence or reference lane at roughly x 4%-56% and the right knowledge lane at x 58%-96%.',
-      '- Leave a clean footer lane for locked website/email if provided.',
+      '- Full dark brand-colored background with gradient.',
+      '- LEFT IMAGE PANEL at roughly x 4%-52%, y 4%-96%: rounded panel with light background for the product/reference image.',
+      '- RIGHT INFO PANEL at roughly x 55%-96%, y 4%-96%: rounded panel with brand accent tint and border.',
+      '- Inside the right panel: brand name label in small caps at top, HEADLINE in bold text (largest element), tagline below.',
+      '- Below tagline: 3 NUMBERED PROOF POINTS stacked vertically. Each has a small colored numbered circle (1, 2, 3) on the left and text on the right. Consistent spacing between points.',
+      '- CTA button at the bottom of the right panel.',
+      '- Do not overlap the image panel with text elements.',
     ],
     'datasheet-frame': [
-      '- Keep the upper-left brand/logo zone clear and disciplined.',
-      '- Reserve the left product panel and right information grid with clean separation.',
-      '- Leave a clean footer shelf for locked contact details.',
+      '- Light/white background with subtle brand tint.',
+      '- LEFT PRODUCT PANEL at roughly x 4%-46%, y 4%-96%: rounded panel with dark brand-colored background for the product/reference image.',
+      '- TOP-RIGHT INFO CARD at roughly x 50%-96%, y 4%-28%: white rounded card with border. Contains logo + brand name at top-left, HEADLINE in bold dark text, tagline below.',
+      '- BOTTOM-RIGHT SPEC GRID at roughly x 50%-96%, y 32%-96%: 2x2 grid of 4 white rounded cards with borders. Each card has a small numbered circle badge (1-4) and specification text.',
+      '- Keep the grid cards evenly sized and consistently spaced.',
+      '- The overall feel is technical sell-sheet, datasheet catalog quality.',
     ],
     'proof-stack': [
-      '- Keep the upper brand lane calm for the primary logo or partner lockup.',
-      '- Reserve the left stacked-proof lane and right narrative panel without overlap.',
-      '- Keep the lower edge clean for footer/contact treatment.',
+      '- Light background with subtle brand tint.',
+      '- LEFT PROOF COLUMN at roughly x 4%-50%, y 4%-96%: 3 stacked proof cards filling the height equally with gaps between them. Each card is a rounded bordered panel with brand accent tint. Contains a numbered badge circle (1, 2, 3) on the left and proof point text on the right.',
+      '- RIGHT INFO PANEL at roughly x 52%-96%, y 4%-96%: dark brand-colored rounded panel. Contains logo at top, brand name label, HEADLINE in large bold white text, tagline in lighter text, CTA button at bottom.',
+      '- All 3 proof cards must be consistently sized and evenly spaced.',
+      '- Do not overlap the proof column with the info panel.',
     ],
     'launch-banner': [
-      '- Reserve corner brand zones at the top left/right and keep the lower edge clean for footer/contact details.',
-      '- Keep the dominant headline inside a clear central-left announcement lane, not under the brand lockups.',
+      '- Vibrant brand-colored gradient background with energy (diagonal sweeps, radial glow).',
+      '- TOP ROW: logo in a white rounded pill at left (x 4%, y 5%), brand name badge in accent color at right.',
+      '- CENTER-LEFT (x 8%, y 22%): HEADLINE in very large bold white text — the dominant focal element. Tagline in smaller white text below.',
+      '- Feature bullet dots below tagline if provided (accent-colored dots with white text).',
+      '- BOTTOM ROW (y ~92%): brand name pill at left, white rounded CTA button at right.',
+      '- Keep the headline in the center-left zone, not squeezed to corners.',
     ],
     'sector-collage': [
-      '- Reserve the top header band for the brand/header treatment and centered title.',
-      '- Keep the lower edge clean for a footer/contact strip.',
-      '- Do not let panel imagery or labels crowd those brand lanes.',
+      '- Dark brand-colored gradient background.',
+      '- TOP HEADER BAND (top 16%): dark brand panel. Logo in a white rounded box at LEFT. HEADLINE in large bold white text at RIGHT of header. Tagline in smaller text below headline.',
+      '- THREE EQUAL IMAGE PANELS side by side (x 3%-97%, y 19%-74%, ~3% gap between panels): each rounded panel shows a different product/application/sector image.',
+      '- THREE INFO CARDS at bottom (x 3%-97%, y 78%-94%): each is a dark rounded card with a small numbered circle badge (1, 2, 3) at top and label text below.',
+      '- The 3 image panels and 3 info cards must be EQUAL width and aligned to each other vertically.',
+      '- Do not let panel imagery bleed into the header or card zones.',
     ],
     'brand-story': [
-      '- Reserve a subtle brand zone at top-left or top-right and keep the bottom edge calm for footer details.',
-      '- Keep the portrait/story image and editorial text in separate, non-conflicting lanes.',
+      '- Light warm editorial background with subtle brand tint.',
+      '- LEFT: large oval or rounded portrait/product image centered at roughly x 24%, y 50%, taking ~36% width. Apply shadow.',
+      '- RIGHT COLUMN at roughly x 52%-96%, y 10%-90%: logo at top, HEADLINE in large bold dark text, tagline in muted text, feature bullet dots if provided, CTA button + accent line at bottom.',
+      '- Keep the portrait image and text column well-separated with breathing room.',
+      '- The mood is editorial, storytelling, magazine-feature quality.',
     ],
     'offer-card': [
-      '- Reserve a top brand zone and a bottom footer lane.',
-      '- Keep the left proposition lane and right hero lane distinct so locked brand/footer details remain legible.',
+      '- Rich brand-colored gradient background.',
+      '- LEFT INFO ZONE at roughly x 4%-56%, y 4%-96%: rounded panel with semi-transparent background. Contains logo at top, "Special Offer" badge in accent color, HEADLINE in large bold white text, tagline, feature bullet dots if provided, white CTA button at bottom.',
+      '- RIGHT HERO PANEL at roughly x 58%-96%, y 4%-96%: white/light rounded panel containing the product/reference image.',
+      '- Keep both zones clearly separated with disciplined edges.',
     ],
     'comparison-board': [
-      '- Reserve the top header strip for brand/title treatment and the bottom edge for footer details.',
-      '- Keep both comparison columns fully inside their lanes with breathing room away from those strips.',
+      '- White background with subtle gradient.',
+      '- TOP ROW (y 4%): logo in a small rounded card at left, HEADLINE in bold dark text next to it.',
+      '- TWO EQUAL COLUMNS: LEFT at x 4%-48%, y 18%-92% (white rounded card with border, "Operational Value" label, image area, 2 numbered bullet points). RIGHT at x 52%-96%, y 18%-92% (accent-tinted rounded card with border, "Protection & Control" label, image area, 2 numbered bullet points).',
+      '- Both columns must be exactly equal width, aligned at the same top and bottom edges.',
+      '- Keep the bottom edge clean for footer if needed.',
     ],
     'premium-editorial': [
-      '- Reserve a subtle brand lockup zone and a slim footer lane.',
-      '- Keep the editorial headline clear of those reserved strips and avoid crowding the luxury image area.',
+      '- Dark luxurious brand-colored background.',
+      '- LEFT IMAGE PANEL at roughly x 3%-33%, y 3%-97%: rounded panel with the editorial/reference image.',
+      '- RIGHT TEXT AREA at roughly x 38%-96%: accent line + "Editorial" label at top, HEADLINE in large bold white serif font, another accent line, tagline text below, feature bullets if provided. At bottom: brand name on left, CTA button on right.',
+      '- Keep the image panel and text area clearly separated with luxury-grade spacing.',
+      '- The mood is magazine-quality luxury, aspirational editorial.',
     ],
     'job-posting': [
-      '- Reserve the top employer-brand band and the bottom footer lane.',
-      '- Keep the role title and requirements inside the left text lane, and keep the right photo lane uncluttered.',
+      '- Reserve the top 14% for an employer-brand header band with logo at left and hiring badge or label at right.',
+      '- Keep the left text lane at roughly x 5%-52%, y 20%-78% for the role title, description, and requirement bullets.',
+      '- ROLE TITLE HEADLINE: Bold 800+ weight, occupying the top of the left lane. Must be the largest text element — 3x bigger than bullet text.',
+      '- REQUIREMENT BULLETS: Stack them below the role description with identical vertical gaps. All share one clean left edge at x ~7%. Use consistent filled-circle markers. Keep each to one line — 2-3 bullets maximum, not more.',
+      '- Keep the right photo lane at roughly x 58%-96%, y 18%-78% clear for a workplace or team photo.',
+      '- Place the CTA button at bottom-left near roughly x 5%-30%, y 82%-90%, with ample breathing room.',
+      '- Keep the bottom 8% clean for a footer strip with contact details.',
     ],
     'hiring-banner': [
-      '- Reserve the top header/logo band and a clean lower footer/contact lane.',
-      '- Keep the main recruitment headline centered between those strips with generous breathing room.',
+      '- Reserve the top-left zone for the brand logo at roughly x 4%-20%, y 4%-12%. Logo must be clear and prominent.',
+      '- Place the hiring badge/pill centered at top near y 12%-18%.',
+      '- HEADLINE: Keep the main headline centered in the vertical middle near y 35%-50% with generous left/right padding (8% each side). Bold 800-900 weight, the largest text in the poster by far — commanding and scroll-stopping.',
+      '- TAGLINE: Place directly below the headline near y 52%-58% at 50-60% of headline size.',
+      '- Place the CTA button centered near y 65%-75%.',
+      '- Keep the bottom 8% clean for a footer/contact lane.',
+      '- The border frame or brand accent should have at least 3% padding from the canvas edge.',
     ],
     'team-spotlight': [
-      '- Reserve a top brand zone and bottom footer lane.',
-      '- Keep the team visual and message lane separate so the locked branding does not overlap faces or copy.',
+      '- Reserve a top brand zone at top-left for the employer logo.',
+      '- Place the circular team photo on the LEFT centered at roughly x 24%, y 50% with ~18% radius.',
+      '- Keep the right text panel at roughly x 48%-96%, y 20%-80% for the JOIN OUR TEAM label, headline, tagline, and value cards.',
+      '- Place the CTA button in the right panel near y 82%-90%.',
+      '- Keep the bottom 8% clean for a footer lane.',
+      '- Do not overlap the circular photo with text or branding elements.',
     ],
     'career-growth': [
-      '- Reserve the top brand/opportunity label lane and bottom footer lane.',
-      '- Keep benefit cards, role headline, and workplace image inside their own lanes with clean separation.',
+      '- Reserve the top lane for a CAREER OPPORTUNITY label and brand logo.',
+      '- Keep the left column at roughly x 5%-52%, y 18%-88% for the headline, tagline, and numbered benefit cards.',
+      '- Keep the right image panel at roughly x 56%-96%, y 14%-86% for the workplace photo.',
+      '- Place the CTA button at bottom-left near y 84%-92%.',
+      '- Keep the bottom 8% clean for a footer strip with contact details.',
+      '- Number circles for benefit cards should be compact and consistently sized.',
     ],
   };
 
   const themeSpecific = themeSpecificMap[themeId] || [
-    '- Reserve a calm top brand lane and a clean bottom footer lane.',
+    '- Reserve a calm top brand lane (top 14%) for the logo and header treatment, and a clean bottom footer lane (bottom 8%).',
     '- Keep the main hero subject and the headline/proof copy inside their intended zones with breathing room away from those reserved strips.',
+    '- HEADLINE: Bold 800+ weight, the largest text element in the poster. Place it prominently with clean contrast behind it.',
+    '- PROOF BULLETS: If used, stack them with identical vertical spacing, consistent markers (filled circles or brand accent bars), and one shared left edge. Keep each to one line.',
+    '- All text must share one clean left alignment edge per column. No scattered or randomly staggered text.',
   ];
 
   return [...shared, ...themeSpecific].join('\n');
+}
+
+function buildAiReadabilityGuide(
+  imageAspect: 'landscape' | 'square' | 'portrait'
+) {
+  const aspectSpecific =
+    imageAspect === 'portrait'
+      ? [
+          '- Portrait: headline max 2-3 lines, tagline max 2 short lines, proof bullets max 3, footer max 1 short line.',
+          '- Portrait: keep the top brand/header lane clear, keep the text in one strong column, and avoid crowding the lower third.',
+          '- Portrait: if proof bullets would wrap awkwardly, rewrite them as very short proof tags or compact chips rather than forcing long wrapped lines.',
+        ]
+      : imageAspect === 'square'
+        ? [
+            '- Square: headline max 2-3 lines, tagline max 2 short lines, proof bullets max 3, footer max 1 short line.',
+            '- Square: keep generous padding on all sides and do not scatter text into multiple unrelated corners.',
+            '- Square: if proof bullets would wrap awkwardly, rewrite them as very short proof tags or compact chips rather than forcing long wrapped lines.',
+          ]
+        : [
+            '- Landscape: headline max 3 lines, tagline max 1-2 short lines, proof bullets max 3-4 short lines only if spacing stays premium, footer max 1 short line.',
+            '- Landscape: keep the hero lane and the text lane clearly separated so the reading column stays calm and highly legible.',
+        ];
+
+  const shared = [
+    'LAYOUT / READABILITY GUARDRAILS (MANDATORY):',
+    '- Use one headline block only. Do not duplicate, echo, or repeat the headline elsewhere in the poster.',
+    '- Keep the logo/header, headline block, tagline, proof bullets, hero subject, and footer in distinct lanes with visible breathing room between them.',
+    '- ALIGNMENT GRID: Imagine an invisible vertical grid with one strong left margin line. The headline left edge, tagline left edge, and ALL bullet left edges MUST align to this same vertical line. Do not indent, offset, or stagger them inconsistently.',
+    '- BULLET RENDERING: Stack bullets vertically with IDENTICAL spacing. Every bullet gets the same marker (filled circle or accent bar) at the same X position. Result must look professionally typeset.',
+    '- SPACING RHYTHM: Consistent gaps throughout — same gap between headline/tagline, tagline/first bullet, and between each bullet.',
+    '- Avoid awkward text wrapping with one stranded word on its own line. Shorten the line instead.',
+    '- If the copy feels crowded, shorten, simplify, or omit lower-priority text before reducing font size. ALWAYS prefer fewer, larger, cleaner lines over cramming more text in.',
+    '- Footer/contact details are lowest priority. Drop them first if space is tight.',
+    '- If a footer/contact line is included, anchor it in a calm bottom lane near the lower edge. Never let it float in the middle of the poster.',
+    '- Rewrite proof bullets for fit when necessary, preserving meaning but keeping each bullet to one clean line. No bullet should wrap to a second line.',
+    '- MAXIMUM TEXT DENSITY: Never show more than 4 proof bullets. If more exist, select only the 2-3 strongest. White space is more premium than extra text.',
+    '- Never let text touch the canvas edge, overlap the logo, overlap the hero subject, or run into the footer zone. Maintain at least 5% canvas padding on all sides.',
+    '- Always keep a clear calm surface behind text so contrast remains strong at LinkedIn feed size.',
+  ];
+
+  return [...shared, ...aspectSpecific].join('\n');
 }
 
 function buildStructuredBrandContentGuide(options: {
@@ -653,11 +894,13 @@ function buildStructuredBrandContentGuide(options: {
   const themeSpecificMap: Record<string, string[]> = {
     'alliance-poster': [
       '- For Alliance Poster: place the primary logo on the left side of the top brand band, the main headline in the center of that band, the partner lockup on the right, the hero product on the left body zone, and proof bullets on the right body zone.',
+      '- Treat the top brand band as a real co-branded structural fascia with integrated lockups. Do not let either logo feel pasted on top of a generic panel.',
       '- Do not move the main headline into a competing oversized body block if the top band structure is active.',
       '- The body should support the headline band, not fight it.',
     ],
     'industrial-campaign': [
       '- For Industrial Campaign: keep a disciplined top brand/header band with the primary logo left, partner/header details right, and the selected headline treated as the dominant campaign message.',
+      '- The brand lockup should feel engineered into the header surface itself: metal plate, glass strip, beam, or native negative-space lockup rather than a sticker or floating badge.',
       '- Use the left body as the prestige product bay and the right body as the proof/message lane.',
     ],
     'clean-brand': [
@@ -700,9 +943,18 @@ function buildStructuredBrandContentGuide(options: {
   return [...lines, ...themeSpecific].join('\n');
 }
 
-function buildVariationDirective(nonce: number, themeId: string) {
-  // Variations can shift atmosphere, composition emphasis, and supporting scene detail,
-  // while still staying recognizable to the chosen theme family.
+function buildVariationDirective(
+  nonce: number,
+  themeId: string,
+  context?: {
+    brandName?: string;
+    headline?: string;
+    industry?: string;
+    postExcerpt?: string;
+  }
+) {
+  // Variations shift atmosphere, composition emphasis, and supporting scene detail,
+  // while staying recognizable to the chosen theme family.
   const themedRecipes: Record<string, string[]> = {
     'alliance-poster': [
       'Variation: industrial switchgear hall — rows of electrical panels, brand-colored indicator lights, dramatic ceiling-mounted floods casting hard shadows. Deep brand-dark atmosphere.',
@@ -793,8 +1045,36 @@ function buildVariationDirective(nonce: number, themeId: string) {
 
   const recipes = themedRecipes[themeId] || themedRecipes.default;
 
-  const recipe = recipes[Math.abs(nonce) % recipes.length];
-  return `Variation directive (attempt ${nonce}): ${recipe} IMPORTANT: Keep the chosen theme family recognizable, but adapt the framing, atmosphere, supporting structure, and text-safe balance as needed to create the strongest final poster.`;
+  // Hash context so the same nonce produces different recipes for different posts/brands
+  const contextSeed = [
+    context?.brandName || '',
+    context?.headline || '',
+    context?.postExcerpt?.slice(0, 50) || '',
+  ].join('|');
+  let contextHash = 0;
+  for (let i = 0; i < contextSeed.length; i++) {
+    contextHash = ((contextHash << 5) - contextHash + contextSeed.charCodeAt(i)) | 0;
+  }
+  const recipeIndex = Math.abs(nonce + contextHash) % recipes.length;
+  const recipe = recipes[recipeIndex];
+
+  // Dynamic scene personality ensures every generation feels unique to the brand/post
+  const dynamicParts: string[] = [];
+  if (context?.industry) {
+    dynamicParts.push(`Infuse ${context.industry}-sector visual DNA into materials, fixtures, and environmental details`);
+  }
+  if (context?.brandName) {
+    dynamicParts.push(`This poster is uniquely for "${context.brandName}" — the atmosphere should feel ownable to this brand, not generic`);
+  }
+  if (context?.headline) {
+    const headlineEssence = context.headline.split(/\s+/).slice(0, 6).join(' ');
+    dynamicParts.push(`Visual energy should reinforce: "${headlineEssence}"`);
+  }
+  const dynamicClause = dynamicParts.length
+    ? ` SCENE PERSONALITY: ${dynamicParts.join('. ')}.`
+    : '';
+
+  return `Variation directive (attempt ${nonce}): ${recipe}${dynamicClause} IMPORTANT: Keep the chosen theme family recognizable, but adapt the framing, atmosphere, supporting structure, and text-safe balance as needed to create the strongest final poster.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1005,7 +1285,11 @@ export async function POST(request: Request) {
     const customPrompt = (body.customPrompt?.trim() || '').slice(0, MAX_PROMPT_LENGTH);
     const postText = (body.postText?.trim() || '').slice(0, 5000);
     const postImagePrompt = (body.postImagePrompt?.trim() || '').slice(0, MAX_PROMPT_LENGTH);
-    const logoPlacement = (['overlay', 'infuse', 'none'].includes(body.logoPlacement || '') ? body.logoPlacement : 'overlay') as 'overlay' | 'infuse' | 'none';
+    const logoPlacement = (
+      ['overlay', 'infuse', 'none'].includes(body.logoPlacement || '')
+        ? body.logoPlacement
+        : getPreferredLogoPlacement(themeId)
+    ) as 'overlay' | 'infuse' | 'none';
     const additionalLogoUrls = Array.isArray(body.additionalLogoUrls)
       ? body.additionalLogoUrls.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
       : [];
@@ -1026,6 +1310,12 @@ export async function POST(request: Request) {
       ? Math.max(1, Math.floor(body.generationNonce as number))
       : 1;
     const referenceImageUrl = body.referenceImageUrl?.trim() || '';
+    const additionalReferenceUrls = Array.isArray(body.additionalReferenceUrls)
+      ? body.additionalReferenceUrls
+          .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+          .map((v) => v.trim())
+          .slice(0, 5)
+      : [];
     const rawSlotImages = body.slotImages && typeof body.slotImages === 'object' && !Array.isArray(body.slotImages)
       ? body.slotImages as Record<string, string>
       : {};
@@ -1181,7 +1471,12 @@ export async function POST(request: Request) {
     const isAlliancePoster = themeId === 'alliance-poster';
     const isAiGuided = themeId === 'guided-auto';
     const hasThemeComposition = Boolean(THEME_SCHEMAS[themeId]);
-    const shouldUseLegacyThemeComposer = process.env.LEGACY_THEME_COMPOSER === '1';
+    // AI owns ALL poster composition — no SVG overlays, no theme composers.
+    // The AI integrates logos, headers, text, bullets, and footers directly
+    // via the edit endpoint and per-theme prompt directives.
+    const forceSvgThemeComposer = false;
+    const shouldUseAllianceComposer = false;
+    const shouldUseStructuredThemeComposer = false;
     const effectiveBrandColors = requestedBrandColors.length
       ? requestedBrandColors
       : analyzedBrandColors;
@@ -1229,19 +1524,15 @@ export async function POST(request: Request) {
       .slice(0, 6);
     const composedFooterWebsite = sanitizeDisplayText(posterFooterWebsite, 72);
     const composedFooterEmail = sanitizeDisplayText(posterFooterEmail, 72);
-    // ── Overlay strategy ──────────────────────────────────────────────────
-    // Determine which post-processing layers will composite text/logos/panels
-    // on top of the AI base image. This drives the prompt: when overlays run,
-    // the AI must generate a background plate only — no text, no logos.
-    const hasBrandOverlayContent =
-      (hasLogo && effectiveLogoPlacement !== 'none') ||
-      additionalLogoUrls.length > 0 ||
-      Boolean(composedFooterWebsite || composedFooterEmail || partnerName || partnerTagline);
-    const willApplyThemeOverlay = shouldUseLegacyThemeComposer && (hasThemeComposition || isAlliancePoster);
-    const willApplyBrandFinisher = !shouldUseLegacyThemeComposer && hasBrandOverlayContent && (hasThemeComposition || isAlliancePoster);
-    // AI owns the full poster only when NO overlay composites text/logos/panels on top
-    const aiOwnsFullPoster = isAiGuided || (!willApplyThemeOverlay && !willApplyBrandFinisher);
-    const hasStructuredBrandSelections = willApplyBrandFinisher;
+    // ── Theme render strategy ─────────────────────────────────────────────
+    // Default behavior is AI-first: the selected theme drives composition,
+    // placement, and portrayal, but the model renders the finished poster
+    // directly. SVG theme composers remain available only as an explicit
+    // fallback via env for debugging or emergency recovery.
+    const willApplyThemeOverlay =
+      shouldUseAllianceComposer || shouldUseStructuredThemeComposer;
+    const aiOwnsFullPoster = isAiGuided || !willApplyThemeOverlay;
+    const hasStructuredBrandSelections = willApplyThemeOverlay;
 
     // Determine render size from aspect ratio
     const sizeMap: Record<string, string> = {
@@ -1249,15 +1540,19 @@ export async function POST(request: Request) {
       square: '1024x1024',
       portrait: '1024x1536',
     };
+    // Output dimensions MUST match the AI render aspect ratio to prevent
+    // destructive cropping that cuts off logos, headers, and footers.
+    // AI renders at 1536x1024 (1.5:1), 1024x1024 (1:1), 1024x1536 (1:1.5).
+    // We resize down proportionally, never crop.
     const outputSizeMap: Record<'landscape' | 'square' | 'portrait', { width: number; height: number }> = {
-      landscape: { width: 1200, height: 628 },
-      square: { width: 1080, height: 1080 },
-      portrait: { width: 1080, height: 1350 },
+      landscape: { width: 1536, height: 1024 },
+      square: { width: 1024, height: 1024 },
+      portrait: { width: 1024, height: 1536 },
     };
     const dimensionMap: Record<string, string> = {
-      landscape: '1200x628 landscape feed',
-      square: '1080x1080 square',
-      portrait: '1080x1350 portrait',
+      landscape: '1536x1024 landscape (3:2 ratio)',
+      square: '1024x1024 square (1:1 ratio)',
+      portrait: '1024x1536 portrait (2:3 ratio)',
     };
 
     const toneMap: Record<string, string> = {
@@ -1281,17 +1576,17 @@ export async function POST(request: Request) {
 
     const styleMap: Record<string, string> = {
       'text-overlay':
-        'Design a striking hero composition where 30-40% of the canvas has clean negative space or a subtle gradient zone specifically reserved for text overlays. The remaining area should have a vivid, in-focus visual scene. Think conference keynote slide meets editorial magazine cover — the text zone should feel intentional, not empty.',
+        'Design a striking hero composition where 30-40% of the canvas has clean negative space or a subtle gradient zone specifically reserved for text overlays. The remaining area should have a vivid, in-focus visual scene with real environmental depth — concrete surfaces, glass, metal, or architectural elements that catch light. Use a 35mm–50mm equivalent focal length with shallow-to-medium depth of field. Light the scene with a strong directional key from camera-left at 45°, a soft fill from opposite, and a rim/edge light to separate the subject from the background. Think conference keynote slide meets editorial magazine cover — the text zone should feel intentional, not empty.',
       'photo-blend':
-        'Create a photorealistic, editorial-quality scene shot at eye level or slightly elevated angle. The subject must be tack-sharp with visible textures (fabric weave, metal brushing, screen pixels). Include a natural text-safe zone created by depth of field, a wall, sky, or surface — not by artificial blur. Think Bloomberg Businessweek or Fast Company photography.',
+        'Create a photorealistic, editorial-quality scene shot on a 50mm–85mm lens at f/2.8–f/4. The primary subject must be tack-sharp with visible micro-textures: metal grain, fabric weave, screen anti-glare, wood pore, concrete aggregate. Use a three-point lighting rig — warm key light from 30–45° camera-left, cool fill from opposite, and a strong hair/rim light to carve the subject from the background. Include a natural text-safe zone created by real environmental depth: a receding corridor, a wall plane, an overhead sky, or a surface — never by artificial Gaussian blur. Background elements should be identifiable at 25–40% defocus, not reduced to meaningless color blobs. Think Bloomberg Businessweek or Condé Nast Traveller cover photography — crisp subject, rich environment, premium atmosphere.',
       'abstract-brand':
-        'Create a bold abstract composition using geometric shapes, flowing gradients, and brand-colored elements as the hero visual. Sharp edges, clean intersections, and intentional negative space for text. Think Stripe or Linear marketing visuals — abstract but structured, modern, and brand-native.',
+        'Create a bold abstract composition using geometric shapes, flowing gradients, and brand-colored elements as the hero visual. Sharp edges, clean intersections, and intentional negative space for text. Use layered depth through overlapping translucent planes, glass-morphism, or 3D-extruded shapes with realistic lighting casting soft shadows. Think Stripe or Linear marketing visuals — abstract but structured, modern, and brand-native. Every surface should catch light believably.',
       'split-layout':
-        'Sharp 60/40 or 50/50 split composition: one zone contains a realistic, detailed scene with a clear subject and environment; the other zone is a clean, solid or subtly textured panel reserved for text. The split line should be clean (vertical, diagonal, or curved) and feel designed. No abstract blur wash on either side.',
+        'Sharp 60/40 or 50/50 split composition: one zone contains a realistic, detailed scene shot on a 35mm–50mm lens with identifiable environmental context, real textures, and directional lighting; the other zone is a clean, solid or subtly textured panel reserved for text with a premium material feel — not flat dead color but a surface with subtle grain, linen, concrete, or brushed-metal texture. The split line should be clean (vertical, diagonal, or curved) and feel designed with a subtle shadow or light edge. No abstract blur wash on either side.',
       infographic:
-        'Create a modular, structured layout with distinct visual blocks: a hero data visualization area, icon-driven info panels, and one prominent text-safe card zone. Use crisp flat icons, clean divider lines, and high contrast between sections. Think annual report infographic meets modern dashboard design.',
+        'Create a modular, structured layout with distinct visual blocks: a hero data visualization area, icon-driven info panels, and one prominent text-safe card zone. Use crisp flat icons, clean divider lines, and high contrast between sections. Add premium depth through card elevations with realistic drop shadows, subtle glass-morphism panels, and material-design layering. Think annual report infographic meets modern dashboard design — every panel has a real surface, never a flat dead fill.',
       cinematic:
-        'Dramatic, widescreen cinematic composition with intentional lighting: strong key light creating defined shadows and highlights. Shallow depth of field with the hero subject razor-sharp. Atmospheric elements (subtle haze, volumetric light rays, bokeh) add mood without obscuring detail. Think movie poster or Netflix thumbnail — one frame tells the whole story.',
+        'Dramatic, widescreen cinematic composition shot on a 35mm anamorphic lens. Use intentional three-point lighting: a hard key light creating defined shadow edges and specular highlights, a soft fill maintaining shadow detail, and a strong backlight or rim light creating subject separation and atmosphere. Depth of field should be shallow with the hero subject razor-sharp and the background at 30-50% defocus — identifiable environment, not blur noise. Atmospheric elements (subtle haze, volumetric god-rays, practical light sources) add mood without obscuring detail. Think Denis Villeneuve cinematography or premium Netflix key art — one frame tells the whole story with cinematic color grading.',
     };
 
     const styleDirection = styleMap[style] || styleMap['text-overlay'];
@@ -1304,24 +1599,42 @@ export async function POST(request: Request) {
     const safeHeadline = sanitizePromptText(displayHeadline, MAX_SHORT_TEXT);
     const safeTagline = sanitizePromptText(displayTagline, MAX_SHORT_TEXT);
     const brandNamingDirective = safeBrandName
-      ? [
-          `BRAND NAMING RULES:`,
-          `- Ensure the brand name is visibly present somewhere in the final composition, either through the main headline, brand label, product branding, or the supplied logo.`,
-          `- If any visible text, label, badge, product marking, signage, or title appears in the image, use the exact brand name "${safeBrandName}".`,
-          safeProductName
-            ? `- If the product name appears in visible text or on the product itself, use the exact product name "${safeProductName}".`
-            : null,
-          safeHeadline
-            ? `- For layouts with text, the primary visible headline should follow this exact wording: "${safeHeadline}".`
-            : null,
-          safeTagline
-            ? `- Use this supporting line only when it remains large and readable: "${safeTagline}".`
-            : null,
-          `- Never invent alternate company names, sub-brands, or fake UI/product labels.`,
-          `- Never change spelling, punctuation, or capitalization of the brand or product names.`,
-        ]
-          .filter(Boolean)
-          .join('\n')
+      ? hasLogo && effectiveLogoPlacement !== 'none'
+        ? [
+            `BRAND NAMING RULES:`,
+            `- The brand "${safeBrandName}" is represented by the uploaded LOGO IMAGE — do NOT write the brand name as separate text. The logo IS the brand mark.`,
+            `- Do NOT render "${safeBrandName}" as standalone text, a text label, a text badge, or any typographic element. The uploaded logo.png already contains the brand identity.`,
+            `- If the brand name must appear in the headline, that is fine, but do NOT add extra brand-name text labels, watermarks, or text badges anywhere else.`,
+            safeProductName
+              ? `- If the product name appears in visible text or on the product itself, use the exact product name "${safeProductName}".`
+              : null,
+            safeHeadline
+              ? `- For layouts with text, the primary visible headline should follow this exact wording: "${safeHeadline}".`
+              : null,
+            safeTagline
+              ? `- Use this supporting line only when it remains large and readable: "${safeTagline}".`
+              : null,
+            `- Never invent alternate company names, sub-brands, or fake UI/product labels.`,
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : [
+            `BRAND NAMING RULES:`,
+            `- If any visible text, label, badge, product marking, signage, or title appears in the image, use the exact brand name "${safeBrandName}".`,
+            safeProductName
+              ? `- If the product name appears in visible text or on the product itself, use the exact product name "${safeProductName}".`
+              : null,
+            safeHeadline
+              ? `- For layouts with text, the primary visible headline should follow this exact wording: "${safeHeadline}".`
+              : null,
+            safeTagline
+              ? `- Use this supporting line only when it remains large and readable: "${safeTagline}".`
+              : null,
+            `- Never invent alternate company names, sub-brands, or fake UI/product labels.`,
+            `- Never change spelling, punctuation, or capitalization of the brand or product names.`,
+          ]
+            .filter(Boolean)
+            .join('\n')
       : '';
 
     const postImageAnchor = safePostImagePrompt.replace(/\s+/g, ' ').trim().slice(0, 220);
@@ -1382,17 +1695,25 @@ export async function POST(request: Request) {
       );
     }
 
+    // Always use our detailed poster guide with exact layout coordinates —
+    // the Voxa themeGuide only has vague descriptions that cause the AI to
+    // ignore the preview structure. Voxa's positivePrompt still contributes
+    // supplementary quality/tone guidance in its own block.
     const selectedTheme =
-      voxaPromptPackage.themeGuide ||
-      (aiOwnsFullPoster ? buildAiThemePosterGuide(themeId) : buildThemeDirective(themeId));
-    const variationDirective = buildVariationDirective(generationNonce, themeId);
+      aiOwnsFullPoster ? buildAiThemePosterGuide(themeId) : buildThemeDirective(themeId);
+    const variationDirective = buildVariationDirective(generationNonce, themeId, {
+      brandName: safeBrandName || undefined,
+      headline: safeHeadline || undefined,
+      industry: brandRow?.industry?.trim() || marketingDnaContext?.businessFocus || undefined,
+      postExcerpt: postText.replace(/\s+/g, ' ').trim().slice(0, 100) || undefined,
+    });
     const variationSalt = `${generationNonce}-${Date.now().toString(36).slice(-6)}`;
     const themeSlotGuidance = hasThemeComposition ? buildThemeSlotGuidance(themeId) : '';
     const aiStructureGuide = aiOwnsFullPoster
       ? buildAiThemeStructureGuide(themeId, hasStructuredBrandSelections)
       : '';
     const structuredBrandContentGuide =
-      aiOwnsFullPoster && hasStructuredBrandSelections
+      aiOwnsFullPoster && (hasThemeComposition || isAlliancePoster)
         ? buildStructuredBrandContentGuide({
             themeId,
             brandName: safeBrandName,
@@ -1420,309 +1741,139 @@ export async function POST(request: Request) {
     const voxaQualityGate = voxaPromptPackage.supported ? voxaPromptPackage.qualityGate : '';
 
     const imagePrompt = `
-You are an elite creative director and visual designer who has art-directed campaigns for Fortune 500 brands. You specialize in LinkedIn visual content that stops the scroll and drives engagement.
-
-Your mission: create a visually stunning, magazine-quality image that makes the viewer pause, feel something, and engage with the post.
+You are an elite creative director. Create a magazine-quality LinkedIn poster.
 
 CANVAS: ${dimensionMap[imageAspect] || dimensionMap.landscape} format.
 
-CREATIVE MODE:
-- Theme: ${selectedTheme.label}
-- Theme direction: ${selectedTheme.direction}
+═══════════════════════════════════════════════════
+THEME LAYOUT (FOLLOW THIS EXACTLY):
+═══════════════════════════════════════════════════
+Theme: ${selectedTheme.label}
+${selectedTheme.direction}
 
-THEME FIDELITY — CRITICAL (THIS OVERRIDES ALL OTHER COMPOSITION RULES):
-${aiOwnsFullPoster ? `- The selected theme is a COMPOSITION BRIEF for the final poster, not a later overlay.
-- You are responsible for the COMPLETE final poster: background, atmosphere, hero image treatment, headline, tagline, proof bullets, labels, and overall hierarchy.${hasStructuredBrandSelections ? ' Exact selected logos, partner marks, and footer/contact details may be finalized in a finishing pass, so compose around those reserved brand lanes.' : ' Include final logo integration directly in the composition when it is selected.'}
-- Use the theme's spirit and zone map as guidance for where content belongs, but make the result feel bespoke, premium, and art-directed rather than rigid or boxed in.
-- The finished image must already look LinkedIn-ready with no extra design pass required.
-- Selected visuals, logos, and proof lines are real content inputs. They must visibly shape the final poster instead of being ignored or reduced to background texture.
-- Keep every element inside disciplined safe margins with clean spacing. No footer collisions, no bullet overflow, no cramped typography, no fake template feel.
-- If the theme uses a top header band or locked brand/footer lanes, compose around them on purpose. Do not put a second giant competing headline or stray logo system elsewhere in the frame.
-- This is a LinkedIn campaign/editorial poster, not an ecommerce banner. Avoid retail "shop now" aesthetics, coupon energy, and cheap CTA-button styling unless the chosen hiring theme genuinely needs a restrained recruitment action cue.
-- Build depth, lighting, and atmosphere that feel expensive and custom-made. Avoid flat dead gradients, empty color washes, or generic blurred nothingness.` : `- Your image will be placed INSIDE the theme layout as the hero visual content.
-- A structured SVG overlay will be composited on top, adding panels, text, logos, chips, labels, and layout around your image.
-- Generate a STRONG, FOCUSED visual subject — the product, scene, environment, or concept that tells the story.
-- Do NOT render any text, headlines, taglines, brand names, logos, chips, labels, UI panels, cards, or structural layout elements — the overlay adds all of those.
-- Do NOT improvise your own layout, poster system, or text hierarchy — focus entirely on the visual content.
-- Fill the frame with rich, detailed visual content — this image will be cropped into the theme's hero slot.
-- Use brand colors in the scene (lighting, surfaces, materials, environment) so the AI content harmonizes with the theme overlay colors.
-- This is a LinkedIn post visual system, not an ecommerce ad or landing-page banner. Avoid retail "shop now" aesthetics, coupon energy, or hard-sell web ad styling.
-${hasThemeComposition || isAlliancePoster ? `
-- Treat the selected theme as an ART DIRECTION SYSTEM, not a generic template. The background plate should feel custom-built for that theme's structure.
-- Create premium atmosphere, depth, and lighting that makes the final composed poster feel intentional, not like a stock image with a template dropped on top.
-- Preserve a clear relationship between the likely hero zone and the likely text-safe zone: one side may carry richer environmental detail, while the text side stays calmer, deeper, and easier to read over.
-- Avoid flat dead gradients, empty color washes, or generic blurred nothingness. The plate must have richness, texture, and believable visual storytelling.
-` : ''}
+${aiStructureGuide ? `${aiStructureGuide}\n` : ''}
+═══════════════════════════════════════════════════
+YOU ARE RENDERING THE COMPLETE FINAL POSTER:
+- Background, atmosphere, hero image, headline, tagline, proof bullets, logos, footer — ALL rendered by you.
+- Follow the theme layout coordinates above precisely. The preview the user sees matches those coordinates.
+- The finished image must look LinkedIn-ready with no extra design pass.
+═══════════════════════════════════════════════════
 
-=== SVG OVERLAY AWARENESS (READ THIS CAREFULLY) ===
-A structured SVG overlay WILL be composited on top of your output containing ALL text, logos, panels, bullets, and branding.
-Your job is ONLY to generate the background scene and hero subject.
-Do NOT add any text, title cards, logo zones, bullet points, lower thirds, or panel graphics to the image.
-Generate a clean, rich, atmospheric background with a strong hero subject in the designated zone.
-Leave the top 14% of the frame clean and calm for the header band.
-Leave the left or right 45% relatively calm for text panels.
-The SVG overlay will handle all typography and branding.
-If you render text, logos, panels, cards, or UI chrome, they will COLLIDE with the overlay and produce a broken double-layered mess.
-=== END SVG OVERLAY AWARENESS ===
-`}
-
-${safeCustomPrompt ? `CREATIVE BRIEF (HIGHEST PRIORITY):
-"${safeCustomPrompt}"
-This is the primary creative direction. Use it to drive scene choice, composition, and mood. All structural constraints below must serve this brief.
-` : ''}
-
-${themeSlotGuidance ? `THEME SLOT MAP:
-${themeSlotGuidance}
-` : ''}
-
-${themeSelectionGuidance ? `SELECTED VISUAL ASSET GUIDANCE:
-${themeSelectionGuidance}
-` : ''}
-
-${aiStructureGuide ? `${aiStructureGuide}
-
-` : ''}
+${safeCustomPrompt ? `CREATIVE BRIEF (HIGHEST PRIORITY): "${safeCustomPrompt}"\n` : ''}
+${themeSlotGuidance ? `THEME SLOT MAP:\n${themeSlotGuidance}\n` : ''}
+${themeSelectionGuidance ? `SELECTED VISUAL ASSETS:\n${themeSelectionGuidance}\n` : ''}
 
 ${safeBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
-BRAND IDENTITY — #1 PRIORITY (READ THIS FIRST)
+BRAND IDENTITY
 ═══════════════════════════════════════════════════
-${safeBrandName ? (aiOwnsFullPoster
-  ? `BRAND: "${safeBrandName}"
-- The final poster must clearly show the brand through the supplied logo, a refined brand label, product branding, or a disciplined header/footer brand block.
-- If visible brand text appears, use the exact brand name "${safeBrandName}" with perfect spelling.
-- Place brand presence in a premium position with clean contrast and enough breathing room.
-- Never invent alternate company names, sub-brands, or fake product labels.`
-  : `BRAND: "${safeBrandName}"
-- The brand name "${safeBrandName}" MUST appear as clearly readable text somewhere in the final image.
-- Place it in a high-contrast area so it is legible at LinkedIn feed size (552px wide).
-- Use it exactly as written — never invent alternate names, sub-brands, or fake labels.
-- It can appear as: a headline, a brand label/badge, a watermark, or text integrated into the design.
-- Minimum apparent size: equivalent to 28pt bold text relative to the canvas.`) : ''}
-${effectiveBrandColors.length ? `
-BRAND COLORS (MANDATORY — these override ALL default color choices):
-Palette: ${effectiveBrandColors.join(', ')}
-Priority order: ${effectiveBrandColors.slice(0, 4).join(' → ')}
-
-COLOR RULES (NON-NEGOTIABLE):
-1. The DOMINANT color of the image (backgrounds, panels, large surfaces) MUST be from this palette.
-2. At least 60% of the image's color area must use these brand colors.
-3. Text-safe zones, gradients, overlays, cards, and panels MUST use brand colors — never fall back to generic navy, blue, purple, gold, teal, or black unless those exact hex values are in the palette above.
-4. Use the first 1-2 colors as hero/primary surfaces. Use remaining colors as accents and supporting elements.
-5. Environmental elements (lighting gels, material colors, background tones) should harmonize with the brand palette.
-6. NEVER substitute the brand palette with random or default colors. Every color decision starts from this palette.` : ''}
-${safeProductName ? `\nPRODUCT: "${safeProductName}" — if the product appears as visible text or on the product itself, use this exact name.` : ''}
+${safeBrandName ? (hasLogo && effectiveLogoPlacement !== 'none' ? `BRAND: "${safeBrandName}" — represented by the uploaded logo image (large, prominent, 14-22% canvas width). Do NOT render brand name as separate text. The logo must be clearly visible and one of the first things noticed.` : `BRAND: "${safeBrandName}" — spell exactly, never invent alternate names.`) : ''}
+${effectiveBrandColors.length ? `BRAND COLORS (MANDATORY): ${effectiveBrandColors.join(', ')}
+- 60%+ of the canvas must use these colors in backgrounds, panels, gradients.
+- Dark palette → dark cinematic scene. Warm palette → warm energetic scene.
+- NEVER fall back to generic blue/purple/gold/teal unless those hex values are in the palette.` : ''}
+${safeProductName ? `PRODUCT: "${safeProductName}" — use this exact name if it appears as text.` : ''}
 ═══════════════════════════════════════════════════
 ` : ''}
 
-${effectiveBrandColors.length > 0 ? `=== BRAND COLOR MANDATE — HIGHEST PRIORITY ===
-Primary palette: ${effectiveBrandColors.join(', ')}
-- The background environment must contain these colors in gradients, surfaces, lighting, and materials
-- Panel fills must use these colors at varying opacities (100%, 70%, 40%)
-- If a color is dark navy (#050d1a style), build a dark cinematic scene — do NOT generate a light/white background
-- If a color is warm red (#cc2200 style), drive warm industrial or energetic lighting into the scene
-- Neutral or white brand colors → clean minimal light background with brand accent used in architectural or product details
-- At least 60% of the visible canvas must reflect the brand palette — no exceptions
-- NEVER fall back to generic blue, purple, gold, or teal unless those exact hex values are in the palette above
-=== END MANDATE ===
-` : ''}
+${analyzedContextLines ? `BRAND INTELLIGENCE:\n${analyzedContextLines}\n` : ''}
 
-${analyzedContextLines ? `BRAND INTELLIGENCE (use this to inform every design decision):
-${analyzedContextLines}
-This is the brand's DNA. Every color choice, composition style, and visual element should feel native to this brand.
-` : ''}
+${safePostImagePrompt ? `POST VISUAL BRIEF: "${safePostImagePrompt}"\n` : ''}
+${safeContextBrief ? `USER CONTEXT: "${safeContextBrief}"\n` : ''}
 
-${safePostImagePrompt ? `POST GENERATOR VISUAL BRIEF (PRIMARY MESSAGE ANCHOR):
-"${safePostImagePrompt}"
-This brief came directly from the post generator. The final image must clearly support this message.\n` : ''}
-
-${safeContextBrief ? `USER CONTEXT (TREAT THIS LIKE THE MAIN CHATGPT-STYLE REQUEST):
-"${safeContextBrief}"
-Use this as the main explanation of what the user wants the picture to communicate and what must be shown.\n` : ''}
-
-${'' /* safeCustomPrompt moved to CREATIVE BRIEF block before theme slot guidance */}
-
-${isAiGuided ? `AI GUIDED MODE (PRIMARY BEHAVIOR):
-- There is NO fixed poster/template overlay for this request.
-- "Your Vision" is the main creative brief for composition, scene choice, and visual storytelling.
-- Build the full image yourself: structure, hierarchy, focal subject, lighting, and any readable text.
-- If a reference image is supplied, use it as a real subject/style input, not as a hidden slot placeholder.
-- Make the final image feel bespoke and fully art-directed, not template-like.
-- Keep all readable text inside a disciplined safe area with at least 8% side padding and 10% top/bottom padding.
-- Never let any headline, brand text, or support label touch the canvas edge.
-- If the subject sits on one side, reserve the opposite side as a dedicated text column with clean negative space.
-- Prefer 2-4 shorter lines over one oversized headline block. Readability is more important than drama.\n` : ''}
-
-${aiOwnsFullPoster && !isAiGuided ? `AI THEME POSTER MODE (PRIMARY BEHAVIOR):
-- This theme defines the intended poster structure and sentiment, but YOU must render the finished poster directly.
-- Use the selected theme as an art-direction brief for where the hero visual, headline block, proof bullets, logo zone, and footer details should live.
-- Feel free to refine spacing, panel proportions, and emphasis so the poster feels premium and balanced rather than mechanically templated.
-- Make the selected visual assets visible and celebrated. If a product/reference image exists, it should be a real recognizable hero or support visual in the poster.
-- Keep text disciplined: headline first, tagline optional, 2-4 proof bullets maximum, and only include footer/contact info if it remains readable.
-- Do not let bullet stacks, footer text, or logos collide with the canvas edge or each other.
-- If a theme-specific top brand band exists, treat that header as the primary home for the brand lockup and core campaign headline. Do not render a second competing billboard headline elsewhere unless the composition clearly needs a smaller echo.
-${hasStructuredBrandSelections ? '- The exact selected logos, partner marks, and footer/contact details will be locked in afterward. Compose around those reserved brand lanes instead of improvising duplicate lockups elsewhere.\n' : '\n'}` : ''}
+${isAiGuided ? `AI GUIDED MODE: Build the full image yourself — structure, hierarchy, focal subject, lighting, text. Keep text inside safe area with 8% side and 10% top/bottom padding.\n` : ''}
 
 ${structuredBrandContentGuide ? `${structuredBrandContentGuide}\n` : ''}
 
-${voxaPromptBlock ? `VOXA MASTER PROMPT SPEC:
-${voxaPromptBlock}
-` : ''}
+${voxaPromptBlock ? `VOXA SPEC:\n${voxaPromptBlock}\n` : ''}
 
-${voxaQualityGate ? `VOXA QUALITY GATE:
-${voxaQualityGate}
-` : ''}
+CONTENT TO RENDER:
+${postContext ? `Context: ${postContext.slice(0, 600)}` : 'Use the headline and tagline as the message.'}
+${safeHeadline ? `Headline: "${safeHeadline}"` : ''}
+${safeTagline ? `Tagline: "${safeTagline}"` : ''}
+${composedFeatureBullets.length ? `Proof bullets:\n${composedFeatureBullets.map((line) => `  ● ${line}`).join('\n')}` : ''}
 
-CONTENT CONTEXT:
-${postContext || 'Use the provided headline and tagline as the post message.'}
+${brandNamingDirective ? `${brandNamingDirective}\n` : ''}
 
-POST-TO-IMAGE ALIGNMENT RULES:
-- The final visual must make immediate sense beside the confirmed post headline and body.
-- If both a post generator brief and a user image request are provided, merge them.
-- If a user context brief is provided, treat it as the clearest description of what the final image should communicate.
-- The post generator brief defines the message/topic.
-- The user context and user request refine how that topic is visualized.
-- Do not drift into a different topic, metaphor, or subject that weakens the post.
+SUBJECT ANCHOR: "${semanticAnchor}"
 
-${brandNamingDirective ? `${brandNamingDirective}
+${(hasThemeComposition || isAlliancePoster) && referenceImageUrl ? `HERO PRODUCT — USER'S SELECTED IMAGE:
+- Reproduce the selected product/scene faithfully. Same shape, proportions, materials, colors.
+- Place as the visual hero in the theme's hero zone. Premium lighting, realistic shadows.
+- Do NOT replace with a different product or hide it.\n` : ''}
 
-` : ''}
-
-VISUAL STORYTELLING BRIEF:
-${safeHeadline ? `- Core message: ${safeHeadline}` : ''}
-${safeTagline ? `- Supporting message: ${safeTagline}` : ''}
-${composedFeatureBullets.length ? `- Supporting proof signals: ${composedFeatureBullets.join('; ')}` : ''}
-${safeProductName ? `- Product/service spotlight: ${safeProductName}` : ''}
-${safeContextBrief ? `- User context: ${safeContextBrief}` : ''}
-
-SUBJECT ANCHOR (the image MUST visually represent this):
-- "${semanticAnchor}"
-- The viewer should immediately understand what this image is about without reading the post.
-
-${composedFeatureBullets.length ? (aiOwnsFullPoster
-  ? `PROOF LINES TO HONOR AND, WHERE APPROPRIATE, RENDER AS SUPPORTING BULLETS:
-${composedFeatureBullets.map((line) => `- ${line}`).join('\n')}
-- Render at most 2-4 of these as clear supporting proof bullets or proof cards, rewriting only for fit while preserving meaning and brand accuracy.
-- If not all lines fit elegantly, prioritize the strongest lines and let the rest influence the environment or supporting details.`
-  : `THEME SIGNALS TO HONOR (influence the image visually, never as readable text):
-${composedFeatureBullets.map((line) => `- ${line}`).join('\n')}
-- Let these signals shape the product details, environment, supporting props, or proof-oriented atmosphere so the final poster feels aligned with the user's selections.`) : ''}
-
-${isAlliancePoster ? (aiOwnsFullPoster ? `ALLIANCE POSTER EXECUTION RULES:
-- Deliver a finished alliance/campaign poster with a disciplined top brand band, a left hero product visual, a right-side benefits stack, and a compact footer.
-- Keep the left hero highly visible and premium, with enough surrounding depth to feel grounded rather than pasted.
-- Keep the right information lane darker and calmer for readable bullets and headline hierarchy.
-- Favor premium industrial, electrification, energy, automation, or infrastructure context when it matches the brief.
-- This should feel like a real campaign board from a top industrial design team, not a brochure page with random elements.` : `ALLIANCE POSTER BACKGROUND RULES:
-- Generate the background plate only. Final logos, headlines, footer text, and bullet pointers will be composited later.
-- Do NOT render readable text, letterforms, logos, product labels, or fake UI in the image itself.
-- This is a strict template, not a freeform poster. Keep the header logo zones, left hero bay, and right information lane clean.
-- Keep the hero subject isolated on the left with negative space around it so later composition stays crisp.
-- Hard failure if any readable text, logo marks, or UI chrome appears anywhere in the image.
-- Keep the left side strong enough for a hero product cutout and the right side visually clean enough for benefit bullets.
-- Favor premium industrial, electrification, energy, automation, or infrastructure context when it matches the brief.
-- Make the backdrop sharp, high contrast, and poster-friendly rather than generic lifestyle photography.`) : ''}
-
-${(hasThemeComposition || isAlliancePoster) && referenceImageUrl ? (aiOwnsFullPoster ? `HERO PRODUCT CONTEXT (the user has selected a product/reference image):
-- A product or reference image has been selected. Use it as real visual truth and make it a clearly recognizable hero or major support visual in the final poster.
-- Light, crop, and stage the composition so the selected product feels prestigious and intentional.
-- Keep a strong relationship between the hero visual and the text-safe lane: one side can carry richer visual detail while the text side stays calmer and readable.
-- Match the industrial, technical, or environmental character of the selected product and the post context above.` : `HERO PRODUCT CONTEXT (the user has selected a product/reference image for the hero slot):
-- A product or reference image has been selected and will be placed in the theme's hero zone by the SVG overlay.
-- Your background plate must visually COMPLEMENT and CELEBRATE this product — not compete with it.
-- Design the atmosphere, lighting, and environment to make the product feel at home and prestigious.
-- The product sits in the LEFT hero zone — create background texture and lighting that gives it context and weight.
-- The RIGHT zone (text area) must remain dark and atmospheric so white text reads clearly over it.
-- Match the industrial, technical, or environmental character of the product type described in the post context above.
-- HARD CONSTRAINT: The user has selected a specific reference image as the hero subject. Do NOT invent a new hero. Instead: use the composition, subject, and core visual from the reference. Improve its lighting, crop to the theme's hero zone, enhance color depth to match the brand palette, and sharpen the staging. The reference image IS the product/hero — treat it as ground truth.`) : ''}
-SCENE CONSTRUCTION (MANDATORY):
+SCENE CONSTRUCTION:
 - ${sceneBrief}
-- Every image needs a clear HERO ELEMENT (the main visual subject) and SUPPORTING CONTEXT (environment, props, or secondary elements that reinforce the story).
-- Think like a photographer: what would you stage, light, and frame to tell this story in one shot?
-- No gradient-only or abstract-only outputs unless style is "abstract-brand".
-${effectiveBrandColors.length ? `- Use brand colors (${effectiveBrandColors.slice(0, 3).join(', ')}) as the dominant palette in the scene — in surfaces, lighting, materials, and environment.` : ''}
+- 2-3 depth layers. Real materials (metal, glass, concrete). Directional lighting.
+${effectiveBrandColors.length ? `- Use brand colors (${effectiveBrandColors.slice(0, 3).join(', ')}) as dominant palette.` : ''}
 
-${effectiveLogoPlacement === 'none' ? 'No logo needed in this image.' : ''}
+TYPOGRAPHY:
+- HEADLINE: Bold 800-900 weight sans-serif, 3-4x larger than bullets, 20-30% of image width. Tight tracking.
+- TAGLINE: 400-500 weight, 50-60% of headline size.
+- BULLETS: 400-500 weight, consistent ● markers, identical vertical spacing, aligned left edge. Max 4 bullets.
+- FOOTER: Smallest text, optional. Drop if crowded.
+- All text needs clean calm surface behind it. Never place text over busy detail.
+- Modern 2025 design: no drop shadows, no embossed text, no gradient fills on letters.
 
-COMPOSITION MASTERY:
-- Apply the rule of thirds for visual balance — place the hero element at an intersection point.
-- Create clean text-safe zones with strong contrast for the headline, optional tagline, proof bullets, and footer details.
-- Use depth of field, layering, or environmental framing to create visual depth.
-- Keep all key visual elements inside an 85% central safe-area so LinkedIn crops stay balanced.
-- Use leading lines, color contrast, or light direction to guide the viewer's eye to the focal point.
-- IMPORTANT: The image will be viewed at 552px wide in the LinkedIn feed. All text, icons, and key details must be clearly readable at that size. Avoid tiny text, thin lines, or subtle details that vanish at feed scale.
-
-${aiOwnsFullPoster ? `TEXT RENDERING RULES (CRITICAL — YOU ARE RENDERING THE FINAL POSTER):
-- The final poster SHOULD include disciplined readable text where the theme calls for it: headline, optional tagline, brand label, and up to 2-4 short proof bullets.
-- Use the exact headline wording when possible: "${displayHeadline || effectiveBrandName || ''}".
-- Use the exact tagline only when it remains large and readable: "${displayTagline || ''}".
-- ${hasStructuredBrandSelections ? 'If structured brand lanes are reserved, keep the headline and proof copy clear of those zones and leave exact footer/contact lockups to the finishing pass.' : 'If the supplied logo is present, reproduce it faithfully and keep it crisp.'}
-- Keep typography large, bold, and clean enough to read at LinkedIn feed size.
-- Use short lines, clear hierarchy, and generous spacing. Never let bullets or footer details run out of their zone.
-- Footer/contact details are optional; include them only if they fit cleanly and remain legible.
-- Every brand or product word must be perfectly spelled.` : `TEXT RENDERING RULES (CRITICAL — AI text must be perfect):
-- Every letter in every word must be spelled correctly with no missing, extra, swapped, or garbled characters.
-- Before rendering any text, mentally spell it out letter by letter: "${displayHeadline || effectiveBrandName || ''}".
-- Use clean, bold sans-serif fonts (Helvetica, Inter, or similar) for maximum readability.
-- Ensure strong contrast between text and background — minimum 4.5:1 contrast ratio.
-- Text should be large and confident — the headline should occupy at least 15-25% of the image width.
-- Never render text smaller than equivalent to 18pt at final output size.
-- If the text would be hard to render perfectly, use fewer words but make them flawless.
-- Double-check: brand name "${effectiveBrandName}" must be letter-perfect if it appears.`}
-
-LINKEDIN FEED OPTIMIZATION:
-- Images appear at 552px wide in the LinkedIn feed — design for impact at that size.
-- Use bold, high-contrast elements that pop on both desktop and mobile screens.
-- Avoid fine details, thin lines, or subtle gradients that disappear at feed size.
-- Key message and hero subject should be instantly recognizable within 0.3 seconds.
-- White/negative space is a power tool — use it to create focus, not fill every pixel.
-
-VISUAL STYLE: ${styleDirection}
-VISUAL TONE: ${toneDirection}
-
-${style === 'photo-blend' ? `PHOTO-BLEND EXECUTION RULES:
-- Must render as a sharp, high-fidelity photographic scene — not a blurred texture wash.
-- Subject edges, textures, and materials must be crisp and readable at LinkedIn feed size (typically 552px wide).
-- Use studio-quality lighting: directional key light, soft fill, and environmental ambient.
-- Maintain realistic depth of field but keep the primary subject tack-sharp.
-- Think editorial photography: Condé Nast, Bloomberg Businessweek, or Wired cover quality.
-` : ''}
+STYLE: ${styleDirection}
+TONE: ${toneDirection}
 
 ${variationDirective}
-VARIATION SEED: ${variationSalt}
 
-QUALITY STANDARD (NON-NEGOTIABLE):
-- This image will represent a professional brand on LinkedIn — it must look like a $5,000 creative agency deliverable.
-- Ultra-sharp rendering: every edge clean, every texture detailed, every element intentional.
-- Modern design sensibility: current visual trends (2024-2026), not dated styles.
-- Professional lighting that creates mood and dimension — no flat, evenly-lit compositions.
-- Visual hierarchy that tells a story: primary subject → supporting elements → background atmosphere.
-- The image should trigger the viewer to stop scrolling within 0.3 seconds.
-- All visible text must be perfectly spelled, properly kerned, and clearly legible.
-- Color accuracy: brand colors must match the hex values provided — no approximations.
+QUALITY: Fortune 500 campaign quality. $10K agency deliverable. Sharp rendering, real materials, premium lighting.
 
-${voxaNegativePrompt ? `VOXA NEGATIVE PROMPT (ABSOLUTE AVOIDS):
-- ${voxaNegativePrompt}
-` : ''}
-
-ABSOLUTE PROHIBITIONS:
-- Blurry, soft-focus, or low-resolution output
-- Watermarks, stock photo badges, or placeholder artifacts
-- Cluttered compositions with competing visual elements
-- Generic clip-art, cartoon, or illustration-style elements (unless style explicitly calls for it)
-- Gaussian blur blobs, foggy haze, or dreamy soft-focus backgrounds
-- Abstract color gradients that communicate nothing about the topic
-- Cheesy visual metaphors (lightbulbs for ideas, handshakes for partnership, puzzle pieces for teamwork)
-- Human hands with incorrect finger counts or anatomical errors
-${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, generic pasted overlays, or dead empty background plates
-- Cramped bullet stacks, footer collisions, or text running outside its visual lane
-- Tiny unreadable logos or unreadable brand marks
-- Ecommerce-style "Shop Now", "Buy Now", "Get Started", coupon stickers, or cheap CTA clutter unless the selected hiring theme needs a restrained recruitment action cue
-- Ignoring the selected reference images, logos, or proof lines when they were provided
-- Misspelled text, garbled letters, or nonsensical words anywhere in the image
-- Decorative text effects that reduce readability at feed size` : `- Misspelled text, garbled letters, or nonsensical words anywhere in the image
-- Text that is too small to read at 552px display width`}
-- Generic stock-photo compositions that lack brand personality
+PROHIBITIONS:
+- Blurry/soft-focus output, watermarks, stock photo badges
+- Flat dead gradients, empty void backgrounds, featureless color fills
+- Cheesy metaphors (lightbulbs, handshakes, puzzle pieces)
+- Tiny unreadable text or logos — everything must read at 552px feed width
+- Misaligned text, inconsistent bullet spacing, orphan words
+- Misspelled text or garbled letters
+${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
+- Sticker-like floating logos — integrate them into the design
+- Tiny logos under 14% of canvas width — logos must be large and clearly readable
+- Ecommerce "Shop Now" styling unless it's a hiring theme` : ''}
 `.trim();
+
+    // ── Prompt budget enforcement (OpenAI limit: 32,000 chars) ──
+    // The edit endpoint appends logo/ref instructions (~3K chars extra), so
+    // we need a lower cap when images are present. Use 28,500 when logos/refs
+    // are likely, 31,500 otherwise.
+    const hasUploadedAssets = hasLogo || !!referenceImageUrl || additionalReferenceUrls.length > 0;
+    const PROMPT_BUDGET = hasUploadedAssets ? 28500 : 31500;
+    let budgetedPrompt = imagePrompt;
+    if (budgetedPrompt.length > PROMPT_BUDGET) {
+      // 1) Strip VOXA block (duplicate theme info already in main prompt)
+      budgetedPrompt = budgetedPrompt
+        .replace(/VOXA SPEC:\n[\s\S]*?(?=\n\n[A-Z])/m, '');
+    }
+    if (budgetedPrompt.length > PROMPT_BUDGET) {
+      // 2) Trim SCENE CONSTRUCTION to essentials
+      budgetedPrompt = budgetedPrompt.replace(
+        /SCENE CONSTRUCTION:\n[\s\S]*?(?=\n\n[A-Z])/m,
+        `SCENE CONSTRUCTION:\n- ${sceneBrief}\n- 2-3 depth layers, real materials, directional lighting.\n${effectiveBrandColors.length ? `- Brand colors: ${effectiveBrandColors.slice(0, 3).join(', ')}.` : ''}`
+      );
+    }
+    if (budgetedPrompt.length > PROMPT_BUDGET) {
+      // 3) Trim TYPOGRAPHY to essentials
+      budgetedPrompt = budgetedPrompt.replace(
+        /TYPOGRAPHY:\n[\s\S]*?(?=\n\n[A-Z])/m,
+        'TYPOGRAPHY: Bold 800w headline 3-4x larger than bullets, 400w tagline 50-60% of headline, bullets with ● markers aligned left, clean surface behind all text.'
+      );
+    }
+    if (budgetedPrompt.length > PROMPT_BUDGET) {
+      // 4) Trim PROHIBITIONS to essentials
+      budgetedPrompt = budgetedPrompt.replace(
+        /PROHIBITIONS:\n[\s\S]*$/m,
+        'PROHIBITIONS: No blurry output, watermarks, flat gradients, cheesy metaphors, tiny text, misaligned bullets, misspelled text, ignored logos.'
+      );
+    }
+    // Final hard cap — truncate trailing content as last resort
+    if (budgetedPrompt.length > PROMPT_BUDGET) {
+      budgetedPrompt = budgetedPrompt.slice(0, PROMPT_BUDGET);
+    }
+    // Replace imagePrompt reference for downstream usage
+    const finalImagePrompt = budgetedPrompt;
+    console.log(`[image-create] theme="${themeId}" promptLen=${finalImagePrompt.length}/${PROMPT_BUDGET} themeLabel="${selectedTheme.label}" directionLen=${selectedTheme.direction.length} aiOwnsFullPoster=${aiOwnsFullPoster} hasLogo=${hasLogo} hasRef=${!!referenceImageUrl}`);
 
     const configuredImageModel = process.env.OPENAI_IMAGE_MODEL?.trim();
     const model = aiOwnsFullPoster
@@ -1775,10 +1926,12 @@ ${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, g
         : [];
 
     if (hasLogo && effectiveLogoPlacement !== 'none' && primaryLogoBuffer) {
+      // Send logo at high resolution so the AI can reproduce fine details,
+      // letterforms, and brand marks with pixel-perfect fidelity.
       const logoPng = await sharp(primaryLogoBuffer)
         .resize({
-          width: aiOwnsFullPoster ? 720 : 512,
-          height: aiOwnsFullPoster ? 420 : 512,
+          width: 1024,
+          height: 1024,
           fit: 'contain',
           withoutEnlargement: true,
           background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -1792,8 +1945,8 @@ ${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, g
       for (const [index, buffer] of posterSecondaryLogoBuffers.entries()) {
         const resized = await sharp(buffer)
           .resize({
-            width: 680,
-            height: 380,
+            width: 1024,
+            height: 1024,
             fit: 'contain',
             withoutEnlargement: true,
             background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -1813,7 +1966,7 @@ ${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, g
         const refBuffer = await resolveImageBufferFromSource(referenceImageUrl);
         if (refBuffer) {
           const refPng = await sharp(refBuffer)
-            .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+            .resize({ width: 1536, height: 1536, fit: 'inside', withoutEnlargement: true })
             .png()
             .toBuffer();
           referenceImages.push({ buffer: refPng, filename: 'reference.png', role: 'reference' });
@@ -1826,8 +1979,8 @@ ${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, g
 
         const refPng = await sharp(refBuffer)
           .resize({
-            width: index === 0 ? 1400 : 1100,
-            height: index === 0 ? 1400 : 1100,
+            width: 1536,
+            height: 1536,
             fit: 'inside',
             withoutEnlargement: true,
           })
@@ -1842,84 +1995,126 @@ ${aiOwnsFullPoster ? `- Rigid template-looking posters with boxed-in elements, g
       }
     }
 
+    // Additional reference images — works for ALL themes (not just un-themed)
+    for (const [idx, addUrl] of additionalReferenceUrls.entries()) {
+      if (referenceImages.length >= 6) break; // OpenAI limit
+      if (addUrl === referenceImageUrl) continue; // skip duplicate
+      // Also skip if already included via themedReferenceSources
+      if (themedReferenceSources.includes(addUrl)) continue;
+      try {
+        const addBuf = await resolveImageBufferFromSource(addUrl);
+        if (addBuf) {
+          const addPng = await sharp(addBuf)
+            .resize({ width: 1536, height: 1536, fit: 'inside', withoutEnlargement: true })
+            .png()
+            .toBuffer();
+          referenceImages.push({
+            buffer: addPng,
+            filename: `extra-reference-${idx + 1}.png`,
+            role: `reference-extra-${idx + 1}`,
+          });
+        }
+      } catch {
+        console.warn(`[image-create] Failed to resolve additional reference ${idx + 1}`);
+      }
+    }
+
     const useEditEndpoint = referenceImages.length > 0 && model.startsWith('gpt-image');
 
     // Augment prompt with logo/reference instructions for the edit endpoint
-    let editPrompt = imagePrompt;
+    let editPrompt = finalImagePrompt;
     if (useEditEndpoint) {
       const hasLogoRef = referenceImages.some((r) => r.role === 'logo');
+      const hasPartnerLogoRefs = referenceImages.some((r) => r.role.startsWith('partner-logo'));
+      const partnerLogoCount = referenceImages.filter((r) => r.role.startsWith('partner-logo')).length;
       const hasImageRef = referenceImages.some((r) => r.role === 'reference');
 
+      // Build an explicit manifest so the AI knows exactly what each uploaded image is
+      const imageManifest = referenceImages.map((r) => {
+        if (r.role === 'logo') return `- "${r.filename}": PRIMARY BRAND LOGO — reproduce this EXACTLY, large and clearly visible (14-22% of canvas width) in the header/brand zone`;
+        if (r.role.startsWith('partner-logo')) return `- "${r.filename}": PARTNER/SECONDARY LOGO — reproduce this EXACTLY in the top-right partner zone`;
+        if (r.role === 'reference') return `- "${r.filename}": HERO PRODUCT/SCENE IMAGE — use as the main visual hero of the poster`;
+        if (r.role.startsWith('reference-extra')) return `- "${r.filename}": ADDITIONAL REFERENCE IMAGE — incorporate this product/scene/element visibly in the poster composition`;
+        if (r.role.startsWith('reference-support')) return `- "${r.filename}": SUPPORTING VISUAL — use as secondary visual content in a panel or supporting area`;
+        return `- "${r.filename}": SUPPORTING REFERENCE IMAGE — use as additional visual content`;
+      }).join('\n');
+
+      const manifestBlock = `\n\n═══════════════════════════════════════════════════
+IMAGE MANIFEST — YOU HAVE BEEN GIVEN ${referenceImages.length} IMAGE(S):
+═══════════════════════════════════════════════════
+${imageManifest}
+
+CRITICAL: Each image listed above is a REAL asset the user uploaded. You MUST use ALL of them in the final poster. Do NOT ignore any uploaded image. Do NOT replace any uploaded logo with text or a made-up logo. Reproduce each uploaded logo EXACTLY as provided.
+═══════════════════════════════════════════════════`;
+
       const logoInstruction = hasLogoRef
-        ? hasStructuredBrandSelections
-          ? `\n\nLOGO / BRAND-MARK FIDELITY:
-You have been given the brand logo as a reference image. Use it to understand the exact brand mark, proportions, and colors.
+        ? `\n\nPRIMARY LOGO INFUSION (file: "logo.png") — NON-NEGOTIABLE:
+You have been given the brand's EXACT logo as a reference image (logo.png). This is the user's real brand mark. It MUST appear in the final image, reproduced with absolute fidelity. The logo is one of the MOST IMPORTANT elements of the poster.
 
-CRITICAL BRAND-LANE RULES:
-1. A finishing pass will place the exact selected logo(s), partner marks, and footer details into the reserved brand lanes after you render the main poster.
-2. Keep those reserved brand lanes clean and supportive — do NOT place critical subject matter, dense props, or competing text inside them.
-3. Do NOT invent duplicate floating logos, alternate brand badges, extra footer strips, or off-theme corner stamps outside the reserved structure.
-4. If you show any brand presence yourself, it must align with the same reserved header/footer logic and never fight the final brand lockup.
-5. If a selected headline or supporting line exists, keep the header lane calm enough that it can be locked in cleanly afterward without collisions.
-6. Brand name reference: "${effectiveBrandName || 'Brand'}". Keep spelling exact anywhere it appears.`
-          : `\n\nLOGO INTEGRATION — THIS IS THE #1 PRIORITY:
-You have been given the brand's logo as a reference image. You MUST faithfully reproduce this exact logo inside the generated image as a core, beautiful element of the design.
+LOGO RULES:
+1. PIXEL-PERFECT: Copy the logo EXACTLY — same shape, colors, proportions, letterforms, internal details. Do not redraw, simplify, or reinterpret it.
+2. PROMINENT SIZE: The logo MUST be large and clearly visible — at least 14-22% of canvas width. It should be immediately recognizable at LinkedIn feed size (552px wide). Never make it small or subtle.
+3. PROMINENT PLACEMENT: Place it in the theme's designated logo zone (usually top-left header). Give it 3-4% breathing room on all sides. It must be one of the first things a viewer notices.
+4. INFUSE MODE: The logo is a commanding hero brand element — large, bold, and prominent. It anchors the brand identity of the entire poster.
+5. CLEAN CONTRAST: Place on a surface with strong contrast — dark logo on light panel or light logo on dark panel. Give it a dedicated brand zone (header fascia, glass strip, metal plate, or clean background area).
+6. CRISP RENDERING: Clean edges, no blurriness, no softening, no color bleeding. Sharp at every pixel.
+7. NO TEXT SUBSTITUTION: The logo.png IS the brand identity. Do NOT write the brand name as separate text anywhere. Do NOT add text labels, text badges, or typographic renderings of the brand name. The logo image alone represents the brand.
 
-CRITICAL LOGO RULES:
-1. REPRODUCE THE LOGO EXACTLY as provided — same shape, same colors, same proportions, same details. Do not redesign, simplify, or alter it.
-2. Make the logo a visually important branded element. It must be crisp, readable, and intentionally placed.
-3. The logo must be DESIGNED INTO the composition, not floating randomly. Give it:
-   - Proper visual weight and sizing
-   - A clean background area or contrasting zone behind it so it reads perfectly
-   - Professional integration: subtle drop shadow, clean edges, or a complementary backdrop
-4. ${effectiveLogoPlacement === 'infuse'
-    ? 'INFUSE MODE: Make the logo a central, hero element of the design. It can be large and commanding — centered or prominently placed. It should feel like the image was designed AROUND the logo. Think of it like a brand-launch hero banner where the logo is the star.' 
-    : aiOwnsFullPoster
-      ? 'AI THEME POSTER MODE: Place the logo in a premium brand zone that matches the selected theme family — for example a refined header band, disciplined corner stamp, footer lockup, or structured brand label. It must feel intentionally designed into the poster, not pasted on after the fact.'
-      : themeId === 'alliance-poster'
-      ? 'OVERLAY MODE: Place the logo inside a disciplined brand zone such as a top header, corner stamp, or structured title band. Keep it clearly readable and premium, but do not let it overpower the hero product or core message.'
-      : 'OVERLAY MODE: Place the logo in a premium corner position (top-right or top-left preferred) with a clean backing — a subtle white/frosted card, clean negative space, or a contrasting panel. It should look like a professional watermark/brand stamp that belongs there by design.'}
-5. The logo should be CRISP and SHARP — high fidelity rendering with clean edges.
-6. Brand name: "${effectiveBrandName || 'Brand'}"
+DO NOT: Replace the logo with text • Draw a different version • Make it tiny or subtle • Turn it into a watermark • Blur or degrade it • Change its colors • Write the brand name as text alongside the logo • Hide it in a corner • Make it smaller than 14% of canvas width`
+        : '';
 
-DO NOT:
-- Replace the logo with text spelling out the brand name
-- Draw a different/simplified version of the logo  
-- Make the logo tiny or hard to see
-- Put the logo in a cluttered area where it gets lost`
+      const partnerLogoInstruction = hasPartnerLogoRefs
+        ? `\n\nPARTNER LOGO(S) INFUSION (${partnerLogoCount} partner logo file(s)) — NON-NEGOTIABLE:
+You have been given ${partnerLogoCount} PARTNER/SECONDARY logo(s) as reference images (partner-logo-1.png${partnerLogoCount > 1 ? ', partner-logo-2.png' : ''}${partnerLogoCount > 2 ? ', partner-logo-3.png' : ''}). These are REAL partner brand marks the user uploaded. Every partner logo MUST appear in the final poster.
+
+PARTNER LOGO RULES:
+1. PIXEL-PERFECT: Reproduce each partner logo EXACTLY as provided — same shape, colors, proportions. Do not substitute, redraw, or omit any.
+2. PLACEMENT: Place partner logos in the TOP-RIGHT header zone (the partner lockup area, roughly 75%-97% width, 3%-12% height). If multiple partners, arrange them side by side with equal spacing.
+3. CLEAN CONTRAST: Each partner logo needs a clean contrasting surface behind it — a dark or light panel appropriate for legibility.
+4. EQUAL DIGNITY: Partner logos should be similar in visual weight to the primary brand logo — not tiny, not hidden, not relegated to a footnote.
+5. CRISP RENDERING: Clean edges, sharp details, no blurriness.
+
+DO NOT: Omit any partner logo • Replace partner logos with text • Make partner logos smaller than 6% of canvas width • Invent fake partner logos`
         : '';
 
       const refInstruction = hasImageRef
         ? aiOwnsFullPoster
-          ? `\n\nSELECTED VISUAL REFERENCES (MANDATORY):
-- I have provided one or more user-selected reference images. These are the user's actual chosen product/scene assets.
-- Use them directly in the FINAL poster as the hero or major supporting visual(s). They should be clearly recognizable, not hidden inside vague atmosphere.
-- Treat them as visual truth for the product family, silhouette, materials, detailing, proportions, finish quality, and environment language.
-- You may refine their presentation through better staging, premium lighting, cleaner cropping, richer background integration, and stronger hierarchy.
-- Do not replace the selected asset with a different invented product. Elevate the chosen asset into a premium campaign composition.`
+          ? `\n\nHERO IMAGE INFUSION (file: "reference.png" or "theme-reference-*.png") — MANDATORY:
+The user selected specific product/scene images as the hero content. These MUST be the visual centerpiece.
+
+HERO IMAGE RULES:
+1. FAITHFUL: Reproduce the selected product/scene recognizably — same shape, proportions, materials, key details.
+2. HERO TREATMENT: Place as the primary visual hero — large, well-staged, immediately visible in the hero bay/panel area.
+3. PREMIUM STAGING: Elevate with commercial photography lighting, realistic shadows, and environmental context.
+4. Do NOT replace the selected product with something else. Do NOT hide it or make it tiny.`
           : hasThemeComposition || isAlliancePoster
-          ? `\n\nSELECTED VISUAL REFERENCES (MANDATORY):
-- I have provided one or more user-selected reference images. These are the user's actual chosen product/scene assets.
-- Treat them as visual truth for the product family, silhouette, materials, detailing, proportions, finish quality, and environment language.
-- Build the BACKGROUND PLATE around these selections so the final composed theme feels custom-designed from the user's choices.
-- If the structured theme overlay later places the chosen asset into a hero slot, do NOT create a second isolated pasted cutout elsewhere in the frame.
-- Instead, echo the selection through supporting environmental context: matching reflections, close-up product detailing, relevant supporting hardware, atmospheric lighting, texture language, and realistic surrounding scene cues.
-- The final result must feel like a premium campaign background art-directed from these exact selected assets, not a generic stock concept.`
-          : `\n\nREFERENCE / PRODUCT IMAGE (MUST USE):
-- I have provided a reference or product image. You MUST incorporate the visual subject, product, or scene from this reference prominently in the generated image.
-- The generated image should clearly feature and showcase the referenced subject as a key visual element.
-- Match the reference's colors, style, and characteristics faithfully while integrating it into a professional, polished composition.
-- The reference subject should be recognizable and prominent, not abstracted away.`
+          ? `\n\nHERO IMAGE CONTEXT (file: "theme-reference-*.png") — MANDATORY:
+Build the composition around the user's selected product/scene images. They are the visual truth for this poster.`
+          : `\n\nREFERENCE IMAGE (file: "reference.png") — MUST USE:
+Incorporate the user's selected product/scene prominently. Match colors, materials, style, and characteristics faithfully.`
         : '';
 
-      // Build the final edit prompt with logo as highest priority
+      // Build the final edit prompt — user's selections are the #1 priority
       editPrompt =
-        imagePrompt +
+        finalImagePrompt +
+        manifestBlock +
         logoInstruction +
+        partnerLogoInstruction +
         refInstruction +
         (aiOwnsFullPoster
-          ? `\n\nFINAL PRIORITY ORDER: 1) Honor the selected reference assets as the product/scene truth. 2) Respect the selected theme structure and any reserved brand lanes. 3) Deliver a finished premium poster with readable hierarchy and balanced spacing.${hasStructuredBrandSelections ? ' 4) Leave the exact selected logos/footer lockups to the finishing pass unless a large, deliberate brand treatment is clearly called for in the reserved header lane.' : ' 4) Reproduce and integrate the supplied logo(s) faithfully.'}`
-          : `\n\nFINAL PRIORITY ORDER: 1) Reproduce the logo exactly and prominently. 2) Match the visual style and scene description. 3) Integrate reference images naturally.`);
+          ? `\n\n═══════════════════════════════════════════════════
+FINAL PRIORITY ORDER (READ THIS LAST — IT OVERRIDES CONFLICTS):
+═══════════════════════════════════════════════════
+1) USE EVERY UPLOADED IMAGE: ALL uploaded logos and reference images MUST appear in the final poster. None may be omitted.
+2) PRIMARY LOGO (logo.png): Reproduce EXACTLY in the top-left header zone with clean contrast.
+${hasPartnerLogoRefs ? `3) PARTNER LOGOS (partner-logo-*.png): Reproduce EXACTLY in the top-right partner zone.
+4) HERO IMAGE: The selected product/scene must be the visual hero of the poster.
+5) THEME STRUCTURE: Follow the layout coordinates from the theme direction.
+6) PREMIUM FINISH: Readable hierarchy, premium lighting, material depth, balanced spacing.` : `3) HERO IMAGE: The selected product/scene must be the visual hero of the poster.
+4) THEME STRUCTURE: Follow the layout coordinates from the theme direction.
+5) PREMIUM FINISH: Readable hierarchy, premium lighting, material depth, balanced spacing.`}
+═══════════════════════════════════════════════════`
+          : `\n\nFINAL PRIORITY ORDER: 1) Reproduce ALL uploaded logos exactly. 2) Showcase the reference image as the visual hero. 3) Match the visual style and scene direction.`);
     }
 
     let base64: string;
@@ -1927,6 +2122,13 @@ DO NOT:
 
     const generatedAt = Date.now();
     const folder = `${brandId || actingUserId}`;
+
+    // Final safety cap on any prompt before sending to OpenAI
+    if (editPrompt.length > 31900) {
+      editPrompt = editPrompt.slice(0, 31900);
+    }
+
+    console.log(`[image-create] editPromptLen=${editPrompt.length} useEdit=${useEditEndpoint} refImages=${referenceImages.length} [${referenceImages.map(r => `${r.role}:${r.filename}`).join(', ')}]`);
 
     if (useEditEndpoint) {
       const editResult = await generateImageEdit({
@@ -1940,7 +2142,7 @@ DO NOT:
     } else {
       const firstPass = await generateImageBase({
         model,
-        prompt: imagePrompt,
+        prompt: finalImagePrompt,
         size: renderSize,
         quality: 'high',
         outputFormat: 'png',
@@ -1963,7 +2165,7 @@ DO NOT:
       ((style === 'split-layout' || style === 'cinematic') && base64.length < lowDetailThreshold);
 
     if (shouldRetryForDetail && !useEditEndpoint) {
-      const sharpnessOverridePrompt = `${imagePrompt}
+      const sharpnessOverridePrompt = `${finalImagePrompt}
 
 CLARITY OVERRIDE (MANDATORY):
 - Produce a crisp, high-detail, in-focus image.
@@ -1992,7 +2194,7 @@ ${!hasThemeComposition && !isAlliancePoster && effectiveBrandName ? `- REMINDER:
     // Final guard for photo-blend: if output still looks low-detail by payload size,
     // fallback to a cleaner split-layout composition that tends to be sharper.
     if (style === 'photo-blend' && base64.length < lowDetailThreshold && !useEditEndpoint) {
-      const fallbackPrompt = imagePrompt
+      const fallbackPrompt = finalImagePrompt
         .replace(
           `VISUAL STYLE: ${styleDirection}`,
           `VISUAL STYLE: ${styleMap['split-layout']}`
@@ -2051,8 +2253,8 @@ FINAL QUALITY FALLBACK (MANDATORY):
       .resize({
         width: canvas.width,
         height: canvas.height,
-        fit: 'cover',
-        position: 'attention',
+        fit: 'inside',
+        withoutEnlargement: true,
       })
       .png()
       .toBuffer();
@@ -2071,9 +2273,11 @@ FINAL QUALITY FALLBACK (MANDATORY):
     let finalPngBuffer = basePngBuffer;
     let logoApplied = useEditEndpoint && hasLogo && effectiveLogoPlacement !== 'none';
 
-    // Only do sharp-based overlay if we did NOT use the edit endpoint
-    // and this is NOT a themed image (theme overlay handles logo placement)
-    if (!useEditEndpoint && !hasThemeComposition && !isAlliancePoster && (shouldOverlayLogo || shouldInfuseLogo)) {
+    // Sharp-based logo overlay DISABLED — AI handles all logo infusion via the
+    // edit endpoint reference images. No post-processing overlays.
+    // The old overlay code placed a sticker-like logo on the image which looked
+    // cheap and disconnected from the design. AI infusion produces integrated results.
+    if (false && !useEditEndpoint && !hasThemeComposition && !isAlliancePoster && (shouldOverlayLogo || shouldInfuseLogo)) {
       if (primaryLogoBuffer) {
         let composedPngBuffer: Buffer;
 
@@ -2084,26 +2288,25 @@ FINAL QUALITY FALLBACK (MANDATORY):
           const x = canvas.width - logoW - pad;
           const y = pad;
 
-          const bgPad = Math.max(8, Math.round(canvas.width * 0.008));
-          const bgX = x - bgPad;
-          const bgY = y - bgPad;
-          const bgW = logoW + bgPad * 2;
-          const bgH = logoH + bgPad * 2;
-          const bgRadius = Math.max(10, Math.round(bgH * 0.2));
-
-          const logoCardSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bgW}" height="${bgH}" viewBox="0 0 ${bgW} ${bgH}">
-  <rect width="${bgW}" height="${bgH}" rx="${bgRadius}" fill="rgba(255,255,255,0.92)" />
-</svg>`;
-
-          const logoCardPngBuffer = await sharp(Buffer.from(logoCardSvg)).png().toBuffer();
-          const resizedLogoBuffer = await sharp(primaryLogoBuffer)
+          const resizedLogoBuffer = await sharp(primaryLogoBuffer!)
             .resize({ width: logoW, height: logoH, fit: 'contain', withoutEnlargement: true })
             .png()
             .toBuffer();
 
+          // Subtle drop shadow instead of a white sticker card
+          const shadowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${logoW}" height="${logoH}" viewBox="0 0 ${logoW} ${logoH}">
+  <defs>
+    <filter id="ds" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.35)" />
+    </filter>
+  </defs>
+  <rect width="${logoW}" height="${logoH}" rx="6" fill="rgba(0,0,0,0.10)" filter="url(#ds)" />
+</svg>`;
+          const shadowPng = await sharp(Buffer.from(shadowSvg)).png().toBuffer();
+
           composedPngBuffer = await sharp(basePngBuffer)
             .composite([
-              { input: logoCardPngBuffer, top: bgY, left: bgX },
+              { input: shadowPng, top: y, left: x },
               { input: resizedLogoBuffer, top: y, left: x },
             ])
             .png()
@@ -2116,13 +2319,13 @@ FINAL QUALITY FALLBACK (MANDATORY):
           const x = canvas.width - logoW - pad;
           const y = canvas.height - logoH - pad;
 
-          const resizedLogoBuffer = await sharp(primaryLogoBuffer)
+          const resizedLogoBuffer = await sharp(primaryLogoBuffer!)
             .resize({ width: logoW, height: logoH, fit: 'contain', withoutEnlargement: true })
             .png()
             .toBuffer();
 
           const infusedLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${logoW}" height="${logoH}" viewBox="0 0 ${logoW} ${logoH}">
-  <image href="data:image/png;base64,${resizedLogoBuffer.toString('base64')}" x="0" y="0" width="${logoW}" height="${logoH}" preserveAspectRatio="xMidYMid meet" opacity="0.32" />
+  <image href="data:image/png;base64,${resizedLogoBuffer.toString('base64')}" x="0" y="0" width="${logoW}" height="${logoH}" preserveAspectRatio="xMidYMid meet" opacity="0.85" />
 </svg>`;
           const infusedLogoPng = await sharp(Buffer.from(infusedLogoSvg)).png().toBuffer();
 
@@ -2136,7 +2339,7 @@ FINAL QUALITY FALLBACK (MANDATORY):
       }
     }
 
-    if (shouldUseLegacyThemeComposer && isAlliancePoster) {
+    if (shouldUseAllianceComposer) {
       finalPngBuffer = await composeAlliancePoster({
         width: canvas.width,
         height: canvas.height,
@@ -2158,9 +2361,8 @@ FINAL QUALITY FALLBACK (MANDATORY):
       logoApplied = Boolean(primaryLogoBuffer || posterSecondaryLogoBuffers.length > 0);
     }
 
-    // Generic theme composition for non-alliance-poster themes.
-    // ALWAYS run for themed images — the theme overlay defines the final structure.
-    if (shouldUseLegacyThemeComposer && !isAlliancePoster && hasThemeComposition) {
+    // Structured theme composition for all non-alliance theme layouts.
+    if (shouldUseStructuredThemeComposer && !isAlliancePoster) {
       // Resolve slot image URLs to buffers
       const slotImageBuffers: Record<string, Buffer> = {};
       const slotEntries = Object.entries(slotImages);
@@ -2194,7 +2396,7 @@ FINAL QUALITY FALLBACK (MANDATORY):
           partnerName,
         });
         console.log(`[theme-compose] Composition succeeded for "${themeId}", output size=${finalPngBuffer.length}`);
-        logoApplied = Boolean(primaryLogoBuffer);
+        logoApplied = logoApplied || Boolean(primaryLogoBuffer);
       } catch (composeError) {
         console.error(`[theme-compose] FAILED for "${themeId}":`, composeError);
         // Fall through — finalPngBuffer stays as basePngBuffer, user gets base image
@@ -2202,39 +2404,35 @@ FINAL QUALITY FALLBACK (MANDATORY):
       }
     }
 
-    const shouldApplyThemeFinisher =
-      willApplyBrandFinisher &&
-      (
-        (hasLogo && effectiveLogoPlacement !== 'none' && Boolean(primaryLogoBuffer)) ||
-        posterSecondaryLogoBuffers.length > 0 ||
-        Boolean(composedFooterWebsite || composedFooterEmail || partnerName || partnerTagline)
-      );
-
-    if (shouldApplyThemeFinisher) {
-      finalPngBuffer = await applyThemeBrandFinisher({
-        width: canvas.width,
-        height: canvas.height,
-        baseImageBuffer: finalPngBuffer,
-        themeId,
-        primaryLogoBuffer,
-        secondaryLogoBuffers: posterSecondaryLogoBuffers,
-        brandName: composedBrandName,
-        headline: composedHeadline,
-        tagline: composedTagline,
-        partnerName,
-        partnerTagline,
-        footerWebsite: composedFooterWebsite,
-        footerEmail: composedFooterEmail,
-        palette: effectiveBrandColors,
-        logoAlreadyPlaced: willApplyThemeOverlay,
-      });
-
-      logoApplied =
-        logoApplied ||
-        Boolean(
-          (hasLogo && effectiveLogoPlacement !== 'none') ||
-            posterSecondaryLogoBuffers.length > 0
-        );
+    // AI renders the complete poster — no overlays, no finisher ribbons.
+    // Logo is integrated by the AI via the edit endpoint reference images.
+    const themeComposerApplied = shouldUseStructuredThemeComposer || shouldUseAllianceComposer;
+    if (false) {
+      // Theme-finisher disabled: AI owns full poster composition.
+      // The AI integrates logos, headers, and footers directly in the image.
+      try {
+        finalPngBuffer = await applyThemeBrandFinisher({
+          width: canvas.width,
+          height: canvas.height,
+          baseImageBuffer: finalPngBuffer,
+          themeId: themeId || 'guided-auto',
+          primaryLogoBuffer,
+          secondaryLogoBuffers: posterSecondaryLogoBuffers,
+          brandName: composedBrandName,
+          headline: composedHeadline,
+          tagline: composedTagline,
+          partnerName,
+          partnerTagline,
+          footerWebsite: composedFooterWebsite,
+          footerEmail: composedFooterEmail,
+          palette: effectiveBrandColors,
+          logoAlreadyPlaced: false,
+        });
+        logoApplied = true;
+      } catch (finisherError) {
+        console.error('[theme-finisher] FAILED:', finisherError);
+        // Fall through — keep whatever finalPngBuffer we had
+      }
     }
 
     if (finalPngBuffer !== basePngBuffer) {
@@ -2274,7 +2472,8 @@ FINAL QUALITY FALLBACK (MANDATORY):
               model,
               type: 'linkedin-image-creator',
               logo_applied: logoApplied,
-              theme_finisher_applied: shouldApplyThemeFinisher,
+              theme_composer_applied: willApplyThemeOverlay,
+              theme_finisher_applied: false,
               logo_placement: effectiveLogoPlacement,
               logo_baked_by_ai: useEditEndpoint && hasLogo,
               reference_image_url: referenceImageUrl || null,
