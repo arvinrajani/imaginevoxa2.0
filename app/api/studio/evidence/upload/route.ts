@@ -346,7 +346,7 @@ async function ingestPdfKnowledgeSource(
   let totalPages: number | null = null;
 
   try {
-    const parser = createPdfParser({ data: params.fileBuffer });
+    const parser = await createPdfParser({ data: params.fileBuffer });
     const parsed = await parser.getText();
     await parser.destroy();
     rawText = typeof parsed.text === 'string' ? parsed.text : '';

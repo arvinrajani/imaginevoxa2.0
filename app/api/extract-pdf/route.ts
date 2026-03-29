@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     try {
       // Use pdf-parse to extract text
-      const parser = createPdfParser({ data: buffer });
+      const parser = await createPdfParser({ data: buffer });
       const pdfData = await parser.getText();
       await parser.destroy();
       

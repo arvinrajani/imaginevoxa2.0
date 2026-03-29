@@ -151,7 +151,7 @@ export async function parsePdfEmbeddedImages(fileBuffer: Buffer) {
     };
   }
 
-  const parser = createPdfParser({ data: fileBuffer });
+  const parser = await createPdfParser({ data: fileBuffer });
   try {
     const parsed = await parser.getImage({
       imageThreshold: MIN_EXTRACTED_IMAGE_SIZE_PX,
@@ -253,7 +253,7 @@ export async function parsePdfPageScreenshots(
     };
   }
 
-  const parser = createPdfParser({ data: fileBuffer });
+  const parser = await createPdfParser({ data: fileBuffer });
   try {
     const parsed = await parser.getScreenshot({
       desiredWidth: MAX_RENDERED_PAGE_WIDTH_PX,

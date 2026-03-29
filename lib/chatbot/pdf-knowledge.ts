@@ -212,7 +212,7 @@ async function insertChunkRows(
 
 export async function extractPdfTextFromBuffer(fileBuffer: Buffer) {
   const { createPdfParser } = await import('@/lib/pdf-parse-config');
-  const parser = createPdfParser({ data: fileBuffer });
+  const parser = await createPdfParser({ data: fileBuffer });
 
   try {
     const parsed = await parser.getText();
