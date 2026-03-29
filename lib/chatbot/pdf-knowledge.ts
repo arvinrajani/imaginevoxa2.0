@@ -1,5 +1,4 @@
 import { createAdminClient } from '../supabase/admin';
-import { createPdfParser } from '@/lib/pdf-parse-config';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -212,6 +211,7 @@ async function insertChunkRows(
 }
 
 export async function extractPdfTextFromBuffer(fileBuffer: Buffer) {
+  const { createPdfParser } = await import('@/lib/pdf-parse-config');
   const parser = createPdfParser({ data: fileBuffer });
 
   try {

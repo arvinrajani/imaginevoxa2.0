@@ -23,7 +23,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['sharp', 'pdf-parse'],
+  serverExternalPackages: ['sharp', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
   images: {
     remotePatterns: [
       {

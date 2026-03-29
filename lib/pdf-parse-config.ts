@@ -11,6 +11,8 @@ function resolveWorkerPath() {
   const resolvedCandidates = [
     () => require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs'),
     () => require.resolve('pdfjs-dist/build/pdf.worker.mjs'),
+    () => require.resolve('pdfjs-dist/legacy/build/pdf.worker.js'),
+    () => require.resolve('pdfjs-dist/build/pdf.worker.js'),
   ];
 
   for (const resolveCandidate of resolvedCandidates) {
@@ -45,7 +47,9 @@ export function configurePdfParseWorker() {
 
   const workerPath = resolveWorkerPath();
   if (!workerPath) {
-    throw new Error('Could not locate pdf.worker.mjs for pdf-parse.');
+    console.warn('[pdf-parse-config] Could not locate pdf.worker.mjs — continuing without explicit worker');
+    workerConfigured = true;
+    return;
   }
 
   PDFParse.setWorker(pathToFileURL(workerPath).href);
