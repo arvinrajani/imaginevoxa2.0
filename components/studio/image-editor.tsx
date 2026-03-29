@@ -367,7 +367,7 @@ export function ImageEditor({
   const [customCanvasW, setCustomCanvasW] = useState(CANVAS_W);
   const [customCanvasH, setCustomCanvasH] = useState(CANVAS_H);
   const [bgColor, setBgColor] = useState('#ffffff');
-  const [bgGradient, setBgGradient] = useState(true);
+  const [bgGradient, setBgGradient] = useState(false);
   const [bgGradientA, setBgGradientA] = useState(brandColors[0] || '#0A66C2');
   const [bgGradientB, setBgGradientB] = useState(brandColors[1] || '#0F172A');
 
@@ -531,8 +531,7 @@ export function ImageEditor({
         const imageRatio = img.width / Math.max(img.height, 1);
         const canvasRatio = canvasW / Math.max(canvasH, 1);
         const ratioDelta = Math.abs(imageRatio - canvasRatio);
-        const backgroundFit: Layer['objectFit'] =
-          ratioDelta > 0.15 ? 'contain' : 'cover';
+        const backgroundFit: Layer['objectFit'] = 'cover';
         if (isBackground) {
           w = canvasW;
           h = canvasH;
@@ -3142,6 +3141,7 @@ export function ImageEditor({
                       className="w-full h-full pointer-events-none select-none"
                       style={{ objectFit: layer.objectFit || 'contain', filter: filterStyle }}
                       draggable={false}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                   </div>
                 );
