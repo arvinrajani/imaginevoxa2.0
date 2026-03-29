@@ -5,7 +5,7 @@ import {
   syncContentSourceToChatbotKnowledge,
   syncPdfTextToChatbotKnowledge,
 } from '@/lib/chatbot/pdf-knowledge';
-import { EVIDENCE_STORAGE_BUCKET } from '@/lib/studio/pdf-extraction';
+import { EVIDENCE_STORAGE_BUCKET } from '@/lib/studio/evidence-helpers';
 import {
   isMissingTableOrRelationError,
   requireOwnedBrand,

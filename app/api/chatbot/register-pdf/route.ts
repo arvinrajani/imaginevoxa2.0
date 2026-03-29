@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   EVIDENCE_STORAGE_BUCKET,
   insertEvidenceRow,
-} from '@/lib/studio/pdf-extraction';
+} from '@/lib/studio/evidence-helpers';
 import {
   requireOwnedBrand,
   requireStudioAuth,
