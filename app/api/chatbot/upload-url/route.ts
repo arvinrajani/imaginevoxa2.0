@@ -45,6 +45,12 @@ function isStorageLimitError(error: unknown) {
 async function ensureEvidenceBucket(admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin']) {
   const existing = await admin.storage.getBucket(EVIDENCE_STORAGE_BUCKET);
   if (!existing.error && existing.data) {
+    // Update file size limit if it was created with old defaults
+    await admin.storage.updateBucket(EVIDENCE_STORAGE_BUCKET, {
+      public: false,
+      allowedMimeTypes: ['application/pdf'],
+      fileSizeLimit: 1024 * 1024 * 1024, // 1 GB
+    });
     return;
   }
 
@@ -60,6 +66,7 @@ async function ensureEvidenceBucket(admin: Awaited<ReturnType<typeof requireStud
   const created = await admin.storage.createBucket(EVIDENCE_STORAGE_BUCKET, {
     public: false,
     allowedMimeTypes: ['application/pdf'],
+    fileSizeLimit: 1024 * 1024 * 1024, // 1 GB
   });
 
   if (
