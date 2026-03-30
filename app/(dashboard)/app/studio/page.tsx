@@ -553,11 +553,7 @@ export default function StudioPage() {
           (item) =>
             item.type === 'image' &&
             typeof item.signed_url === 'string' &&
-            item.signed_url.length > 0 &&
-            (
-              (Array.isArray(item.tags) && item.tags.includes('pdf-extracted')) ||
-              (typeof item.file_path === 'string' && item.file_path.includes('/pdf-extract/'))
-            )
+            item.signed_url.length > 0
         )
       ).map((item) => ({
         id: item.id,

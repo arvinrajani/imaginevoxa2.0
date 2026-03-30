@@ -1502,9 +1502,11 @@ export async function POST(request: Request) {
 
     const effectiveLogoUrl = providedLogoUrl || brandKitLogoUrl || '';
     const hasLogo = Boolean(effectiveLogoUrl);
-    const effectiveLogoPlacement = hasLogo ? logoPlacement : 'none';
-    const shouldInfuseLogo = !isAlliancePoster && effectiveLogoPlacement === 'infuse' && hasLogo;
-    const shouldOverlayLogo = !isAlliancePoster && effectiveLogoPlacement === 'overlay' && hasLogo;
+    // When a logo is provided, always use 'infuse' — the user's uploaded logo
+    // must appear in every generated image, integrated naturally by the AI.
+    const effectiveLogoPlacement = hasLogo ? 'infuse' : 'none';
+    const shouldInfuseLogo = !isAlliancePoster && hasLogo;
+    const shouldOverlayLogo = false; // Overlay mode disabled — always infuse
     const posterFeatureBullets =
       featureBullets.length > 0
         ? featureBullets
@@ -1766,7 +1768,7 @@ ${themeSelectionGuidance ? `SELECTED VISUAL ASSETS:\n${themeSelectionGuidance}\n
 ${safeBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
 BRAND IDENTITY
 ═══════════════════════════════════════════════════
-${safeBrandName ? (hasLogo && effectiveLogoPlacement !== 'none' ? `BRAND: "${safeBrandName}" — represented by the uploaded logo image (large, prominent, 14-22% canvas width). Do NOT render brand name as separate text. The logo must be clearly visible and one of the first things noticed.` : `BRAND: "${safeBrandName}" — spell exactly, never invent alternate names.`) : ''}
+${safeBrandName ? (hasLogo && effectiveLogoPlacement !== 'none' ? `BRAND: "${safeBrandName}" — represented by the uploaded logo image (LARGE, PROMINENT, at least 20-28% canvas width). Do NOT render brand name as separate text. The logo MUST be clearly visible, sharp, and one of the FIRST things a viewer notices. It is the single most important brand element.` : `BRAND: "${safeBrandName}" — spell exactly, never invent alternate names.`) : ''}
 ${effectiveBrandColors.length ? `BRAND COLORS (MANDATORY): ${effectiveBrandColors.join(', ')}
 - 60%+ of the canvas must use these colors in backgrounds, panels, gradients.
 - Dark palette → dark cinematic scene. Warm palette → warm energetic scene.
@@ -1925,9 +1927,9 @@ ${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
           ).slice(0, 3)
         : [];
 
-    if (hasLogo && effectiveLogoPlacement !== 'none' && primaryLogoBuffer) {
-      // Send logo at high resolution so the AI can reproduce fine details,
-      // letterforms, and brand marks with pixel-perfect fidelity.
+    if (hasLogo && primaryLogoBuffer) {
+      // Always send the user's uploaded logo at high resolution so the AI
+      // can reproduce fine details, letterforms, and brand marks with fidelity.
       const logoPng = await sharp(primaryLogoBuffer)
         .resize({
           width: 1024,
@@ -2031,7 +2033,7 @@ ${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
 
       // Build an explicit manifest so the AI knows exactly what each uploaded image is
       const imageManifest = referenceImages.map((r) => {
-        if (r.role === 'logo') return `- "${r.filename}": PRIMARY BRAND LOGO — reproduce this EXACTLY, large and clearly visible (14-22% of canvas width) in the header/brand zone`;
+        if (r.role === 'logo') return `- "${r.filename}": PRIMARY BRAND LOGO — reproduce this EXACTLY, LARGE and clearly visible (20-28% of canvas width) in the header/brand zone. This is THE most important visual element.`;
         if (r.role.startsWith('partner-logo')) return `- "${r.filename}": PARTNER/SECONDARY LOGO — reproduce this EXACTLY in the top-right partner zone`;
         if (r.role === 'reference') return `- "${r.filename}": HERO PRODUCT/SCENE IMAGE — use as the main visual hero of the poster`;
         if (r.role.startsWith('reference-extra')) return `- "${r.filename}": ADDITIONAL REFERENCE IMAGE — incorporate this product/scene/element visibly in the poster composition`;
@@ -2049,18 +2051,18 @@ CRITICAL: Each image listed above is a REAL asset the user uploaded. You MUST us
 
       const logoInstruction = hasLogoRef
         ? `\n\nPRIMARY LOGO INFUSION (file: "logo.png") — NON-NEGOTIABLE:
-You have been given the brand's EXACT logo as a reference image (logo.png). This is the user's real brand mark. It MUST appear in the final image, reproduced with absolute fidelity. The logo is one of the MOST IMPORTANT elements of the poster.
+You have been given the brand's EXACT logo as a reference image (logo.png). This is the user's real brand mark. It MUST appear in the final image, reproduced with absolute fidelity. The logo is THE SINGLE MOST IMPORTANT element of the poster — it must be impossible to miss.
 
 LOGO RULES:
 1. PIXEL-PERFECT: Copy the logo EXACTLY — same shape, colors, proportions, letterforms, internal details. Do not redraw, simplify, or reinterpret it.
-2. PROMINENT SIZE: The logo MUST be large and clearly visible — at least 14-22% of canvas width. It should be immediately recognizable at LinkedIn feed size (552px wide). Never make it small or subtle.
-3. PROMINENT PLACEMENT: Place it in the theme's designated logo zone (usually top-left header). Give it 3-4% breathing room on all sides. It must be one of the first things a viewer notices.
+2. PROMINENT SIZE: The logo MUST be LARGE and clearly visible — at least 20-28% of canvas width. It should be immediately recognizable at LinkedIn feed size (552px wide). Never make it small or subtle. BIGGER IS BETTER.
+3. PROMINENT PLACEMENT: Place it in the theme's designated logo zone (usually top-left header). Give it 3-4% breathing room on all sides. It must be THE FIRST thing a viewer notices.
 4. INFUSE MODE: The logo is a commanding hero brand element — large, bold, and prominent. It anchors the brand identity of the entire poster.
 5. CLEAN CONTRAST: Place on a surface with strong contrast — dark logo on light panel or light logo on dark panel. Give it a dedicated brand zone (header fascia, glass strip, metal plate, or clean background area).
 6. CRISP RENDERING: Clean edges, no blurriness, no softening, no color bleeding. Sharp at every pixel.
 7. NO TEXT SUBSTITUTION: The logo.png IS the brand identity. Do NOT write the brand name as separate text anywhere. Do NOT add text labels, text badges, or typographic renderings of the brand name. The logo image alone represents the brand.
 
-DO NOT: Replace the logo with text • Draw a different version • Make it tiny or subtle • Turn it into a watermark • Blur or degrade it • Change its colors • Write the brand name as text alongside the logo • Hide it in a corner • Make it smaller than 14% of canvas width`
+DO NOT: Replace the logo with text • Draw a different version • Make it tiny or subtle • Turn it into a watermark • Blur or degrade it • Change its colors • Write the brand name as text alongside the logo • Hide it in a corner • Make it smaller than 20% of canvas width`
         : '';
 
       const partnerLogoInstruction = hasPartnerLogoRefs
@@ -2106,7 +2108,7 @@ Incorporate the user's selected product/scene prominently. Match colors, materia
 FINAL PRIORITY ORDER (READ THIS LAST — IT OVERRIDES CONFLICTS):
 ═══════════════════════════════════════════════════
 1) USE EVERY UPLOADED IMAGE: ALL uploaded logos and reference images MUST appear in the final poster. None may be omitted.
-2) PRIMARY LOGO (logo.png): Reproduce EXACTLY in the top-left header zone with clean contrast.
+2) PRIMARY LOGO (logo.png): This is THE highest priority element. Reproduce EXACTLY in the top-left header zone with clean contrast. Make it LARGE (20-28% canvas width), sharp, and impossible to miss. The logo must be clearly readable at LinkedIn feed thumbnail size.
 ${hasPartnerLogoRefs ? `3) PARTNER LOGOS (partner-logo-*.png): Reproduce EXACTLY in the top-right partner zone.
 4) HERO IMAGE: The selected product/scene must be the visual hero of the poster.
 5) THEME STRUCTURE: Follow the layout coordinates from the theme direction.
