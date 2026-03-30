@@ -22,7 +22,6 @@ import {
   Layers,
   CalendarDays,
   Save,
-  ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -34,8 +33,6 @@ const PLAN_LIMITS = {
   pro: { credits: 30, name: 'Pro' },
   business: { credits: 60, name: 'Pro+' }
 };
-
-const IMAGE_POST_LIMIT = 30;
 
 type Post = {
   id: string;
@@ -58,7 +55,6 @@ type DashboardData = {
   recentPosts: Post[];
   creditsUsed: number;
   creditsTotal: number;
-  imagePostsUsed: number;
   statusCounts: {
     drafts: number;
     scheduled: number;
@@ -258,7 +254,6 @@ export default function DashboardPage() {
     recentPosts: [],
     creditsUsed: 0,
     creditsTotal: PLAN_LIMITS.pro.credits,
-    imagePostsUsed: 0,
     statusCounts: { drafts: 0, scheduled: 0, posted: 0, failed: 0 }
   });
 
@@ -295,7 +290,6 @@ export default function DashboardPage() {
         { data: recentPosts },
         { count: totalPosts },
         { count: postsThisMonthCount },
-        { count: imagePostsThisMonth },
         { data: allPostsForStatus },
       ] = await Promise.all([
         // Recent posts (only 5, only needed columns)
@@ -316,13 +310,6 @@ export default function DashboardPage() {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id)
           .gte('created_at', startOfMonth),
-        // Image posts this month count
-        supabase
-          .from('posts')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('created_at', startOfMonth)
-          .not('image_url', 'is', null),
         // Status counts (only need status column)
         supabase
           .from('posts')
@@ -331,7 +318,6 @@ export default function DashboardPage() {
       ]);
 
       const postsThisMonth = postsThisMonthCount ?? 0;
-      const imagePostsUsed = imagePostsThisMonth ?? 0;
 
       const statusCounts = (allPostsForStatus || []).reduce(
         (acc: any, post: any) => {
@@ -358,7 +344,6 @@ export default function DashboardPage() {
         recentPosts,
         creditsUsed,
         creditsTotal,
-        imagePostsUsed,
         statusCounts
       });
     } catch (error) {
@@ -395,8 +380,7 @@ export default function DashboardPage() {
 
   const creditsRemaining = Math.max(0, data.creditsTotal - data.creditsUsed);
   const creditPercentage = data.creditsTotal > 0 ? (data.creditsUsed / data.creditsTotal) * 100 : 0;
-  const imageCreditsRemaining = Math.max(0, IMAGE_POST_LIMIT - data.imagePostsUsed);
-  const imageCreditsExhausted = imageCreditsRemaining <= 0;
+  const creditsExhausted = creditsRemaining <= 0;
 
   const focusActions = [
     {
@@ -476,21 +460,13 @@ export default function DashboardPage() {
       />
 
       {/* Stats Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Credits Remaining"
-          value={loading ? '...' : creditsRemaining}
+          value={loading ? '...' : `${creditsRemaining} / ${data.creditsTotal}`}
           subtitle={loading ? '' : `${data.creditsUsed} used this month`}
           icon={CreditCard}
-          color="violet"
-          loading={loading}
-        />
-        <StatCard
-          title="Image Credits"
-          value={loading ? '...' : `${imageCreditsRemaining} / ${IMAGE_POST_LIMIT}`}
-          subtitle={loading ? '' : `${data.imagePostsUsed} image posts used`}
-          icon={ImageIcon}
-          color={imageCreditsExhausted ? 'amber' : 'blue'}
+          color={creditsExhausted ? 'amber' : 'violet'}
           loading={loading}
         />
         <StatCard
@@ -516,8 +492,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Image credits exhausted banner */}
-      {!loading && imageCreditsExhausted && (
+      {/* Credits exhausted banner */}
+      {!loading && creditsExhausted && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -527,9 +503,9 @@ export default function DashboardPage() {
             <AlertCircle className="h-5 w-5 text-red-600" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-red-900">Image post credits exhausted</h3>
+            <h3 className="font-semibold text-red-900">Credits exhausted</h3>
             <p className="text-sm text-red-700 mt-1">
-              You have used all {IMAGE_POST_LIMIT} image post credits for this billing period. Posting is paused until your credits renew.
+              You have used all {data.creditsTotal} credits for this billing period. Posting is paused until your credits renew.
               {daysUntilReset !== null && (
                 <span className="font-medium"> Credits reset in {daysUntilReset} day{daysUntilReset === 1 ? '' : 's'}.</span>
               )}

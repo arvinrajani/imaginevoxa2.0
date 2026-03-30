@@ -292,7 +292,7 @@ export async function fetchBillingSnapshot() {
 
   const creditsUnlimited = planDefinition.credits < 0;
   const creditsTotal = creditsUnlimited ? -1 : planDefinition.credits;
-  const fallbackCreditsUsed = generationRequestsThisMonth ?? postsThisMonth;
+  const fallbackCreditsUsed = postsThisMonth;
   const creditsUsed = billingSource === "live" && liveCreditsUsed !== null ? liveCreditsUsed : fallbackCreditsUsed;
   const creditsRemaining =
     billingSource === "live" && liveCreditsRemaining !== null

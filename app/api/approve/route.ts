@@ -538,31 +538,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing post owner." }, { status: 400 });
     }
 
-    // --- Image post credit check (30 per billing period) ---
-    const IMAGE_POST_LIMIT = 30;
-    const hasImage = Boolean(
-      body.imageUrl ||
-      (body.imageUrls && body.imageUrls.length > 0) ||
-      post.image_url
-    );
-
-    if (hasImage) {
+    // --- Post credit check (30 per billing period) ---
+    const POST_CREDIT_LIMIT = 30;
+    {
       const admin = createAdminClient();
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const { count: imagePostCount } = await admin
+      const { count: postCount } = await admin
         .from("posts")
         .select("id", { count: "exact", head: true })
         .eq("user_id", effectiveUserId)
         .gte("created_at", startOfMonth)
-        .not("image_url", "is", null)
         .in("status", ["approved", "posted", "scheduled"]);
 
-      if ((imagePostCount ?? 0) >= IMAGE_POST_LIMIT) {
+      if ((postCount ?? 0) >= POST_CREDIT_LIMIT) {
         return NextResponse.json(
           {
-            error: "Image post credits exhausted. You have used all 30 image post credits for this billing period. Please upgrade your plan or wait for credits to renew.",
-            code: "IMAGE_CREDITS_EXHAUSTED",
+            error: "Post credits exhausted. You have used all 30 credits for this billing period. Please upgrade your plan or wait for credits to renew.",
+            code: "CREDITS_EXHAUSTED",
           },
           { status: 403 }
         );
