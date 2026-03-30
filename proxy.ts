@@ -1,6 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import crypto from 'crypto';
+
+// Edge Runtime-compatible constant-time string comparison (no Node.js crypto needed)
+function timingSafeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const encoder = new TextEncoder();
+  const aBytes = encoder.encode(a);
+  const bBytes = encoder.encode(b);
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
+}
 
 // ---------------------------------------------------------------------------
 // Public routes — no auth required
@@ -176,9 +188,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith('/api/')) {
       const cronSecret = process.env.CRON_SECRET?.trim();
       const cronHeader = request.headers.get('x-cron-secret')?.trim();
-      if (cronSecret && cronHeader &&
-          cronSecret.length === cronHeader.length &&
-          crypto.timingSafeEqual(Buffer.from(cronHeader), Buffer.from(cronSecret))) {
+      if (cronSecret && cronHeader && timingSafeStringEqual(cronHeader, cronSecret)) {
         return response;
       }
       return NextResponse.json(
