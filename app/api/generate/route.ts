@@ -181,6 +181,18 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (prompt.length > 10000) {
+      return NextResponse.json(
+        { error: "Prompt must be under 10,000 characters." },
+        { status: 400 }
+      );
+    }
+    if (pdfText.length > 100000) {
+      return NextResponse.json(
+        { error: "PDF text must be under 100,000 characters." },
+        { status: 400 }
+      );
+    }
 
     // --- Direct OpenAI generation ---
     const generatedData = await generateWithOpenAI(

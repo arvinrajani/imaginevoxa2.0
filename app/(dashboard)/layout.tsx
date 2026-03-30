@@ -165,7 +165,7 @@ export default function AppLayout({
 
     checkAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'SIGNED_OUT') {
         redirectToLogin();
         return;

@@ -17,6 +17,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
 
+    // Validate URL to prevent SSRF attacks
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return NextResponse.json({ error: 'Only HTTP/HTTPS URLs are allowed' }, { status: 400 });
+    }
+    const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.169.254', 'metadata.google.internal'];
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      blockedHosts.includes(hostname) ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal') ||
+      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)
+    ) {
+      return NextResponse.json({ error: 'URL not allowed — internal addresses are blocked' }, { status: 400 });
+    }
+
     // Fetch and extract content from the URL
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type PostRequest = {
   postId: string;
@@ -43,6 +44,31 @@ export async function POST(request: Request) {
       { error: "Post is not ready to publish." },
       { status: 400 }
     );
+  }
+
+  // --- Image post credit check (30 per billing period) ---
+  const IMAGE_POST_LIMIT = 30;
+  if (post.image_url) {
+    const admin = createAdminClient();
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const { count: imagePostCount } = await admin
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", startOfMonth)
+      .not("image_url", "is", null)
+      .in("status", ["approved", "posted", "scheduled"]);
+
+    if ((imagePostCount ?? 0) >= IMAGE_POST_LIMIT) {
+      return NextResponse.json(
+        {
+          error: "Image post credits exhausted. You have used all 30 image post credits for this billing period. Please upgrade your plan or wait for credits to renew.",
+          code: "IMAGE_CREDITS_EXHAUSTED",
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const { data: connectionRows, error: connectionError } = await supabase

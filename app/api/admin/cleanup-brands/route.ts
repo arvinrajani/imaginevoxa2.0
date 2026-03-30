@@ -1,10 +1,29 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createServerSupabase } from '@/lib/supabase/server';
+
+// Allowed admin user IDs (set ADMIN_USER_IDS env var as comma-separated UUIDs)
+function getAdminIds(): Set<string> {
+  const raw = process.env.ADMIN_USER_IDS?.trim();
+  if (!raw) return new Set();
+  return new Set(raw.split(',').map((id) => id.trim()).filter(Boolean));
+}
 
 // One-time cleanup route: GET /api/admin/cleanup-brands
 // Deletes duplicate 'My Brand' entries for ALL users, keeping the oldest per user.
 export async function GET() {
     try {
+        // Auth check — must be a signed-in admin user
+        const supabase = await createServerSupabase();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const adminIds = getAdminIds();
+        if (adminIds.size > 0 && !adminIds.has(user.id)) {
+            return NextResponse.json({ error: 'Forbidden — admin access required' }, { status: 403 });
+        }
+
         const admin = createAdminClient();
 
         // Fetch all brands named 'My Brand'

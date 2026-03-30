@@ -35,8 +35,11 @@ async function generateVariants(request: Request) {
     variantCount?: number;
   };
 
-  if (!postContent || postContent.trim().length < 50) {
+  if (!postContent || typeof postContent !== 'string' || postContent.trim().length < 50) {
     return NextResponse.json({ error: "postContent must be at least 50 characters" }, { status: 400 });
+  }
+  if (postContent.length > 50000) {
+    return NextResponse.json({ error: "postContent must be under 50,000 characters" }, { status: 400 });
   }
 
   const count = Math.min(Math.max(variantCount, 2), 5);

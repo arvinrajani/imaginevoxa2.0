@@ -638,7 +638,7 @@ IMPORTANT: Focus on extracting the ACTUAL brand colors visible in the profile, n
   }
   
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4o-mini',
     messages,
     response_format: { type: 'json_object' },
   });
@@ -683,7 +683,7 @@ async function analyzeManualBrief(brief: string, brandContext: BrandContextInput
 
   const openai = getOpenAIClient();
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4o-mini',
     messages: [
       {
         role: 'system',

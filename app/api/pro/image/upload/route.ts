@@ -42,6 +42,13 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Enforce max image size (25 MB)
+    const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
+    if (buffer.byteLength > MAX_IMAGE_SIZE) {
+      return NextResponse.json({ error: 'Image too large. Maximum size is 25 MB.' }, { status: 413 });
+    }
+
     const extension = file.name.split(".").pop() || "png";
     const filePath = `uploads/${user.id}/reference-${Date.now()}.${extension}`;
     const publicUrl = await uploadToSupabaseStorage({

@@ -21,7 +21,8 @@ import {
   Target,
   Layers,
   CalendarDays,
-  Save
+  Save,
+  ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -29,10 +30,12 @@ import { createClient } from '@/lib/supabase/client';
 
 // Plan limits
 const PLAN_LIMITS = {
-  starter: { credits: 25, name: 'Starter' },
+  starter: { credits: 30, name: 'Starter' },
   pro: { credits: 30, name: 'Pro' },
   business: { credits: 60, name: 'Pro+' }
 };
+
+const IMAGE_POST_LIMIT = 30;
 
 type Post = {
   id: string;
@@ -55,6 +58,7 @@ type DashboardData = {
   recentPosts: Post[];
   creditsUsed: number;
   creditsTotal: number;
+  imagePostsUsed: number;
   statusCounts: {
     drafts: number;
     scheduled: number;
@@ -254,6 +258,7 @@ export default function DashboardPage() {
     recentPosts: [],
     creditsUsed: 0,
     creditsTotal: PLAN_LIMITS.pro.credits,
+    imagePostsUsed: 0,
     statusCounts: { drafts: 0, scheduled: 0, posted: 0, failed: 0 }
   });
 
@@ -281,24 +286,55 @@ export default function DashboardPage() {
         .limit(1);
       const linkedinConnection = linkedinRows?.[0] ?? null;
 
-      // Get all posts by this user
-      const { data: allPosts } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      // Calculate posts this month
+      // Get all posts by this user — optimized queries
       const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const postsThisMonth = allPosts?.filter(
-        post => new Date(post.created_at) >= startOfMonth
-      ).length || 0;
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-      // Get recent posts (last 5)
-      const recentPosts = allPosts?.slice(0, 5) || [];
-      const statusCounts = (allPosts || []).reduce(
-        (acc, post) => {
+      // Parallel queries: recent posts, monthly counts, total count, status counts
+      const [
+        { data: recentPosts },
+        { count: totalPosts },
+        { count: postsThisMonthCount },
+        { count: imagePostsThisMonth },
+        { data: allPostsForStatus },
+      ] = await Promise.all([
+        // Recent posts (only 5, only needed columns)
+        supabase
+          .from('posts')
+          .select('id, prompt, title, post_content, status, created_at, posted_at, image_url, brand_id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        // Total post count
+        supabase
+          .from('posts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        // Posts this month count
+        supabase
+          .from('posts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', startOfMonth),
+        // Image posts this month count
+        supabase
+          .from('posts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', startOfMonth)
+          .not('image_url', 'is', null),
+        // Status counts (only need status column)
+        supabase
+          .from('posts')
+          .select('status')
+          .eq('user_id', user.id),
+      ]);
+
+      const postsThisMonth = postsThisMonthCount ?? 0;
+      const imagePostsUsed = imagePostsThisMonth ?? 0;
+
+      const statusCounts = (allPostsForStatus || []).reduce(
+        (acc: any, post: any) => {
           if (post.status === 'posted') acc.posted += 1;
           else if (post.status === 'scheduled') acc.scheduled += 1;
           else if (post.status === 'failed') acc.failed += 1;
@@ -308,6 +344,7 @@ export default function DashboardPage() {
         { drafts: 0, scheduled: 0, posted: 0, failed: 0 }
       );
 
+      // Hardcoded to 'pro' for testing — switch to profile?.plan for production
       const plan: 'starter' | 'pro' | 'business' = 'pro';
       const creditsTotal = PLAN_LIMITS[plan].credits;
       const creditsUsed = postsThisMonth;
@@ -316,11 +353,12 @@ export default function DashboardPage() {
         userName: profile?.full_name || user.email?.split('@')[0] || 'User',
         plan,
         postsThisMonth,
-        totalPosts: allPosts?.length || 0,
+        totalPosts: totalPosts ?? 0,
         linkedinConnected: !!linkedinConnection,
         recentPosts,
         creditsUsed,
         creditsTotal,
+        imagePostsUsed,
         statusCounts
       });
     } catch (error) {
@@ -357,6 +395,8 @@ export default function DashboardPage() {
 
   const creditsRemaining = Math.max(0, data.creditsTotal - data.creditsUsed);
   const creditPercentage = data.creditsTotal > 0 ? (data.creditsUsed / data.creditsTotal) * 100 : 0;
+  const imageCreditsRemaining = Math.max(0, IMAGE_POST_LIMIT - data.imagePostsUsed);
+  const imageCreditsExhausted = imageCreditsRemaining <= 0;
 
   const focusActions = [
     {
@@ -436,13 +476,21 @@ export default function DashboardPage() {
       />
 
       {/* Stats Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Credits Remaining"
           value={loading ? '...' : creditsRemaining}
           subtitle={loading ? '' : `${data.creditsUsed} used this month`}
           icon={CreditCard}
           color="violet"
+          loading={loading}
+        />
+        <StatCard
+          title="Image Credits"
+          value={loading ? '...' : `${imageCreditsRemaining} / ${IMAGE_POST_LIMIT}`}
+          subtitle={loading ? '' : `${data.imagePostsUsed} image posts used`}
+          icon={ImageIcon}
+          color={imageCreditsExhausted ? 'amber' : 'blue'}
           loading={loading}
         />
         <StatCard
@@ -467,6 +515,36 @@ export default function DashboardPage() {
           loading={loading}
         />
       </div>
+
+      {/* Image credits exhausted banner */}
+      {!loading && imageCreditsExhausted && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-red-200 bg-red-50 p-5 flex items-start gap-4"
+        >
+          <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-red-900">Image post credits exhausted</h3>
+            <p className="text-sm text-red-700 mt-1">
+              You have used all {IMAGE_POST_LIMIT} image post credits for this billing period. Posting is paused until your credits renew.
+              {daysUntilReset !== null && (
+                <span className="font-medium"> Credits reset in {daysUntilReset} day{daysUntilReset === 1 ? '' : 's'}.</span>
+              )}
+            </p>
+            <div className="mt-3 flex gap-3">
+              <Button asChild size="sm" className="bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90">
+                <Link href="/pricing">Upgrade Plan</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-100">
+                <Link href="/app/settings">View Billing</Link>
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -697,4 +775,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

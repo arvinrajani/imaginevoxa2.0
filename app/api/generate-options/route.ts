@@ -3,9 +3,9 @@ import { z } from "zod";
 import { createStructuredChatCompletion } from "@/lib/ai/openai";
 
 const inputSchema = z.object({
-  prompt: z.string().min(5),
+  prompt: z.string().min(5).max(10000),
   count: z.number().int().min(1).max(5).optional(),
-  tone: z.string().optional(),
+  tone: z.string().max(50).optional(),
 });
 
 type GeneratedOption = {

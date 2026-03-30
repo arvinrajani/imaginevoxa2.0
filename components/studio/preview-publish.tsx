@@ -77,6 +77,7 @@ interface PreviewPublishProps {
   brandId: string;
   draftPostId?: string | null;
   onGoToStep: (step: number) => void;
+  onPublishSuccess?: () => void;
   selectedChannels?: PostChannel[];
   primaryChannel?: PostChannel;
 }
@@ -248,6 +249,7 @@ export function PreviewPublish({
   brandId,
   draftPostId = null,
   onGoToStep,
+  onPublishSuccess,
   selectedChannels = ['linkedin'],
   primaryChannel = 'linkedin',
 }: PreviewPublishProps) {
@@ -845,6 +847,7 @@ export function PreviewPublish({
       toast.success('🎉 Published to LinkedIn!', {
         description: 'Your post is now live on LinkedIn.',
       });
+      onPublishSuccess?.();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Publishing failed';
       if (message.includes('not connected') || message.includes('Unauthorized')) {

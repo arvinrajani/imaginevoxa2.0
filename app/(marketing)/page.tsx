@@ -350,7 +350,7 @@ export default function LandingPage() {
 
     checkSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: { user?: unknown } | null) => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         router.replace('/app');
       }
@@ -772,9 +772,9 @@ export default function LandingPage() {
               price="$30"
               period="month"
               description="For consistent weekly posting"
-              credits="25 posts per month"
+              credits="30 posts per month"
               features={[
-                '25 AI-generated posts/mo',
+                '30 AI-generated posts/mo',
                 'PDF, image, and video uploads',
                 'Manual LinkedIn publishing',
                 'Basic templates',
@@ -887,7 +887,7 @@ export default function LandingPage() {
                 </Link>
               </div>
               <p className="text-gray-700 text-sm mt-4">
-                Plans start at $30/month - 25 posts included
+                Plans start at $30/month - 30 posts included
               </p>
             </div>
           </motion.div>
@@ -943,8 +943,11 @@ export default function LandingPage() {
               <ul className="space-y-3">
                 <li><Link href="/privacy" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Terms of Service</Link></li>
-                <li><span className="text-sm text-gray-500">Cookies: Used strictly for authentication</span></li>
-                <li><span className="text-sm text-gray-500">GDPR Compliant</span></li>
+                <li><Link href="/cookies" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Cookie Policy</Link></li>
+                <li><Link href="/acceptable-use" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Acceptable Use</Link></li>
+                <li><Link href="/refund" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Refund Policy</Link></li>
+                <li><Link href="/data-protection" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Data Protection &amp; GDPR</Link></li>
+                <li><Link href="/disclaimer" className="text-sm text-gray-500 hover:text-cyan-600 transition-colors">Disclaimer</Link></li>
               </ul>
             </div>
           </div>

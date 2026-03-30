@@ -32,6 +32,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "brandId is required" }, { status: 400 });
     }
 
+    // Verify user owns this brand
+    const { data: brandOwnership } = await supabase
+      .from("brands")
+      .select("id")
+      .eq("id", brandId)
+      .eq("owner_user_id", authData.user.id)
+      .single();
+    if (!brandOwnership) {
+      return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+    }
+
     // ── Fetch current brand DNA (baseline to compare against) ──
     const { data: currentDna } = await supabase
       .from("marketing_dna")

@@ -63,7 +63,7 @@ export default function DevUpgradePage() {
               <Zap className="h-6 w-6 text-white" />
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-1">Starter</h3>
-            <p className="text-sm text-gray-500 mb-4">25 posts, uploads, manual publish</p>
+            <p className="text-sm text-gray-500 mb-4">30 posts, uploads, manual publish</p>
             {loading === 'starter' ? (
               <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
             ) : success === 'starter' ? (

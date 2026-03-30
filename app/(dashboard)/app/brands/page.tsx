@@ -299,7 +299,7 @@ function BrandAssetManager({
 
             const imageIds = assets
                 .map((a: BrandAssetRow) => a.image_asset_id)
-                .filter((id): id is string => Boolean(id));
+                .filter((id: string | null | undefined): id is string => Boolean(id));
 
             let images: ImageAssetRow[] = [];
             if (imageIds.length > 0) {
@@ -866,7 +866,7 @@ function BrandManagementSection() {
             if (brandsError) throw brandsError;
             if (!brands || brands.length === 0) return [];
 
-            const brandIds = brands.map((b) => b.id);
+            const brandIds = brands.map((b: any) => b.id);
 
             // Fetch brand kits for primary colors (is_active filter omitted for compatibility)
             const { data: kits } = await supabase
@@ -885,8 +885,8 @@ function BrandManagementSection() {
 
             // Fetch image_assets for those logos
             const imageAssetIds = (assets ?? [])
-                .map((a) => (a as BrandAssetRow).image_asset_id)
-                .filter((id): id is string => Boolean(id));
+                .map((a: any) => (a as BrandAssetRow).image_asset_id)
+                .filter((id: any): id is string => Boolean(id));
 
             let imageAssets: ImageAssetRow[] = [];
             if (imageAssetIds.length > 0) {
@@ -913,7 +913,7 @@ function BrandManagementSection() {
                 imageAssetsById.set(img.id, img);
             }
 
-            return brands.map((brand) => {
+            return brands.map((brand: any) => {
                 const kit = kitsByBrand.get(brand.id);
                 const asset = assetsByBrand.get(brand.id);
                 const imageAsset = asset?.image_asset_id

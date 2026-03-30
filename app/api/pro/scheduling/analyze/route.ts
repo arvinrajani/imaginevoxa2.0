@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       competitorGaps: Array<{ day: string; time: string; opportunity: string }>;
       recommendations: string[];
     }>({
-      model: 'gpt-4o',
+      model: process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4o-mini',
       system: `You are a LinkedIn scheduling optimization expert. Analyze the user's posting history and provide optimal posting times.
       
 Return a JSON object with:

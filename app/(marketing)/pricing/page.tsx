@@ -27,10 +27,10 @@ const plans = [
     description: 'For consistent weekly posting',
     price: 30,
     period: 'month',
-    credits: 25,
-    creditsLabel: '25 posts per month',
+    credits: 30,
+    creditsLabel: '30 posts per month',
     features: [
-      '25 AI-generated posts/month',
+      '30 AI-generated posts/month',
       'PDF, image, and video uploads',
       'Copy & paste to LinkedIn',
       'Basic templates',

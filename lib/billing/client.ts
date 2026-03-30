@@ -81,9 +81,9 @@ export const PLAN_DEFINITIONS: Record<
   starter: {
     name: "Starter",
     priceMonthly: 30,
-    credits: 25,
+    credits: 30,
     features: [
-      "25 posts/month",
+      "30 posts/month",
       "PDF, image, and video uploads",
       "Manual LinkedIn publishing",
     ],
@@ -232,7 +232,7 @@ export async function fetchBillingSnapshot() {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [profileRes, postsRes, subscriptionRes, creditBalanceRes, creditTxRes, auditGenerationRes] = await Promise.all([
-    supabase.from("profiles").select("full_name, plan, created_at").eq("id", user.id).maybeSingle<ProfileRow>(),
+    supabase.from("profiles").select("full_name, plan, created_at").eq("id", user.id).maybeSingle(),
     supabase
       .from("posts")
       .select("id", { count: "exact", head: true })
@@ -244,12 +244,12 @@ export async function fetchBillingSnapshot() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle<SubscriptionRow>(),
+      .maybeSingle(),
     supabase
       .from("credit_balances")
       .select("credits_remaining, credits_used_this_period, period_end")
       .eq("user_id", user.id)
-      .maybeSingle<CreditBalanceRow>(),
+      .maybeSingle(),
     supabase
       .from("credit_transactions")
       .select("id, transaction_type, amount, balance_after, description, created_at")

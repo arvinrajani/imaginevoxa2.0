@@ -61,7 +61,8 @@ export async function POST(request: Request) {
   try {
     const secret = process.env.CRON_SECRET?.trim();
     const header = request.headers.get("x-cron-secret")?.trim();
-    if (!secret || !header || header !== secret) {
+    if (!secret || !header || secret.length !== header.length ||
+        !require('crypto').timingSafeEqual(Buffer.from(header), Buffer.from(secret))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

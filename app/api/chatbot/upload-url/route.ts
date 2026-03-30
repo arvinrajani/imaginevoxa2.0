@@ -11,7 +11,7 @@ import {
 const requestSchema = z.object({
   brandId: z.string().trim().min(1, 'brandId is required'),
   fileName: z.string().trim().min(1, 'fileName is required'),
-  fileSize: z.number().int().positive().max(1024 * 1024 * 1024).optional(),
+  fileSize: z.number().int().positive().max(50 * 1024 * 1024).optional(),
   contentType: z.string().trim().optional(),
 });
 
@@ -49,7 +49,7 @@ async function ensureEvidenceBucket(admin: Awaited<ReturnType<typeof requireStud
     await admin.storage.updateBucket(EVIDENCE_STORAGE_BUCKET, {
       public: false,
       allowedMimeTypes: ['application/pdf'],
-      fileSizeLimit: 1024 * 1024 * 1024, // 1 GB
+      fileSizeLimit: 50 * 1024 * 1024, // 50 MB
     });
     return;
   }
@@ -66,7 +66,7 @@ async function ensureEvidenceBucket(admin: Awaited<ReturnType<typeof requireStud
   const created = await admin.storage.createBucket(EVIDENCE_STORAGE_BUCKET, {
     public: false,
     allowedMimeTypes: ['application/pdf'],
-    fileSizeLimit: 1024 * 1024 * 1024, // 1 GB
+    fileSizeLimit: 50 * 1024 * 1024, // 50 MB
   });
 
   if (

@@ -67,12 +67,12 @@ interface ImageCreatorProps {
   confirmedPostHeadline?: string;
   confirmedPostImagePrompt?: string;
   onImageConfirmed?: (imageUrl: string) => void;
-  /** Called whenever a new image is generated — auto-syncs URL to parent without navigating */
+  /** Called whenever a new image is generated â€” auto-syncs URL to parent without navigating */
   onImageGenerated?: (imageUrl: string) => void;
   /** Called when user edits brand colors manually */
   onBrandColorsChange?: (colors: string[]) => void;
   /** Pre-loaded PDF-extracted images from the parent's evidence state. When supplied the
-   *  internal fetch is skipped — images stay in sync whenever evidence changes. */
+   *  internal fetch is skipped â€” images stay in sync whenever evidence changes. */
   pdfImages?: PdfImageReference[];
   /** Selected PDFs in the current Studio run so the image panel can show missing-visual status. */
   selectedPdfs?: SelectedPdfSource[];
@@ -142,9 +142,9 @@ function sanitizeVisualText(value: string | null | undefined, maxLength = 160) {
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
     .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
     .replace(/[\u2013\u2014\u2212]/g, '-')
-    .replace(/[\u2022\u00B7•]/g, ' ')
-    .replace(/[✓✔✅☑]/g, ' ')
-    .replace(/[👉➜➤➡]/g, ' ')
+    .replace(/[\u2022\u00B7â€¢]/g, ' ')
+    .replace(/[âœ“âœ”âœ…â˜‘]/g, ' ')
+    .replace(/[ðŸ‘‰âžœâž¤âž¡]/g, ' ')
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
     .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -352,7 +352,7 @@ function getPdfImageMetaLabel(image: {
 
   return {
     kindLabel,
-    sizeLabel: sizeHint ? `${sizeHint.width}×${sizeHint.height}` : null,
+    sizeLabel: sizeHint ? `${sizeHint.width}Ã—${sizeHint.height}` : null,
   };
 }
 
@@ -1029,10 +1029,10 @@ function derivePosterBenefitLines(...sources: Array<string | undefined>) {
     value = sanitizeVisualText(value, 96);
     const cleaned = value
       .replace(/^[-*.\d)\s]+/, '')
-      .replace(/^[•✓✔]+\s*/, '')
+      .replace(/^[â€¢âœ“âœ”]+\s*/, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .replace(/^["'“”]+|["'“”]+$/g, '');
+      .replace(/^["'â€œâ€]+|["'â€œâ€]+$/g, '');
     const key = cleaned.toLowerCase();
     if (
       !cleaned ||
@@ -1186,21 +1186,21 @@ function deriveThemeLayoutHint(themeId: ThemeId) {
     case 'product-hero':
       return 'Keep the product as the clear hero, give it premium staging, and reserve a calm brand zone instead of crowding the frame with labels.';
     case 'launch-banner':
-      return 'Use a bold announcement structure: brand zone at the top, a dominant centered headline, a short tagline below it, a single CTA, and a footer — nothing else should compete with the headline.';
+      return 'Use a bold announcement structure: brand zone at the top, a dominant centered headline, a short tagline below it, a single CTA, and a footer â€” nothing else should compete with the headline.';
     case 'sector-collage':
       return 'Use a top header band with the brand lockup and centered headline, three equal image panels below with sector labels, and a clean footer strip.';
     case 'offer-card':
-      return 'Use a left text zone (brand, offer badge, headline, tagline, CTA) and a right hero image panel — keep both zones uncluttered with clear visual separation.';
+      return 'Use a left text zone (brand, offer badge, headline, tagline, CTA) and a right hero image panel â€” keep both zones uncluttered with clear visual separation.';
     case 'comparison-board':
-      return 'Use a top header with brand and headline, then two equal left-and-right comparison panels with disciplined labels and evidence — keep the layout symmetrical and analytical.';
+      return 'Use a top header with brand and headline, then two equal left-and-right comparison panels with disciplined labels and evidence â€” keep the layout symmetrical and analytical.';
     case 'premium-editorial':
-      return 'Use a dramatic left editorial image panel, a deep dark right column for the headline and supporting text, and a subtle brand/footer zone — every element should feel magazine-quality.';
+      return 'Use a dramatic left editorial image panel, a deep dark right column for the headline and supporting text, and a subtle brand/footer zone â€” every element should feel magazine-quality.';
     case 'brand-story':
       return 'Use a large circular portrait on the left, a brand lockup at the top-right, a narrative headline and supporting copy on the right, and a warm ambient footer.';
     case 'job-posting':
       return 'Use a bold accent header with a "WE\'RE HIRING" label, the brand mark at top-left, the role title and description on the left, a workplace image on the right, an Apply Now CTA, and a branded footer.';
     case 'hiring-banner':
-      return 'Use a top brand bar, a centered "WE\'RE HIRING" pill badge, a dominant role headline, a short tagline, a "View Openings" CTA, and a footer — keep the composition bold and centered.';
+      return 'Use a top brand bar, a centered "WE\'RE HIRING" pill badge, a dominant role headline, a short tagline, a "View Openings" CTA, and a footer â€” keep the composition bold and centered.';
     case 'team-spotlight':
       return 'Use a top header bar with the brand mark, a large circular team image on the left, a "JOIN OUR TEAM" label and headline on the right, supporting values, a CTA, and a footer.';
     case 'career-growth':
@@ -1582,9 +1582,9 @@ function ThemePreviewMini({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ThemePreviewLarge — full-size right-panel layout mockup per theme
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ThemePreviewLarge â€” full-size right-panel layout mockup per theme
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ThemePreviewLargeProps {
   themeId: ThemeId;
   previewAspectClass: string;
@@ -2198,7 +2198,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Alliance Poster ──────────────────────────────────────────────────────────
+  // â”€â”€ Alliance Poster â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Legacy duplicate Alliance preview branch kept inert for safe cleanup.
   if ((themeId as string) === '__legacy-alliance-preview') {
     return (
@@ -2277,7 +2277,7 @@ function ThemePreviewLarge({
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-lg font-black text-white shadow"
                   style={{ backgroundColor: previewPalette.support }}
                 >
-                  ✓
+                  âœ“
                 </div>
                 <p className="text-[13px] font-semibold italic leading-tight text-white">{line}</p>
               </div>
@@ -2293,7 +2293,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Clean Brand ──────────────────────────────────────────────────────────────
+  // â”€â”€ Clean Brand â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'clean-brand') {
     const cleanTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 3);
     return (
@@ -2359,7 +2359,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Brand Story ──────────────────────────────────────────────────────────────
+  // â”€â”€ Brand Story â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'brand-story') {
     const storyHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 3);
     const storyTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 4);
@@ -2423,7 +2423,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Product Hero ─────────────────────────────────────────────────────────────
+  // â”€â”€ Product Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'product-hero') {
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.surface }}>
@@ -2473,7 +2473,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Knowledge Visual ─────────────────────────────────────────────────────────
+  // â”€â”€ Knowledge Visual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'knowledge-visual') {
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
@@ -2527,7 +2527,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Datasheet Frame ──────────────────────────────────────────────────────────
+  // â”€â”€ Datasheet Frame â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'datasheet-frame') {
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.surface }}>
@@ -2574,7 +2574,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Proof Stack ──────────────────────────────────────────────────────────────
+  // â”€â”€ Proof Stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'proof-stack') {
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`}>
@@ -2621,7 +2621,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Launch Banner ────────────────────────────────────────────────────────────
+  // â”€â”€ Launch Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'launch-banner') {
     return (
       <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
@@ -2678,7 +2678,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Sector Collage ───────────────────────────────────────────────────────────
+  // â”€â”€ Sector Collage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'sector-collage') {
     const sectorLabels = (
       safeFeatureLines.length > 0
@@ -2734,7 +2734,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Offer Card ───────────────────────────────────────────────────────────────
+  // â”€â”€ Offer Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'offer-card') {
     const offerTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 2);
     return (
@@ -2785,7 +2785,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Comparison Board ─────────────────────────────────────────────────────────
+  // â”€â”€ Comparison Board â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'comparison-board') {
     const comparisonBullets = (
       safeFeatureLines.length > 0
@@ -2866,7 +2866,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Premium Editorial ────────────────────────────────────────────────────────
+  // â”€â”€ Premium Editorial â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'premium-editorial') {
     const editorialHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 3);
     const editorialTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 4);
@@ -2930,7 +2930,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Job Posting ──────────────────────────────────────────────────────────────
+  // â”€â”€ Job Posting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'job-posting') {
     const jpHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 2);
     const jpTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 3);
@@ -2981,7 +2981,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Hiring Banner ─────────────────────────────────────────────────────────────
+  // â”€â”€ Hiring Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'hiring-banner') {
     const hbHeadlineLines = fitPreviewText(safeHeadline, [16, 18, 20, 22], 2);
     const hbTaglineLines = fitPreviewText(safeTagline, [26, 30, 34], 2);
@@ -3034,7 +3034,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Team Spotlight ────────────────────────────────────────────────────────────
+  // â”€â”€ Team Spotlight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'team-spotlight') {
     const tsHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22], 2);
     const tsTaglineLines = fitPreviewText(safeTagline, [22, 26, 30], 3);
@@ -3095,7 +3095,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Career Growth ─────────────────────────────────────────────────────────────
+  // â”€â”€ Career Growth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (themeId === 'career-growth') {
     const cgHeadlineLines = fitPreviewText(safeHeadline, [18, 20, 22, 24], 2);
     const cgTaglineLines = fitPreviewText(safeTagline, [24, 28, 32], 2);
@@ -3144,7 +3144,7 @@ function ThemePreviewLarge({
     );
   }
 
-  // ── Default / AI Guided ──────────────────────────────────────────────────────
+  // â”€â”€ Default / AI Guided â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className={`${previewAspectClass} relative overflow-hidden`} style={{ backgroundColor: previewPalette.bgStart }}>
       <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(135deg, ${previewPalette.bgStart} 0%, ${previewPalette.bgEnd} 100%)` }} />
@@ -3310,7 +3310,7 @@ export function ImageCreator({
   const [imageAspect, setImageAspect] = useState<'landscape' | 'square' | 'portrait'>('landscape');
   const [referenceSelectionTouched, setReferenceSelectionTouched] = useState(false);
 
-  // Theme slot image assignments (maps slot id → image URL)
+  // Theme slot image assignments (maps slot id â†’ image URL)
   const [slotAssignments, setSlotAssignments] = useState<Record<string, string | null>>({});
 
   // Reference image state (fetched from URL)
@@ -3609,7 +3609,7 @@ export function ImageCreator({
         );
       })
       .catch(() => {
-        // Non-critical — silently absorb
+        // Non-critical â€” silently absorb
       })
       .finally(() => setIsFetchingPdfImages(false));
   }, [brandId, propPdfImages]);
@@ -3850,7 +3850,7 @@ export function ImageCreator({
     [customPrompt]
   );
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Logo Upload ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -3966,7 +3966,7 @@ export function ImageCreator({
     e.target.value = '';
   }, []);
 
-  // ── Per-slot image upload handler ──
+  // â”€â”€ Per-slot image upload handler â”€â”€
   const handleSlotImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const targetSlot = slotUploadTarget;
@@ -3994,7 +3994,7 @@ export function ImageCreator({
     setTimeout(() => slotUploadInputRef.current?.click(), 0);
   }, []);
 
-  // ── Upload multiple additional reference images (AI Guided) ──
+  // â”€â”€ Upload multiple additional reference images (AI Guided) â”€â”€
   const handleAdditionalImagesUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -4013,7 +4013,7 @@ export function ImageCreator({
     for (const file of filesToProcess) {
       if (!file.type.startsWith('image/')) continue;
       if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} is over 10MB — skipped`);
+        toast.error(`${file.name} is over 10MB â€” skipped`);
         continue;
       }
       const reader = new FileReader();
@@ -4032,7 +4032,7 @@ export function ImageCreator({
     e.target.value = '';
   }, [additionalReferenceImages.length]);
 
-  // ── Add image from PDF/fetched to additional references ──
+  // â”€â”€ Add image from PDF/fetched to additional references â”€â”€
   const addToAdditionalReferences = useCallback((url: string) => {
     const current = (selectedReferenceImage ? 1 : 0) + additionalReferenceImages.length;
     if (current >= maxReferenceImages) {
@@ -4051,7 +4051,7 @@ export function ImageCreator({
     setAdditionalReferenceImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // ── Unified image selection handler (for any source tab) ──
+  // â”€â”€ Unified image selection handler (for any source tab) â”€â”€
   const handleUnifiedImageSelect = useCallback((url: string) => {
     // Deselect if already selected
     if (selectedReferenceImage === url) {
@@ -4079,7 +4079,7 @@ export function ImageCreator({
     }
   }, [selectedReferenceImage, additionalReferenceImages, maxReferenceImages]);
 
-  // ── Unified upload handler (any images, respects slot limit) ──
+  // â”€â”€ Unified upload handler (any images, respects slot limit) â”€â”€
   const handleUnifiedUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -4095,7 +4095,7 @@ export function ImageCreator({
     for (const file of filesToProcess) {
       if (!file.type.startsWith('image/')) continue;
       if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} is over 10MB — skipped`);
+        toast.error(`${file.name} is over 10MB â€” skipped`);
         continue;
       }
       const reader = new FileReader();
@@ -4120,7 +4120,7 @@ export function ImageCreator({
     e.target.value = '';
   }, [selectedReferenceImage, additionalReferenceImages.length, maxReferenceImages]);
 
-  // ── Fetch Images from URL ──
+  // â”€â”€ Fetch Images from URL â”€â”€
   const handlePdfUploadSelection = useCallback(
     async (files: File[]) => {
       if (!onUploadPdfFiles || files.length === 0) return;
@@ -4259,7 +4259,7 @@ export function ImageCreator({
   }, [selectedPdfImage, selectedReferenceImage, selectedSiteImage]);
   const autoBackdropHintRef = useRef('');
 
-  // ── Generate Image (supports batch) ──
+  // â”€â”€ Generate Image (supports batch) â”€â”€
   const handleGenerate = useCallback(async () => {
     const revisionTarget = revisionTargetRef.current;
     revisionTargetRef.current = null;
@@ -4484,7 +4484,7 @@ export function ImageCreator({
           const rawImageUrl = (typeof data.baseUrl === 'string' && data.baseUrl.trim()) || data.url;
           let finalImageUrl: string = data.url;
 
-          // AI integrates the logo directly via the edit endpoint —
+          // AI integrates the logo directly via the edit endpoint â€”
           // no additional client-side blend needed (prevents double-logo).
           const shouldApplyBlend = false;
 
@@ -4571,7 +4571,7 @@ export function ImageCreator({
 
     if (successCount > 0 && lastImageUrl) {
       if (successCount > 1) {
-        toast.success(`${successCount} ${activeTheme.label} images generated — pick your favourite.`);
+        toast.success(`${successCount} ${activeTheme.label} images generated â€” pick your favourite.`);
       } else if (count === 1) {
         toast.success(`${activeTheme.label} image generated.`);
       } else {
@@ -4623,7 +4623,7 @@ export function ImageCreator({
     selectedReferenceSummary,
   ]);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Confirm Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Confirm ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   const handleRegenerateComponent = useCallback((key: VisionComponentKey) => {
     revisionTargetRef.current = key;
     setArtifactCompareView('after');
@@ -4728,7 +4728,7 @@ export function ImageCreator({
   useEffect(() => {
     autoBackdropHintRef.current = autoBackdropHint;
   }, [autoBackdropHint]);
-  // ── Smart Vision Auto-Compose ──────────────────────────────────────────────
+  // â”€â”€ Smart Vision Auto-Compose â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const selectionDrivenVisionLines = useMemo(() => {
     const lines: string[] = [];
     const safeBusinessFocus = sanitizeVisualText(analysisProfile?.businessFocus || '', 120);
@@ -5470,7 +5470,7 @@ export function ImageCreator({
   }, [effectivePdfImages, previewedPdfImageId, selectedPdfImage]);
 
   // Detect if the custom prompt mentions a PDF image by title so we can suggest auto-selecting it.
-  // Match on any word ≥4 chars from an image title appearing in the prompt (case-insensitive).
+  // Match on any word â‰¥4 chars from an image title appearing in the prompt (case-insensitive).
   const promptMatchedPdfImage = useMemo(() => {
     if (!customPrompt.trim() || effectivePdfImages.length === 0) return null;
     const promptLower = normalizedPrompt;
@@ -5479,7 +5479,7 @@ export function ImageCreator({
     for (const img of effectivePdfImages) {
       const words = img.title
         .toLowerCase()
-        .replace(/[•·—–]/g, ' ')
+        .replace(/[â€¢Â·â€”â€“]/g, ' ')
         .split(/\s+/)
         .filter((w) => w.length >= 4);
       if (words.length === 0) continue;
@@ -5500,7 +5500,7 @@ export function ImageCreator({
 
   return (
     <div className="grid lg:grid-cols-[380px_1fr] gap-6">
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â LEFT: Form Controls Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â LEFT: Form Controls ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */}
       <div className="flex flex-col lg:max-h-[calc(100vh-200px)]">
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 lg:pr-2 scrollbar-thin pb-2">
         {!hasPostContext && (
@@ -5517,7 +5517,7 @@ export function ImageCreator({
           </Card>
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Post Context (if available) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Post Context (if available) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {confirmedPostText && (
           <Card className="p-3.5 bg-blue-50 border border-blue-200 shadow-sm">
             <div className="flex items-start gap-2.5">
@@ -5535,7 +5535,7 @@ export function ImageCreator({
           </Card>
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 1. Logo Upload Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 1. Logo Upload ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {hasPostContext && (
           <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3.5 py-2.5 flex items-center gap-3">
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -5625,7 +5625,7 @@ export function ImageCreator({
               ))}
             </div>
 
-            {/* Selected theme indicator — minimal since right panel shows preview */}
+            {/* Selected theme indicator â€” minimal since right panel shows preview */}
             <div className="rounded-lg border border-fuchsia-200/60 bg-fuchsia-50/40 px-3 py-2 flex items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-fuchsia-500 flex-shrink-0" />
               <p className="text-[11px] text-fuchsia-700 font-medium truncate">{activeTheme.label}: {activeTheme.summary}</p>
@@ -5635,7 +5635,7 @@ export function ImageCreator({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Stage 1 · Theme Breakdown
+                    Stage 1 Â· Theme Breakdown
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-600">
                     Review each theme component, then accept or swap it before you generate.
@@ -5673,7 +5673,7 @@ export function ImageCreator({
                       <div className="mt-2 space-y-1">
                         {entry.option.details.slice(0, 4).map((detail) => (
                           <p key={`${entry.key}-${detail}`} className="text-[11px] leading-5 text-slate-700">
-                            <span className="mr-1 text-fuchsia-500">•</span>
+                            <span className="mr-1 text-fuchsia-500">â€¢</span>
                             {detail}
                           </p>
                         ))}
@@ -5716,7 +5716,7 @@ export function ImageCreator({
               </div>
             </div>
 
-            {/* ── Theme Palette & Brand Colors ── */}
+            {/* â”€â”€ Theme Palette & Brand Colors â”€â”€ */}
             <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
               {/* Live palette gradient strip */}
               <div className="space-y-2">
@@ -5767,7 +5767,7 @@ export function ImageCreator({
                 <div className="flex-1 h-px bg-slate-100" />
               </div>
 
-              {/* Brand color swatches — always editable */}
+              {/* Brand color swatches â€” always editable */}
               <div className="space-y-2.5">
                 <div className="grid gap-2 sm:grid-cols-3">
                   {paletteQuickActions.map((action) => {
@@ -5836,7 +5836,7 @@ export function ImageCreator({
                   )}
                 </div>
 
-                {/* Inline color picker — always visible when editing or no colors */}
+                {/* Inline color picker â€” always visible when editing or no colors */}
                 {(isEditingColors || normalizedBrandColors.length === 0) && normalizedBrandColors.length < 8 && (
                   <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/50 p-2">
                     <input
@@ -5915,7 +5915,7 @@ export function ImageCreator({
               </div>
             </div>
 
-            {/* ── Theme Image Slot Pickers ──────────────────────────────── */}
+            {/* â”€â”€ Theme Image Slot Pickers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             {(themeUsesHeroReference || additionalThemeSlots.length > 0 || (isAiGuidedTheme && Boolean(selectedReferenceImage))) && (
               <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/30 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -5953,8 +5953,8 @@ export function ImageCreator({
                           </p>
                           <p className="mt-1 text-[10px] text-indigo-600">
                             {themeUsesHeroReference
-                              ? `Reference image active — AI will use this as hero for ${activeTheme.label}.`
-                              : 'Reference image active — AI will use this as hero.'}
+                              ? `Reference image active â€” AI will use this as hero for ${activeTheme.label}.`
+                              : 'Reference image active â€” AI will use this as hero.'}
                           </p>
                         </div>
                         <Button
@@ -6408,7 +6408,7 @@ export function ImageCreator({
             )}
           </div>
 
-          {/* ── Theme Details (merged) ── */}
+          {/* â”€â”€ Theme Details (merged) â”€â”€ */}
           <div className="flex items-center gap-2 pt-1">
             <div className="flex-1 h-px bg-slate-200" />
             <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Footer & Details</span>
@@ -6482,7 +6482,7 @@ export function ImageCreator({
         </Card>
 
 
-        {/* ── Reference Images — Unified (Upload / PDF / URL) ── */}
+        {/* â”€â”€ Reference Images â€” Unified (Upload / PDF / URL) â”€â”€ */}
         <Card className="p-4 space-y-3 bg-white border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors">
           {/* Header */}
           <div className="flex items-center justify-between gap-2">
@@ -6536,7 +6536,7 @@ export function ImageCreator({
               <p className="text-sm font-medium text-indigo-700">
                 {maxReferenceImages > 1 ? 'Upload images' : 'Upload image'}
               </p>
-              <p className="text-[10px] text-indigo-400">PNG, JPG, or WebP — up to 10MB</p>
+              <p className="text-[10px] text-indigo-400">PNG, JPG, or WebP â€” up to 10MB</p>
             </button>
           )}
 
@@ -6718,9 +6718,9 @@ export function ImageCreator({
           )}
         </Card>
 
-        {/* ── 2. Your Vision / Creative Prompt ── */}
+        {/* â”€â”€ 2. Your Vision / Creative Prompt â”€â”€ */}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 2. Your Vision / Creative Prompt Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 2. Your Vision / Creative Prompt ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {/* Your Vision */}
         <Card className={`p-3.5 space-y-2.5 bg-white border shadow-sm ${isAiGuidedTheme ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2">
@@ -6764,7 +6764,7 @@ export function ImageCreator({
             <div className="mt-2 space-y-1.5">
               {selectionDrivenVisionLines.slice(0, 6).map((line, index) => (
                 <p key={`${line}-${index}`} className="text-[11px] leading-5 text-slate-800">
-                  <span className="mr-1 text-violet-500">•</span>
+                  <span className="mr-1 text-violet-500">â€¢</span>
                   {line}
                 </p>
               ))}
@@ -6785,7 +6785,7 @@ export function ImageCreator({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-                  Stage 2 · My Vision
+                  Stage 2 Â· My Vision
                 </p>
                 <p className="mt-1 text-[11px] leading-5 text-slate-600">
                   This brief grows as you approve components. Edit any field to override the auto direction.
@@ -6928,7 +6928,7 @@ export function ImageCreator({
           </p>
         </Card>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 3. Text / Wording Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 3. Text / Wording ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {/* Text on Image */}
         <Card className="p-3.5 space-y-2.5 bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2">
@@ -6995,7 +6995,7 @@ export function ImageCreator({
           </div>
         </Card>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ 6. Image Size Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 6. Image Size ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {/* Image Size */}
         <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 space-y-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Image Size</p>
@@ -7021,9 +7021,9 @@ export function ImageCreator({
           </div>
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Brand Colors Preview Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Brand Colors Preview ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         </div>
-        {/* ── Sticky Generate Footer ── */}
+        {/* â”€â”€ Sticky Generate Footer â”€â”€ */}
         <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/50 pt-3 pb-1 px-1 space-y-2 rounded-b-xl">
 
         {/* Compact palette strip in footer */}
@@ -7036,8 +7036,8 @@ export function ImageCreator({
           />
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Generate Button Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        {/* ── Theme & Aspect Label ── */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Generate Button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+        {/* â”€â”€ Theme & Aspect Label â”€â”€ */}
         <div className="flex items-center gap-2">
           <Sparkles className="w-3 h-3 text-purple-500" />
           <p className="text-[11px] font-semibold text-slate-700 truncate">
@@ -7116,7 +7116,7 @@ export function ImageCreator({
           ) : (
             <>
               <Sparkles className="w-5 h-5 mr-2" />
-              Generate Image — {activeTheme.label}
+              Generate Image â€” {activeTheme.label}
             </>
           )}
         </Button>
@@ -7129,9 +7129,9 @@ export function ImageCreator({
         </div>
       </div>
 
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â RIGHT: Preview / Gallery Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â RIGHT: Preview / Gallery ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */}
       <div className="space-y-4">
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Main Preview Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Main Preview ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         <Card className="overflow-hidden border border-slate-200/60 bg-white shadow-xl shadow-slate-200/50 rounded-2xl">
           {/* Preview header bar */}
           <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-slate-50 via-white to-purple-50/40 border-b border-slate-100">
@@ -7165,7 +7165,7 @@ export function ImageCreator({
               <p className="mt-6 text-base font-semibold text-white">
                 {isApplyingBlend ? 'Applying blend mode...' : `Creating your ${activeTheme.label} image...`}
               </p>
-              <p className="text-sm text-purple-300/70 mt-1">Usually takes 10–20 seconds</p>
+              <p className="text-sm text-purple-300/70 mt-1">Usually takes 10â€“20 seconds</p>
 
               <div className="mt-5 flex items-center gap-3 text-xs text-purple-400/80">
                 <span className="flex items-center gap-1.5 rounded-full bg-purple-500/20 px-2.5 py-1">
@@ -7181,7 +7181,7 @@ export function ImageCreator({
             </div>
           ) : selectedImage !== null && generatedImages[selectedImage] ? (
             <div className="relative group">
-              {/* Full-size image display — no aspect ratio constraint so the image shows completely */}
+              {/* Full-size image display â€” no aspect ratio constraint so the image shows completely */}
               <div className="relative w-full flex items-center justify-center">
                 <img
                   src={generatedImages[selectedImage]}
@@ -7242,122 +7242,7 @@ export function ImageCreator({
           )}
         </Card>
 
-        {selectedArtifactMeta && (
-          <Card className="p-3 border border-sky-200/70 bg-sky-50/50 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-sky-800">Stage 3 · AI Enhancement Pass</p>
-                <p className="mt-1 text-[11px] leading-5 text-sky-900">{selectedArtifactMeta.rationale}</p>
-              </div>
-              <div className="flex items-center gap-1 rounded-lg border border-sky-200 bg-white p-1">
-                <button
-                  type="button"
-                  onClick={() => setArtifactCompareView('before')}
-                  className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
-                    artifactCompareView === 'before'
-                      ? 'bg-sky-600 text-white'
-                      : 'text-slate-600 hover:bg-sky-50'
-                  }`}
-                >
-                  Before
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setArtifactCompareView('after')}
-                  className={`rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
-                    artifactCompareView === 'after'
-                      ? 'bg-sky-600 text-white'
-                      : 'text-slate-600 hover:bg-sky-50'
-                  }`}
-                >
-                  After
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-sky-200 bg-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={artifactCompareView === 'before' ? selectedArtifactMeta.baseUrl : selectedArtifactMeta.finalUrl}
-                alt={artifactCompareView === 'before' ? 'Before enhancement' : 'After enhancement'}
-                className="w-full h-auto block"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
-              <span>{artifactCompareView === 'before' ? 'Before: raw/base composition pass' : 'After: enhanced final output'}</span>
-              {selectedArtifactMeta.revisionTarget && (
-                <Badge className="border border-sky-200 bg-white text-sky-700 text-[9px]">
-                  Revision focus: {VISION_COMPONENT_LABELS[selectedArtifactMeta.revisionTarget]}
-                </Badge>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Regenerate This Element
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {themeVisionEntries.map((entry) => (
-                  <button
-                    key={`regen-${entry.key}`}
-                    type="button"
-                    onClick={() => handleRegenerateComponent(entry.key)}
-                    disabled={isGenerating || isApplyingBlend}
-                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition-colors hover:border-sky-200 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {entry.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {latestBlendPreview && (
-              <div className="rounded-lg border border-sky-100 bg-white/70 px-3 py-2 text-[10px] leading-5 text-slate-600">
-                Additional blend pass: {BLEND_MODE_OPTIONS.find((mode) => mode.id === latestBlendPreview.mode)?.label || 'Blend'}.
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Previous Generations Thumbnails Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        {generatedImages.length > 1 && (
-          <Card className="p-3 border border-slate-200/60 bg-white rounded-xl shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5 flex items-center gap-1.5">
-              <Eye className="w-3 h-3" />
-              All Generations ({generatedImages.length})
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {generatedImages.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedImage(idx)}
-                  className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-[4/3] ${
-                    selectedImage === idx
-                      ? 'border-purple-400 shadow-lg shadow-purple-200/50 ring-2 ring-purple-300/40 scale-[1.02]'
-                      : 'border-slate-200 hover:border-purple-300 hover:shadow-md'
-                  }`}
-                >
-                  <img
-                    src={img}
-                    alt={`Generation ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  {selectedImage === idx && (
-                    <div className="absolute inset-0 bg-purple-600/15 flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-purple-500 drop-shadow-lg" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-1 right-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[8px] font-bold text-white backdrop-blur-sm">
-                    #{idx + 1}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Confirm & Continue Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Confirm & Continue ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {selectedImage !== null && generatedImages[selectedImage] && (
           <Button
             size="lg"
@@ -7370,7 +7255,7 @@ export function ImageCreator({
           </Button>
         )}
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tips Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Tips ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
         {generatedImages.length === 0 && !isGenerating && !isApplyingBlend && (
           <Card className="p-4 bg-gradient-to-br from-purple-50 via-fuchsia-50/60 to-pink-50/40 border border-purple-200/50 shadow-sm rounded-xl">
             <h4 className="font-bold text-[10px] text-purple-700 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
@@ -7380,7 +7265,7 @@ export function ImageCreator({
             <ul className="space-y-2 text-xs text-purple-800">
               <li className="flex items-start gap-2.5">
                 <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">1</span>
-                <span>Keep headlines short and punchy — 3 to 8 words work best</span>
+                <span>Keep headlines short and punchy â€” 3 to 8 words work best</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-200/60 text-[8px] font-bold text-purple-600">2</span>

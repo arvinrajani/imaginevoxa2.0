@@ -55,7 +55,7 @@ const templates = [
 
 // Plan configurations
 const PLAN_LIMITS = {
-  starter: { credits: 25, name: 'Starter', canPostToLinkedIn: false },
+  starter: { credits: 30, name: 'Starter', canPostToLinkedIn: false },
   pro: { credits: 30, name: 'Pro', canPostToLinkedIn: true },
   business: { credits: 60, name: 'Pro+', canPostToLinkedIn: true }
 };

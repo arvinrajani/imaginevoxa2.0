@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     if (type === 'post-template') {
       // Generate a custom LinkedIn post template
       const result = await createStructuredChatCompletion({
-        model: 'gpt-4o',
+        model: process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4o-mini',
         system: `You are a LinkedIn content design expert. Generate a professional post template configuration based on the user's description. Return a template that includes layout, example content, and an image prompt.`,
         user: `Create a custom LinkedIn post template with these requirements:
 Description: ${description || 'Professional announcement'}
@@ -79,7 +79,7 @@ Generate a complete template with:
     if (type === 'stamp-suggestions') {
       // Generate AI stamp design suggestions
       const result = await createStructuredChatCompletion({
-        model: 'gpt-4o',
+        model: process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4o-mini',
         system: `You are a brand identity design expert. Generate professional brand stamp/watermark design suggestions based on the user's brand identity. Each suggestion should be distinct and suited for LinkedIn content.`,
         user: `Generate 4 unique brand stamp suggestions for:
 Industry: ${industry || 'Technology'}

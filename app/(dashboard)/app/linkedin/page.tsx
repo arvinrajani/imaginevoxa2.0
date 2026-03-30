@@ -239,9 +239,9 @@ export default function LinkedInPage() {
         .select('id, status, posted_at')
         .eq('user_id', user.id);
 
-      const postsPublished = posts?.filter(p => p.status === 'posted').length || 0;
-      const failedAttempts = posts?.filter(p => p.status === 'failed').length || 0;
-      const lastPost = posts?.filter(p => p.posted_at).sort((a, b) => 
+      const postsPublished = posts?.filter((p: any) => p.status === 'posted').length || 0;
+      const failedAttempts = posts?.filter((p: any) => p.status === 'failed').length || 0;
+      const lastPost = posts?.filter((p: any) => p.posted_at).sort((a: any, b: any) => 
         new Date(b.posted_at!).getTime() - new Date(a.posted_at!).getTime()
       )[0];
 

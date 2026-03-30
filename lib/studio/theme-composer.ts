@@ -148,8 +148,8 @@ async function prepareBackgroundPlate(
   const c = deriveColors(palette);
   const base = await sharp(buffer)
     .resize({ width, height, fit: 'cover', position: 'attention' })
-    .modulate({ brightness: 0.88, saturation: 1.15 })
-    .blur(2.5)
+    .modulate({ brightness: 0.95, saturation: 1.10 })
+    .blur(1.0)
     .png()
     .toBuffer();
 
@@ -159,21 +159,21 @@ async function prepareBackgroundPlate(
     `
       <defs>
         <linearGradient id="themeWash" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.55" />
-          <stop offset="58%" stop-color="${c.bgEnd}" stop-opacity="0.40" />
-          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.18" />
+          <stop offset="0%" stop-color="${c.bgStart}" stop-opacity="0.35" />
+          <stop offset="58%" stop-color="${c.bgEnd}" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="${c.accent}" stop-opacity="0.10" />
         </linearGradient>
         <radialGradient id="themeGlow" cx="22%" cy="28%" r="56%">
-          <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.16" />
+          <stop offset="0%" stop-color="${c.accent}" stop-opacity="0.10" />
           <stop offset="100%" stop-color="${c.accent}" stop-opacity="0" />
         </radialGradient>
         <radialGradient id="themeSupport" cx="82%" cy="84%" r="36%">
-          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.10" />
+          <stop offset="0%" stop-color="${c.support}" stop-opacity="0.06" />
           <stop offset="100%" stop-color="${c.support}" stop-opacity="0" />
         </radialGradient>
         <radialGradient id="themeVignette" cx="50%" cy="50%" r="72%">
           <stop offset="55%" stop-color="#000000" stop-opacity="0" />
-          <stop offset="100%" stop-color="#000000" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.14" />
         </radialGradient>
       </defs>
       <rect width="${width}" height="${height}" fill="url(#themeWash)" />
@@ -200,7 +200,7 @@ function softenThemeCanvas(svgMarkup: string, width: number, height: number) {
       }
 
       fullCanvasRectIndex += 1;
-      const targetOpacity = fullCanvasRectIndex === 1 ? '0.55' : '0.65';
+      const targetOpacity = fullCanvasRectIndex === 1 ? '0.70' : '0.78';
 
       if (/fill-opacity="/.test(rest)) {
         return match.replace(/fill-opacity="([^"]+)"/, (_existingMatch, existingOpacity) => {
@@ -283,20 +283,30 @@ function buildStandardHeaderBand(
 ): string {
   const r = Math.round;
   const headerH = r(h * 0.14);
-  const logoX = r(w * 0.04);
-  const logoY = r(h * 0.025);
-  const logoW = r(w * 0.16);
+  const logoX = r(w * 0.035);
+  const logoY = r(h * 0.026);
+  const logoW = r(w * 0.19);
   const logoH = r(h * 0.09);
+  const accentW = Math.max(6, r(logoW * 0.045));
+  const modulePaddingX = Math.max(8, r(w * 0.008));
+  const modulePaddingY = Math.max(6, r(h * 0.008));
+  const innerX = logoX + accentW + modulePaddingX;
+  const innerY = logoY + modulePaddingY;
+  const innerW = Math.max(logoW - accentW - modulePaddingX * 2, r(w * 0.08));
+  const innerH = Math.max(logoH - modulePaddingY * 2, r(h * 0.038));
   const safeName = sanitizeDisplayText(brandName, 32) || 'Brand';
 
   const logoNode = logo
-    ? `<rect x="${logoX}" y="${logoY}" width="${logoW}" height="${logoH}" rx="10" fill="rgba(255,255,255,0.92)" />
-       <image href="${escapeXml(logo.dataUri)}" x="${logoX + 6}" y="${logoY + 5}" width="${logoW - 12}" height="${logoH - 10}" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="${r(w * 0.06)}" y="${r(h * 0.08)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="900">${escapeXml(safeName)}</text>`;
+    ? `<image href="${escapeXml(logo.dataUri)}" x="${innerX + 6}" y="${innerY + 4}" width="${Math.max(innerW - 12, 12)}" height="${Math.max(innerH - 8, 12)}" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="${innerX + r(innerW / 2)}" y="${innerY + r(innerH * 0.62)}" fill="#334155" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="900" text-anchor="middle">${escapeXml(safeName)}</text>`;
 
   return `<rect width="${w}" height="${headerH}" fill="url(#${gradientId})" />
-    <rect y="${headerH}" width="${w}" height="3" fill="${c.accent}" />
-    ${logoNode}`;
+    <rect x="${logoX}" y="${logoY}" width="${logoW}" height="${logoH}" rx="16" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.12)" />
+    <rect x="${logoX}" y="${logoY}" width="${accentW}" height="${logoH}" rx="16" fill="${c.accent}" fill-opacity="0.90" />
+    <rect x="${logoX + accentW + r(w * 0.008)}" y="${logoY + r(logoH * 0.20)}" width="${logoW - accentW - r(w * 0.024)}" height="1" fill="rgba(255,255,255,0.10)" />
+    <rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" rx="12" fill="rgba(249,251,255,0.97)" />
+    ${logoNode}
+    <rect y="${headerH - 2}" width="${w}" height="2" fill="${c.accent}" fill-opacity="0.82" />`;
 }
 
 function buildStandardBulletCards(
@@ -306,15 +316,27 @@ function buildStandardBulletCards(
   cardWidth: number,
   w: number,
   h: number,
-  accentColor: string
+  accentColor: string,
+  options?: {
+    maxBullets?: number;
+    maxBottomY?: number;
+  }
 ): string {
   const r = Math.round;
-  const maxBullets = Math.min(bullets.length, 4);
   const cardSpacing = h * 0.072;
   const cardH = r(h * 0.058);
   const stripeW = r(w * 0.006);
   const fontSize = r(w * 0.015);
   const maxChars = 48;
+  const configuredMaxBullets = Math.min(bullets.length, options?.maxBullets ?? 4);
+  const fittedMaxBullets =
+    typeof options?.maxBottomY === 'number'
+      ? Math.max(
+          0,
+          Math.floor((options.maxBottomY - startY + cardSpacing - cardH) / cardSpacing)
+        )
+      : configuredMaxBullets;
+  const maxBullets = Math.min(configuredMaxBullets, fittedMaxBullets);
 
   return bullets.slice(0, maxBullets).map((b, i) => {
     const cardY = r(startY + i * cardSpacing);
@@ -381,7 +403,9 @@ function buildCleanBrandSvg(w: number, h: number, images: Record<string, Prepare
     <rect x="${r(w * 0.06)}" y="${r(h * 0.24)}" width="${r(w * 0.08)}" height="4" rx="2" fill="${c.accent}" />
     ${headlineNodes}
     ${taglineNodes}
-    ${buildStandardBulletCards(bullets, r(w * 0.05), r(bulletStartY), r(w * 0.46), w, h, c.accent)}
+    ${buildStandardBulletCards(bullets, r(w * 0.05), r(bulletStartY), r(w * 0.46), w, h, c.accent, {
+      maxBottomY: r(h * 0.822),
+    })}
     <!-- Highlight chip -->
     <rect x="${r(w * 0.06)}" y="${r(h * 0.82)}" width="${r(w * 0.24)}" height="${r(h * 0.058)}" rx="${r(h * 0.029)}" fill="${c.accent}" fill-opacity="0.92" />
     <text x="${r(w * 0.18)}" y="${r(h * 0.856)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.016)}" font-weight="800" letter-spacing="1.3" text-anchor="middle">BRAND FOCUS</text>
@@ -461,6 +485,7 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
   const c = deriveColors(input.palette);
   const heroImg = images['hero'];
   const safeBrandName = firstSafeLine(input.brandName, 'Brand', 36);
+  const safePartnerName = firstSafeLine(input.partnerName, '', 32);
   const headline = fitTextLines(input.headline || safeBrandName || 'Campaign Headline', [14, 16, 18, 20], 3);
   const tagline = fitTextLines(input.tagline || '', [26, 30, 34], 2);
   const bullets = getSafeFeatureBullets(input.featureBullets, 4);
@@ -553,6 +578,13 @@ function buildIndustrialCampaignSvg(w: number, h: number, images: Record<string,
     </defs>
     <rect width="${w}" height="${h}" fill="rgba(2,8,20,0.02)" />
     ${buildStandardHeaderBand(w, h, logo, safeBrandName, c, 'indTopBar')}
+    ${safePartnerName
+      ? `<g>
+          <rect x="${r(w * 0.80)}" y="${r(h * 0.030)}" width="${r(w * 0.16)}" height="${r(h * 0.080)}" rx="14" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.10)" />
+          <rect x="${r(w * 0.80)}" y="${r(h * 0.030)}" width="${r(w * 0.012)}" height="${r(h * 0.080)}" rx="14" fill="${c.accent}" fill-opacity="0.82" />
+          <text x="${r(w * 0.885)}" y="${r(h * 0.077)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="800" text-anchor="middle">${escapeXml(safePartnerName)}</text>
+        </g>`
+      : `<rect x="${r(w * 0.84)}" y="${r(h * 0.050)}" width="${r(w * 0.12)}" height="${r(h * 0.030)}" rx="${r(h * 0.015)}" fill="rgba(4,12,24,0.20)" stroke="rgba(255,255,255,0.10)" />`}
     <rect x="${r(w * 0.24)}" y="${r(h * 0.050)}" width="${r(w * 0.012)}" height="${r(h * 0.072)}" transform="skewX(-18)" fill="rgba(255,255,255,0.22)" />
     <rect x="${r(w * 0.26)}" y="${r(h * 0.050)}" width="${r(w * 0.008)}" height="${r(h * 0.072)}" transform="skewX(-18)" fill="${c.accent}" fill-opacity="0.92" />
     <rect x="${r(w * 0.76)}" y="${r(h * 0.028)}" width="${r(w * 0.012)}" height="${r(h * 0.082)}" transform="skewX(-18)" fill="rgba(255,255,255,0.20)" />
@@ -623,7 +655,9 @@ function buildProductHeroSvg(w: number, h: number, images: Record<string, Prepar
     <rect x="${r(w * 0.06)}" y="${r(h * 0.26)}" width="${r(w * 0.08)}" height="3" rx="2" fill="${c.accent}" />
     ${headline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.325 + i * headlineStep)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${headlineFont}" font-weight="900" letter-spacing="-0.5" filter="url(#phShadow)">${escapeXml(line)}</text>`).join('')}
     ${tagline.map((line, i) => `<text x="${r(w * 0.06)}" y="${r(h * 0.548 + i * h * 0.042)}" fill="${c.accent}" font-family="Arial,sans-serif" font-size="${taglineFont}" font-weight="700" letter-spacing="1.2">${escapeXml(line.toUpperCase())}</text>`).join('')}
-    ${buildStandardBulletCards(bullets, r(w * 0.05), r(bulletStartY), r(w * 0.46), w, h, c.accent)}
+    ${buildStandardBulletCards(bullets, r(w * 0.05), r(bulletStartY), r(w * 0.46), w, h, c.accent, {
+      maxBottomY: r(h * 0.825),
+    })}
     <rect x="${r(w * 0.06)}" y="${r(h * 0.836)}" width="${r(w * 0.225)}" height="${r(h * 0.063)}" rx="${r(h * 0.031)}" fill="${c.accent}" />
     <text x="${r(w * 0.173)}" y="${r(h * 0.877)}" fill="rgba(255,255,255,0.96)" font-family="Arial,sans-serif" font-size="${r(w * 0.018)}" font-weight="700" text-anchor="middle">Learn More</text>
     <text x="${r(w * 0.50)}" y="${h - r(h * 0.030)}" fill="#ffffff" fill-opacity="0.85" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="600" text-anchor="middle">${escapeXml(footerLine)}</text>
@@ -709,7 +743,6 @@ function buildDatasheetFrameSvg(w: number, h: number, images: Record<string, Pre
   const headline = fitTextLines(input.headline || safeBrandName || 'Product Series', [18, 20, 22], 2);
   const tagline = fitTextLines(input.tagline || '', [22, 26, 30], 2);
   const bullets = getSafeFeatureBullets(input.featureBullets, 4);
-  const headlineFont = headline.length > 1 ? r(w * 0.025) : r(w * 0.028);
 
   const heroNode = heroImg
     ? `<defs><clipPath id="dsHeroClip"><rect x="${r(w * 0.06)}" y="${r(h * 0.10)}" width="${r(w * 0.30)}" height="${r(h * 0.76)}" rx="14" /></clipPath></defs>
@@ -1385,7 +1418,9 @@ function buildTeamSpotlightSvg(w: number, h: number, images: Record<string, Prep
     <!-- Accent divider -->
     <rect x="${r(w * 0.52)}" y="${r(h * 0.46)}" width="${r(w * 0.10)}" height="2" rx="1" fill="${c.accent}" fill-opacity="0.55" />
     ${taglineNodes}
-    ${buildStandardBulletCards(bullets, r(w * 0.52), r(bulletStartY), r(w * 0.42), w, h, c.accent)}
+    ${buildStandardBulletCards(bullets, r(w * 0.52), r(bulletStartY), r(w * 0.42), w, h, c.accent, {
+      maxBottomY: r(h * 0.845),
+    })}
     <!-- CTA button -->
     <rect x="${r(w * 0.52)}" y="${r(h * 0.86)}" width="${r(w * 0.20)}" height="${r(h * 0.055)}" rx="${r(h * 0.028)}" fill="${c.accent}" fill-opacity="0.92" />
     <text x="${r(w * 0.62)}" y="${r(h * 0.895)}" fill="rgba(255,255,255,0.95)" font-family="Arial,sans-serif" font-size="${r(w * 0.015)}" font-weight="700" text-anchor="middle">Join Us</text>

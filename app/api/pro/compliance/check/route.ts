@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const postRes = await supabase.from("posts").select("*").eq("id", input.postId).single();
+    const postRes = await supabase.from("posts").select("*").eq("id", input.postId).eq("user_id", user.id).single();
     if (postRes.error || !postRes.data) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }

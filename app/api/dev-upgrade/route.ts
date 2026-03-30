@@ -1,8 +1,13 @@
-// TEMPORARY DEV ENDPOINT - Remove in production!
+// TEMPORARY DEV ENDPOINT - Disabled in production!
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
+  // Block in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: "This endpoint is disabled in production" }, { status: 403 });
+  }
+
   try {
     const supabase = await createServerSupabase();
     const { data: { user }, error: userError } = await supabase.auth.getUser();

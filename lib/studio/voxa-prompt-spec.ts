@@ -115,25 +115,31 @@ const UNIVERSAL_NEGATIVE_PROMPT = [
   "elements touching edges",
   "off-brand colors",
   "wrong logo colors",
+  "sticker logo",
+  "pasted logo overlay",
+  "floating brand mark",
+  "random corner badge",
+  "corner watermark logo",
+  "generic frosted white logo card",
 ].join(", ");
 
 const FORMAT_RULES: Record<VoxaFormat, VoxaFormatRule> = {
   landscape: {
-    dimensions: "1200x628",
+    dimensions: "1536x1024",
     layout:
       "Landscape uses a 12-column grid with a 40% hero zone on the left, 60% content zone on the right, a top header band, and a bottom footer band.",
     headlineMaxWords: 8,
     taglineMaxWords: 10,
   },
   portrait: {
-    dimensions: "1080x1350",
+    dimensions: "1024x1536",
     layout:
       "Portrait stacks the composition vertically: header, headline zone, hero zone, benefits zone, and footer. Maintain strong F-pattern readability.",
     headlineMaxWords: 6,
     taglineMaxWords: 8,
   },
   square: {
-    dimensions: "1080x1080",
+    dimensions: "1024x1024",
     layout:
       "Square uses a balanced stack or side-by-side composition with a top header, a concise headline block, a hero plus benefits zone, and a disciplined footer.",
     headlineMaxWords: 5,
@@ -166,7 +172,7 @@ const THEME_DEFINITIONS: Record<VoxaSupportedThemeId, VoxaThemeDefinition> = {
     background:
       "Use a professional dark brand gradient with subtle industry atmosphere. The right-side text lane must stay calmer and darker than the hero side.",
     header:
-      "Use a disciplined header band with the primary logo on the left, the campaign headline centered or left-anchored in the content lane, and optional partner branding on the right.",
+      "Use a disciplined co-branded header fascia with the primary logo integrated on the left, the campaign headline centered or left-anchored in the content lane, and optional partner branding integrated on the right. The lockups must feel built into the band, not pasted on top.",
     hero:
       "Keep the product hero inside the left 40% with studio lighting, a soft shadow, clear separation from the background, and no text inside the protected hero zone.",
     footer:
@@ -177,7 +183,8 @@ const THEME_DEFINITIONS: Record<VoxaSupportedThemeId, VoxaThemeDefinition> = {
       "Use a dark brand-matched gradient shield when readability needs help. Match the overlay to the palette instead of defaulting to generic black.",
     benefitsMode: "required",
     footerMode: "required",
-    negative: "informal layout, asymmetric chaos, missing footer icons, playful ad styling",
+    negative:
+      "informal layout, asymmetric chaos, missing footer icons, playful ad styling, pasted sticker logos, floating brand badges, generic frosted logo cards",
   },
   "industrial-campaign": {
     id: "industrial-campaign",
@@ -190,7 +197,7 @@ const THEME_DEFINITIONS: Record<VoxaSupportedThemeId, VoxaThemeDefinition> = {
     background:
       "Use a deep industrial gradient with real environmental context, infrastructure depth, and only restrained energy accents.",
     header:
-      "Use a clear top brand band that feels engineered and strong. Brand elements should feel integrated, not decorative.",
+      "Use a clear top brand band that feels engineered and structural. Brand elements should feel integrated into a beam, fascia, plated strip, or glass rail rather than decorative overlays.",
     hero:
       "Treat the hero as premium industrial equipment or infrastructure in context. Use dramatic key lighting, edge light, and strong subject separation.",
     footer:
@@ -201,7 +208,8 @@ const THEME_DEFINITIONS: Record<VoxaSupportedThemeId, VoxaThemeDefinition> = {
       "Favor directional brand-tinted overlays that protect the copy lane without flattening industrial depth or metallic contrast.",
     benefitsMode: "required",
     footerMode: "required",
-    negative: "soft imagery, gentle aesthetics, weak typography, polite brochure energy",
+    negative:
+      "soft imagery, gentle aesthetics, weak typography, polite brochure energy, pasted sticker logos, floating brand marks, generic frosted logo cards",
   },
   "brand-story": {
     id: "brand-story",
@@ -596,8 +604,12 @@ export function buildVoxaPromptPackage(input: VoxaPromptInput): VoxaPromptPackag
     `TYPOGRAPHY HIERARCHY`,
     `- Use exactly one primary headline.`,
     `- Keep the headline at ${format.headlineMaxWords} words or fewer for this format.`,
+    `- HEADLINE: Bold 800-900 weight sans-serif (Inter, Helvetica Neue, DM Sans, or similar). The headline must be 3-4x larger than bullet text and 2x larger than the tagline. Tight letter-spacing (-0.02em to -0.01em). Line height 1.05-1.15.`,
     `- Keep the tagline at ${format.taglineMaxWords} words or fewer for this format.`,
+    `- TAGLINE: Medium weight (400-500), 50-60% of headline size. Place directly below headline with clear breathing room.`,
+    `- PROOF BULLETS: Regular weight (400-500). Stack with identical vertical spacing and consistent markers (filled circles or brand accent bars). All bullets must share one clean left edge. Keep each to one line.`,
     `- Use body/supporting text as Level 3 hierarchy only. Footer details remain Level 4 and visually secondary.`,
+    `- ALL text in a column must align to one shared vertical left edge. No scattered or randomly staggered positions.`,
     ``,
     `COLOR AND GRADIENT SYSTEM`,
     `- Primary palette: ${colors.palette.length ? colors.palette.join(", ") : "derive from brand-safe professional tones"}.`,
@@ -609,6 +621,13 @@ export function buildVoxaPromptPackage(input: VoxaPromptInput): VoxaPromptPackag
     `- Header: ${theme.header}`,
     `- Footer: ${theme.footer}`,
     `- Never let footer or header elements collide with the hero or copy lanes.`,
+    ``,
+    `LOGO INTEGRATION`,
+    `- Any supplied logo must feel native to the composition: built into a header fascia, plated strip, glass band, negative-space lockup, or structural brand surface.`,
+    `- Never render the logo as a pasted sticker, floating corner watermark, random brand badge, or default frosted white logo card unless a restrained plated module is absolutely necessary for contrast.`,
+    theme.id === "alliance-poster" || theme.id === "industrial-campaign"
+      ? `- For ${theme.displayName}, make the header/logo treatment read like a real enterprise campaign lockup with deliberate spacing, believable edges, and premium integration.`
+      : null,
     ``,
     `HERO / PRODUCT TREATMENT`,
     `- ${theme.hero}`,

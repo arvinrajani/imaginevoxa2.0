@@ -13,8 +13,11 @@ export async function POST(request: Request) {
 
     const { content, brandId, slideCount = 5, style = 'modern', includeImages = false } = await request.json();
 
-    if (!content) {
+    if (!content || typeof content !== 'string') {
       return NextResponse.json({ error: 'Content is required' }, { status: 400 });
+    }
+    if (content.length > 50000) {
+      return NextResponse.json({ error: 'Content must be under 50,000 characters' }, { status: 400 });
     }
 
     const actualSlideCount = Math.min(Math.max(slideCount, 3), 10);

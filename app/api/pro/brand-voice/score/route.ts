@@ -28,6 +28,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "brandId and postContent are required" }, { status: 400 });
     }
 
+    // Verify user owns this brand
+    const { data: brandOwnership } = await supabase
+      .from("brands")
+      .select("id")
+      .eq("id", brandId)
+      .eq("owner_user_id", authData.user.id)
+      .single();
+    if (!brandOwnership) {
+      return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+    }
+
     // ── Fetch latest brand voice (prefer voice-evolution, fallback to linkedin) ──
     const { data: dnaRows } = await supabase
       .from("marketing_dna")

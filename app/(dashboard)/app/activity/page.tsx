@@ -156,8 +156,10 @@ export default function ActivityPage() {
       const activityLogs: ActivityLog[] = [];
 
       // Convert posts to activity
-      posts?.forEach((post) => {
-        const contentPreview = post.post_content?.substring(0, 60) + (post.post_content?.length > 60 ? '...' : '') || 'No content';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      posts?.forEach((post: any) => {
+        const postContent = typeof post.post_content === 'string' ? post.post_content : '';
+        const contentPreview = postContent.substring(0, 60) + (postContent.length > 60 ? '...' : '') || 'No content';
         
         if (post.status === 'posted') {
           activityLogs.push({
@@ -194,7 +196,8 @@ export default function ActivityPage() {
       });
 
       // Convert linkedin connections to activity
-      connections?.forEach((conn) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      connections?.forEach((conn: any) => {
         activityLogs.push({
           id: `linkedin-${conn.id}`,
           type: 'linkedin_connected',

@@ -227,11 +227,29 @@ function buildAlliancePosterSvg(input: {
   footerEmail: string;
   palette?: string[];
 }) {
-  const { bgStart, bgEnd, accent, support, surface, muted } =
+  const { bgStart, bgEnd, accent, muted } =
     deriveStudioPalette(input.palette);
   const w = input.width;
   const h = input.height;
   const r = Math.round;
+
+  const HEADER_HEIGHT = 0.14;
+  const FOOTER_HEIGHT = 0.12;
+  const FOOTER_TOP = 1 - FOOTER_HEIGHT;
+
+  const CONTENT_TOP = HEADER_HEIGHT;
+  const CONTENT_BOTTOM = FOOTER_TOP;
+  const CONTENT_HEIGHT = CONTENT_BOTTOM - CONTENT_TOP;
+
+  const HERO_LEFT = 0.035;
+  const HERO_WIDTH = 0.30;
+  const HERO_TOP = CONTENT_TOP + 0.04;
+  const HERO_BOTTOM = CONTENT_BOTTOM - 0.02;
+
+  const TEXT_LEFT = 0.40;
+  const TEXT_WIDTH = 0.56;
+  const TEXT_TOP = CONTENT_TOP + 0.03;
+  const TEXT_BOTTOM = CONTENT_BOTTOM - 0.02;
 
   const safeBrandName = sanitizeDisplayText(input.brandName, 32) || 'Brand';
   const safePartnerName = sanitizeDisplayText(input.partnerName, 32);
@@ -247,9 +265,8 @@ function buildAlliancePosterSvg(input: {
     !safeTaglineRaw.toLowerCase().includes(safeHeadline.toLowerCase())
       ? safeTaglineRaw
       : '';
-  const headlineLines = wrapText(safeHeadline, 24).slice(0, 3);
+  const headlineLines = wrapText(safeHeadline, 26).slice(0, 2);
   const taglineLines = wrapText(safeTagline, 30).slice(0, 1);
-  const bullets = getSafeFeatureBullets(input.featureBullets, 4);
   const footerLine = [
     sanitizeDisplayText(input.footerWebsite, 48),
     sanitizeDisplayText(input.footerEmail, 48),
@@ -258,18 +275,31 @@ function buildAlliancePosterSvg(input: {
     .join('  |  ');
 
   // ── Header zone: top 15% ──
-  const headerH = r(h * 0.15);
+  const headerH = r(h * HEADER_HEIGHT);
 
   // Primary logo — frosted glass card top-left
   const logoBoxX = r(w * 0.025);
   const logoBoxY = r(h * 0.025);
   const logoBoxW = r(w * 0.20);
   const logoBoxH = r(h * 0.10);
+  const logoAccentW = Math.max(8, r(logoBoxW * 0.055));
+  const logoInsetX = logoBoxX + logoAccentW + r(w * 0.010);
+  const logoInsetY = logoBoxY + r(h * 0.010);
+  const logoInsetW = Math.max(logoBoxW - logoAccentW - r(w * 0.020), r(w * 0.08));
+  const logoInsetH = Math.max(logoBoxH - r(h * 0.020), r(h * 0.040));
   const primaryLogoNode = input.primaryLogo
-    ? `<rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="14" fill="rgba(255,255,255,0.92)" />
-       <image href="${escapeXml(input.primaryLogo.dataUri)}" x="${logoBoxX + 10}" y="${logoBoxY + 6}" width="${logoBoxW - 20}" height="${logoBoxH - 12}" preserveAspectRatio="xMidYMid meet" />`
-    : `<rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="14" fill="rgba(255,255,255,0.92)" />
-       <text x="${logoBoxX + r(logoBoxW / 2)}" y="${logoBoxY + r(logoBoxH * 0.64)}" fill="${bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.026)}" font-weight="900" text-anchor="middle">${escapeXml(safeBrandName)}</text>`;
+    ? `<g>
+        <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="16" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.12)" />
+        <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoAccentW}" height="${logoBoxH}" rx="16" fill="${accent}" fill-opacity="0.92" />
+        <rect x="${logoInsetX}" y="${logoInsetY}" width="${logoInsetW}" height="${logoInsetH}" rx="12" fill="rgba(249,251,255,0.97)" />
+        <image href="${escapeXml(input.primaryLogo.dataUri)}" x="${logoInsetX + 8}" y="${logoInsetY + 4}" width="${Math.max(logoInsetW - 16, 12)}" height="${Math.max(logoInsetH - 8, 12)}" preserveAspectRatio="xMidYMid meet" />
+      </g>`
+    : `<g>
+        <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoBoxW}" height="${logoBoxH}" rx="16" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.12)" />
+        <rect x="${logoBoxX}" y="${logoBoxY}" width="${logoAccentW}" height="${logoBoxH}" rx="16" fill="${accent}" fill-opacity="0.92" />
+        <rect x="${logoInsetX}" y="${logoInsetY}" width="${logoInsetW}" height="${logoInsetH}" rx="12" fill="rgba(249,251,255,0.97)" />
+        <text x="${logoInsetX + r(logoInsetW / 2)}" y="${logoInsetY + r(logoInsetH * 0.62)}" fill="${bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.022)}" font-weight="900" text-anchor="middle">${escapeXml(safeBrandName)}</text>
+      </g>`;
 
   // Partner logos — frosted cards top-right
   const secondaryLogoCards = input.secondaryLogos
@@ -279,29 +309,35 @@ function buildAlliancePosterSvg(input: {
       const gap = r(w * 0.010);
       const cardW = r(w * 0.085);
       const cardH = r(h * 0.08);
+      const accentW = Math.max(6, r(cardW * 0.10));
       const totalW = logoCount * cardW + Math.max(0, logoCount - 1) * gap;
       const startX = r(w * 0.97) - totalW;
       const x = startX + index * (cardW + gap);
       const y = r(h * 0.035);
       return `<g>
-        <rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="12" fill="rgba(255,255,255,0.90)" />
-        <image href="${escapeXml(logo.dataUri)}" x="${x + 8}" y="${y + 6}" width="${cardW - 16}" height="${cardH - 12}" preserveAspectRatio="xMidYMid meet" />
+        <rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="12" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.10)" />
+        <rect x="${x}" y="${y}" width="${accentW}" height="${cardH}" rx="12" fill="${accent}" fill-opacity="0.82" />
+        <rect x="${x + accentW + 6}" y="${y + 6}" width="${Math.max(cardW - accentW - 12, 10)}" height="${cardH - 12}" rx="8" fill="rgba(249,251,255,0.94)" />
+        <image href="${escapeXml(logo.dataUri)}" x="${x + accentW + 10}" y="${y + 8}" width="${Math.max(cardW - accentW - 20, 10)}" height="${cardH - 16}" preserveAspectRatio="xMidYMid meet" />
       </g>`;
     })
     .join('');
 
   // Partner name as text fallback (only when no partner logos)
   const partnerTextNode = !secondaryLogoCards && safePartnerName
-    ? `<rect x="${r(w * 0.74)}" y="${r(h * 0.03)}" width="${r(w * 0.23)}" height="${r(h * 0.09)}" rx="14" fill="rgba(255,255,255,0.88)" />
-       <text x="${r(w * 0.855)}" y="${r(h * 0.068)}" fill="${bgStart}" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="800" text-anchor="middle">${escapeXml(safePartnerName)}</text>
-       ${safePartnerTagline ? `<text x="${r(w * 0.855)}" y="${r(h * 0.098)}" fill="${muted}" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="600" text-anchor="middle">${escapeXml(safePartnerTagline)}</text>` : ''}`
+    ? `<g>
+        <rect x="${r(w * 0.74)}" y="${r(h * 0.03)}" width="${r(w * 0.23)}" height="${r(h * 0.09)}" rx="14" fill="rgba(4,12,24,0.24)" stroke="rgba(255,255,255,0.10)" />
+        <rect x="${r(w * 0.74)}" y="${r(h * 0.03)}" width="${r(w * 0.015)}" height="${r(h * 0.09)}" rx="14" fill="${accent}" fill-opacity="0.82" />
+        <text x="${r(w * 0.865)}" y="${r(h * 0.066)}" fill="#ffffff" font-family="Arial,sans-serif" font-size="${r(w * 0.019)}" font-weight="800" text-anchor="middle">${escapeXml(safePartnerName)}</text>
+        ${safePartnerTagline ? `<text x="${r(w * 0.865)}" y="${r(h * 0.094)}" fill="rgba(255,255,255,0.66)" font-family="Arial,sans-serif" font-size="${r(w * 0.012)}" font-weight="600" text-anchor="middle">${escapeXml(safePartnerTagline)}</text>` : ''}
+      </g>`
     : '';
 
   // ── Headline — right zone, large white text with drop shadow ──
-  const headlineFontSize = headlineLines.length >= 3 ? r(w * 0.042) : r(w * 0.050);
-  const headlineStep = headlineLines.length >= 3 ? h * 0.072 : h * 0.086;
-  const headlineStartY = h * 0.24;
-  const textX = r(w * 0.42);
+  const textX = r(w * TEXT_LEFT);
+  const headlineFontSize = headlineLines.length >= 2 ? r(w * 0.044) : r(w * 0.050);
+  const headlineStep = headlineLines.length >= 2 ? h * 0.074 : h * 0.086;
+  const headlineStartY = h * (TEXT_TOP + 0.055);
 
   const headlineNodes = headlineLines
     .map((line, i) => {
@@ -326,15 +362,34 @@ function buildAlliancePosterSvg(input: {
   const dividerNode = `<rect x="${textX}" y="${dividerY}" width="${r(w * 0.10)}" height="3" rx="1.5" fill="${accent}" fill-opacity="0.75" />`;
 
   // ── Bullet points with accent checkmark boxes ──
-  const bulletStartY = dividerY + r(h * 0.045);
-  const bulletCardH = r(h * 0.095);
-  const bulletGap = r(h * 0.018);
+  const headlineHeight = headlineLines.length * 0.065;
+  const taglineHeight = taglineLines.length > 0 ? 0.04 : 0;
+  const dividerHeight = 0.025;
+  const textContentUsed = headlineHeight + taglineHeight + dividerHeight;
+  const availableBulletSpace = CONTENT_HEIGHT - textContentUsed - 0.06;
+  const BULLET_HEIGHT = 0.085;
+  const BULLET_GAP = 0.015;
+  const bulletStartY = dividerY + r(h * 0.04);
+  const bulletCardH = r(h * BULLET_HEIGHT);
+  const bulletGap = r(h * BULLET_GAP);
+  const bulletMaxY = r(h * FOOTER_TOP) - r(h * 0.02);
+  const maxBulletsFromContent = Math.min(
+    4,
+    Math.max(0, Math.floor(availableBulletSpace / (BULLET_HEIGHT + BULLET_GAP)))
+  );
+  const maxBulletsFromRenderedZone = Math.min(
+    4,
+    Math.max(0, Math.floor((bulletMaxY - bulletStartY + bulletGap) / (bulletCardH + bulletGap)))
+  );
+  const maxBullets = Math.min(maxBulletsFromContent, maxBulletsFromRenderedZone);
+  const bullets = getSafeFeatureBullets(input.featureBullets, maxBullets);
   const bulletFontSize = Math.max(16, r(w * 0.018));
   const boxSize = r(w * 0.028);
 
   const bulletNodes = bullets
     .map((line, index) => {
       const cardY = bulletStartY + index * (bulletCardH + bulletGap);
+      if (cardY + bulletCardH > bulletMaxY) return '';
       const wrapped = wrapText(line, 38).slice(0, 2);
       const cardX = textX - r(w * 0.015);
       const cardW = r(w * 0.50);
@@ -364,13 +419,14 @@ function buildAlliancePosterSvg(input: {
         ${textNodes}
       </g>`;
     })
+    .filter(Boolean)
     .join('');
 
   // ── Hero product card — left side with shadow ──
-  const heroCardX = r(w * 0.035);
-  const heroCardY = r(h * 0.20);
-  const heroCardW = r(w * 0.32);
-  const heroCardH = r(h * 0.60);
+  const heroCardX = r(w * HERO_LEFT);
+  const heroCardY = r(h * HERO_TOP);
+  const heroCardW = r(w * HERO_WIDTH);
+  const heroCardH = r(h * (HERO_BOTTOM - HERO_TOP));
   const heroNode = input.heroImage
     ? `<g>
       <defs>
@@ -386,8 +442,8 @@ function buildAlliancePosterSvg(input: {
     : `<rect x="${heroCardX}" y="${heroCardY}" width="${heroCardW}" height="${heroCardH}" rx="24" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)" stroke-width="1" />`;
 
   // ── Footer bar ──
-  const footerBarY = h - r(h * 0.08);
-  const footerBarH = r(h * 0.08);
+  const footerBarY = r(h * FOOTER_TOP);
+  const footerBarH = r(h * FOOTER_HEIGHT);
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
@@ -408,7 +464,7 @@ function buildAlliancePosterSvg(input: {
   <rect y="${headerH}" width="${w}" height="3" fill="${accent}" fill-opacity="0.85" />
 
   <!-- Right text zone — subtle semi-transparent panel -->
-  <rect x="${r(w * 0.385)}" y="${r(h * 0.185)}" width="${r(w * 0.58)}" height="${r(h * 0.64)}" rx="22" fill="rgba(0,0,0,0.18)" />
+  <rect x="${r(w * (TEXT_LEFT - 0.015))}" y="${r(h * TEXT_TOP)}" width="${r(w * (TEXT_WIDTH + 0.015))}" height="${r(h * (TEXT_BOTTOM - TEXT_TOP))}" rx="22" fill="rgba(0,0,0,0.18)" />
 
   <!-- Logos -->
   ${primaryLogoNode}
@@ -445,7 +501,7 @@ export async function composeAlliancePoster(input: AlliancePosterComposeInput) {
 
   const [primaryLogo, heroImage, ...secondaryLogos] = await Promise.all([
     prepareLogo(input.primaryLogoBuffer, Math.round(input.width * 0.18), Math.round(input.height * 0.09)),
-    prepareHeroImage(heroSourceBuffer, Math.round(input.width * 0.29), Math.round(input.height * 0.56), {
+    prepareHeroImage(heroSourceBuffer, Math.round(input.width * 0.30), Math.round(input.height * 0.68), {
       trim: Boolean(input.heroImageBuffer),
       fit: 'cover',
     }),

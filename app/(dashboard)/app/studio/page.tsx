@@ -965,6 +965,47 @@ export default function StudioPage() {
     })();
   }, [searchParams, supabase, draftLoaded, brands]);
 
+  // --- LocalStorage draft auto-save ---
+  const DRAFT_STORAGE_KEY = 'studio_draft_autosave';
+  const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Restore draft from localStorage on mount (only if no postId in URL)
+  useEffect(() => {
+    const postId = searchParams.get('postId');
+    if (postId) return; // loaded from DB, skip localStorage restore
+    try {
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!saved) return;
+      const draft = JSON.parse(saved);
+      if (draft.confirmedPost) setConfirmedPost(draft.confirmedPost);
+      if (draft.confirmedImageUrl) setConfirmedImageUrl(draft.confirmedImageUrl);
+      if (typeof draft.activeStep === 'number' && draft.activeStep >= 0 && draft.activeStep < 4) {
+        setActiveStep(draft.activeStep);
+      }
+    } catch { /* ignore corrupt data */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount-only
+
+  // Auto-save draft to localStorage (debounced 1s)
+  useEffect(() => {
+    if (draftAutoSaveTimerRef.current) clearTimeout(draftAutoSaveTimerRef.current);
+    draftAutoSaveTimerRef.current = setTimeout(() => {
+      try {
+        if (!confirmedPost) {
+          localStorage.removeItem(DRAFT_STORAGE_KEY);
+          return;
+        }
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+          confirmedPost,
+          confirmedImageUrl,
+          activeStep,
+          savedAt: Date.now(),
+        }));
+      } catch { /* quota exceeded, ignore */ }
+    }, 1000);
+    return () => { if (draftAutoSaveTimerRef.current) clearTimeout(draftAutoSaveTimerRef.current); };
+  }, [confirmedPost, confirmedImageUrl, activeStep]);
+
   // --- Sync selectedBrand → workspace (one-directional to avoid circular loop) ---
   // A ref tracks the last brand ID we synced TO the workspace context, so that when the
   // workspace context pushes an initial value back we don't re-trigger a second sync.
@@ -2872,6 +2913,7 @@ export default function StudioPage() {
                 brandColorNames={brandColorNames}
                 logoUrl={logoUrl}
                 logoAssets={brandKit?.logoAssets}
+                industry={selectedBrand.industry}
                 analysisProfile={analysisProfile}
                 confirmedPostText={confirmedPost ? `${confirmedPost.headline}\n\n${confirmedPost.body}` : undefined}
                 confirmedPostHeadline={confirmedPost?.headline}
@@ -2950,6 +2992,9 @@ export default function StudioPage() {
                 brandId={selectedBrand.id}
                 draftPostId={draftPostId}
                 onGoToStep={goToStep}
+                onPublishSuccess={() => {
+                  try { localStorage.removeItem('studio_draft_autosave'); } catch {}
+                }}
                 selectedChannels={confirmedPost?.selectedChannels || ['linkedin']}
                 primaryChannel={confirmedPost?.primaryChannel || 'linkedin'}
               />

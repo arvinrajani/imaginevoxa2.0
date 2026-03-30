@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS public.plans (
 
 -- Seed default plans
 INSERT INTO public.plans (id, name, description, price_monthly, price_yearly, credits_monthly, features) VALUES
-    ('starter', 'Starter', 'Perfect for trying things out', 0, 0, 3, '["3 AI-generated posts", "Basic templates", "Manual copy & paste", "Community support"]'),
-    ('pro', 'Pro', 'For serious content creators', 1900, 19000, 50, '["50 AI-generated posts/month", "Direct LinkedIn publishing", "Custom tone & style", "Analytics dashboard", "Image generation", "Priority support"]'),
+    ('starter', 'Starter', 'Perfect for trying things out', 0, 0, 30, '["30 AI-generated posts/month", "Basic templates", "Manual copy & paste", "Community support"]'),
+    ('pro', 'Pro', 'For serious content creators', 1900, 19000, 30, '["30 AI-generated posts/month", "Direct LinkedIn publishing", "Custom tone & style", "Analytics dashboard", "Image generation", "Priority support"]'),
     ('business', 'Business', 'For teams & agencies', 4900, 49000, -1, '["Unlimited posts", "Everything in Pro", "Multiple LinkedIn accounts", "Team collaboration", "Advanced analytics", "API access", "Dedicated support"]')
 ON CONFLICT (id) DO NOTHING;
 
