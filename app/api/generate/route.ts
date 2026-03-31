@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -113,7 +113,8 @@ async function summarizeUploadedImagesForPost(files: File[], imageContext: strin
     return "";
   }
 
-  const json = (await response.json()) as OpenAIResponse;
+  const json = await safeJson<OpenAIResponse>(response);
+  if (!json) return "";
   return extractTextFromResponse(json)?.trim() || "";
 }
 

@@ -13,3 +13,16 @@ export function fetchWithTimeout(
     clearTimeout(timer)
   );
 }
+
+/**
+ * Safely parse a Response as JSON, returning null on parse failure
+ * instead of throwing a SyntaxError.
+ */
+export async function safeJson<T = unknown>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    console.warn(`[safeJson] Failed to parse JSON from ${response.url} (status ${response.status})`);
+    return null;
+  }
+}

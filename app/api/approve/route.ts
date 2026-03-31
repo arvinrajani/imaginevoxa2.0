@@ -5,7 +5,7 @@ export const maxDuration = 60;
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maybeTranscodeWithZencoder } from "@/lib/video";
-import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { fetchWithTimeout, safeJson } from "@/lib/fetch-timeout";
 
 type ApproveRequest = {
   postId: string;
@@ -145,9 +145,14 @@ async function uploadImageToLinkedIn(
       return null;
     }
 
-    const registerData = await registerResponse.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registerData = await safeJson<any>(registerResponse);
+    if (!registerData) {
+      console.error("❌ Failed to parse image register response as JSON");
+      return null;
+    }
     console.log("✅ Upload registered:", JSON.stringify(registerData).substring(0, 300));
-    
+
     const uploadUrl = registerData?.value?.uploadMechanism?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]?.uploadUrl;
     const assetUrn = registerData?.value?.asset;
 
@@ -226,7 +231,12 @@ async function uploadVideoToLinkedIn(
       return null;
     }
 
-    const registerData = await registerResponse.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registerData = await safeJson<any>(registerResponse);
+    if (!registerData) {
+      console.error("❌ Failed to parse video register response as JSON");
+      return null;
+    }
     const uploadUrl =
       registerData?.value?.uploadMechanism?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]?.uploadUrl;
     const assetUrn = registerData?.value?.asset;
@@ -315,7 +325,8 @@ async function postToLinkedIn(
       console.log("LinkedIn Share API response status:", shareResponse.status);
 
       if (shareResponse.ok || shareResponse.status === 201) {
-        const responseData = await shareResponse.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const responseData = await safeJson<any>(shareResponse);
         const postUrn = responseData?.id || responseData?.activity;
         console.log("✅ Organization post created via Share API! URN:", postUrn);
         return { success: true, postUrn };
@@ -453,7 +464,8 @@ async function postToLinkedIn(
     console.log("LinkedIn UGC API response status:", response.status);
 
     if (response.ok || response.status === 201) {
-      const responseData = await response.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const responseData = await safeJson<any>(response);
       const postUrn = responseData?.id;
       console.log("✅ Post created successfully via UGC API! URN:", postUrn);
       return { success: true, postUrn };

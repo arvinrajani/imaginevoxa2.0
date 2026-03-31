@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -14,7 +14,8 @@ type EngagementStats = {
 
 const safeNumber = (value: unknown) => Number(value || 0);
 
-const fetchLinkedIn = async (url: string, accessToken: string) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fetchLinkedIn = async (url: string, accessToken: string): Promise<any> => {
   const response = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -27,7 +28,11 @@ const fetchLinkedIn = async (url: string, accessToken: string) => {
     throw new Error(`${response.status}: ${text.substring(0, 300)}`);
   }
 
-  return response.json();
+  const data = await safeJson(response);
+  if (data === null) {
+    throw new Error(`Invalid JSON from LinkedIn API: ${url}`);
+  }
+  return data;
 };
 
 const getShareStats = async (shareId: string, accessToken: string): Promise<EngagementStats> => {

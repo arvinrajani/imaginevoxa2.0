@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { z } from "zod";
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: errorText || "LinkedIn fetch failed." }, { status: 502 });
     }
 
-    const payload = (await response.json()) as LinkedInUgcResponse;
+    const payload = (await safeJson<LinkedInUgcResponse>(response)) || { elements: [] };
     const posts = (payload.elements || [])
       .map((item) => {
         const shareContent = item.specificContent?.["com.linkedin.ugc.ShareContent"];

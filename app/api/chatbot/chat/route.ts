@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -311,8 +311,10 @@ async function createEmbedding(text: string): Promise<number[]> {
         throw new Error(`OpenAI embeddings failed: ${response.status} ${errorText}`);
     }
 
-    const data = (await response.json()) as EmbeddingResponse;
-    return data.data[0].embedding;
+    const data = await safeJson<EmbeddingResponse>(response);
+    const embedding = data?.data?.[0]?.embedding;
+    if (!embedding) throw new Error('No embedding data in OpenAI response');
+    return embedding;
 }
 
 async function chatCompletion(
@@ -340,8 +342,8 @@ async function chatCompletion(
         throw new Error(`OpenAI chat failed: ${response.status} ${errorText}`);
     }
 
-    const data = (await response.json()) as ChatCompletionResponse;
-    const content = data.choices?.[0]?.message?.content;
+    const data = await safeJson<ChatCompletionResponse>(response);
+    const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error('No response content from OpenAI');
     return content;
 }

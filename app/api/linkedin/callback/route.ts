@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { cookies } from "next/headers";
@@ -33,6 +33,7 @@ const toColumnSet = (rows: { column_name: string }[] | null | undefined) =>
   new Set((rows || []).map((row) => row.column_name));
 
 export async function GET(request: Request) {
+ try {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -136,7 +137,12 @@ export async function GET(request: Request) {
     );
   }
 
-  const tokenData = (await tokenRes.json()) as LinkedInTokenResponse;
+  const tokenData = await safeJson<LinkedInTokenResponse>(tokenRes);
+  if (!tokenData || !tokenData.access_token) {
+    return NextResponse.redirect(
+      new URL("/app/linkedin?error=Token+parse+failed&error_description=LinkedIn+returned+invalid+token+response", request.url)
+    );
+  }
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
   const supabase = await createServerSupabase();
@@ -434,4 +440,11 @@ export async function GET(request: Request) {
   cookieStore.delete("linkedin_oauth_redirect");
 
   return NextResponse.redirect(new URL("/app/linkedin?status=connected", request.url));
+ } catch (err) {
+  console.error("LinkedIn OAuth callback error:", err);
+  const message = err instanceof Error ? err.message : "Unknown error";
+  return NextResponse.redirect(
+    new URL(`/app/linkedin?error=Callback+failed&error_description=${encodeURIComponent(message.slice(0, 200))}`, request.url)
+  );
+ }
 }

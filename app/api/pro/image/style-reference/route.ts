@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { z } from "zod";
@@ -82,7 +82,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `OpenAI style analysis failed: ${errorText}` }, { status: 500 });
     }
 
-    const json = (await response.json()) as OpenAIResponse;
+    const json = await safeJson<OpenAIResponse>(response);
+    if (!json) {
+      return NextResponse.json({ error: "Failed to parse OpenAI response" }, { status: 502 });
+    }
     const text = extractTextFromResponse(json);
     if (!text) {
       return NextResponse.json({ error: "Style analysis returned no text" }, { status: 502 });

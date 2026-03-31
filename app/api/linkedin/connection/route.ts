@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from '@/lib/fetch-timeout';
+import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -49,7 +49,8 @@ async function fetchLinkedInUserInfo(accessToken: string): Promise<{
       return null;
     }
 
-    const data = (await response.json()) as LinkedInUserInfoResponse;
+    const data = await safeJson<LinkedInUserInfoResponse>(response);
+    if (!data) return null;
     const name = pickDisplayName(data);
     const email = asTrimmedString(data.email);
     const pictureUrl = asTrimmedString(data.picture);
