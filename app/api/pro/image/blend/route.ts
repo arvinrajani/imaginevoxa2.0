@@ -301,6 +301,21 @@ export async function POST(request: Request) {
       blend_mode: input.blendMode ?? "normal",
     });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          error: "Invalid request payload",
+          details: error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        { status: 400 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

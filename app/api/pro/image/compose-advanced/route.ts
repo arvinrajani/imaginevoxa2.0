@@ -113,6 +113,12 @@ export async function POST(request: Request) {
       asset_id: asset?.id || null,
     });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
     console.error('Error composing image:', error);
     return NextResponse.json(
       { error: 'Failed to compose image' },

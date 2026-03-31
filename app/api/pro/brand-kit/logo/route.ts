@@ -136,6 +136,21 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ brand_kit: updatedKit, asset });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          error: "Invalid request payload",
+          details: error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        { status: 400 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -215,6 +230,21 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ brand_kit: updatedKit });
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          error: "Invalid request payload",
+          details: error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        { status: 400 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
