@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const maxDuration = 120;
+
 import { createServerSupabase } from '@/lib/supabase/server';
 
 /**

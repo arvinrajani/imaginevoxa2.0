@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+
 import { z } from "zod";
 import { createStructuredChatCompletion } from "@/lib/ai/openai";
 

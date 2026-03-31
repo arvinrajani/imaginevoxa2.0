@@ -1,4 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
+
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {

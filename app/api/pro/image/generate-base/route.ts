@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+
+export const maxDuration = 60;
+
 import { createServerSupabase } from '@/lib/supabase/server';
 import { generateImageBase } from '@/lib/ai/openai';
 import { buildBaseImagePrompt } from '@/lib/studio/prompt-builder';

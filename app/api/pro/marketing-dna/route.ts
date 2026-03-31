@@ -1,4 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
+
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';

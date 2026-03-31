@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
+
 import { z } from "zod";
 import crypto from "crypto";
 import { createServerSupabase } from "@/lib/supabase/server";

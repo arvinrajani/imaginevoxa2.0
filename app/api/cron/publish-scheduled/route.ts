@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 120;
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type JobResult = {
