@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -37,7 +38,7 @@ async function fetchLinkedInUserInfo(accessToken: string): Promise<{
   source: "live";
 } | null> {
   try {
-    const response = await fetch("https://api.linkedin.com/v2/userinfo", {
+    const response = await fetchWithTimeout("https://api.linkedin.com/v2/userinfo", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

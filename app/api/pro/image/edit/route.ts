@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -36,7 +37,7 @@ async function fetchImageBuffer(url: string) {
   if (url.startsWith("data:image")) {
     return dataUrlToBuffer(url);
   }
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch base image: ${res.status}`);
   }
@@ -100,13 +101,13 @@ export async function POST(request: Request) {
     if (input.size) form.append("size", input.size);
     form.append("response_format", "b64_json");
 
-    const editRes = await fetch(`${OPENAI_API_BASE}/images/edits`, {
+    const editRes = await fetchWithTimeout(`${OPENAI_API_BASE}/images/edits`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${getApiKey()}`,
       },
       body: form,
-    });
+    }, 55000);
 
     if (!editRes.ok) {
       const errorText = await editRes.text();

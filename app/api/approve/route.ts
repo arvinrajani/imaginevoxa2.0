@@ -5,6 +5,7 @@ export const maxDuration = 60;
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maybeTranscodeWithZencoder } from "@/lib/video";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 type ApproveRequest = {
   postId: string;
@@ -104,7 +105,7 @@ async function uploadImageToLinkedIn(
       imageBody = Buffer.from(match[2], "base64");
       console.log("✅ Data URL decoded, size:", imageBody.byteLength, "bytes, type:", contentType);
     } else {
-      const imageResponse = await fetch(imageUrl);
+      const imageResponse = await fetchWithTimeout(imageUrl);
       if (!imageResponse.ok) {
         console.error("❌ Failed to download image:", imageResponse.status);
         return null;
@@ -117,7 +118,7 @@ async function uploadImageToLinkedIn(
 
     // Step 2: Register upload with LinkedIn's v2 Assets API
     console.log("🖼️ Step 2: Registering upload with LinkedIn...");
-    const registerResponse = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+    const registerResponse = await fetchWithTimeout("https://api.linkedin.com/v2/assets?action=registerUpload", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -159,7 +160,7 @@ async function uploadImageToLinkedIn(
     console.log("🖼️ Step 3: Uploading image binary to:", uploadUrl.substring(0, 80) + "...");
     const uploadBody =
       imageBody instanceof ArrayBuffer ? new Uint8Array(imageBody) : new Uint8Array(imageBody);
-    const uploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await fetchWithTimeout(uploadUrl, {
       method: "PUT",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -197,7 +198,7 @@ async function uploadVideoToLinkedIn(
     const contentType = videoFile.type || "video/mp4";
     console.log("🎬 Step 1: Preparing video upload:", videoFile.name, contentType);
 
-    const registerResponse = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+    const registerResponse = await fetchWithTimeout("https://api.linkedin.com/v2/assets?action=registerUpload", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -238,7 +239,7 @@ async function uploadVideoToLinkedIn(
     const videoBuffer = await videoFile.arrayBuffer();
     console.log("🎬 Step 2: Uploading video binary:", videoBuffer.byteLength, "bytes");
 
-    const uploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await fetchWithTimeout(uploadUrl, {
       method: "PUT",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -301,7 +302,7 @@ async function postToLinkedIn(
 
       console.log("📋 Share payload:", JSON.stringify(sharePayload, null, 2));
 
-      const shareResponse = await fetch("https://api.linkedin.com/v2/shares", {
+      const shareResponse = await fetchWithTimeout("https://api.linkedin.com/v2/shares", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -359,7 +360,7 @@ async function postToLinkedIn(
     const shouldUsePostsApi = !hasVideo && !hasMultipleImages;
     let response: Response | null = null;
     if (shouldUsePostsApi) {
-      response = await fetch("https://api.linkedin.com/rest/posts", {
+      response = await fetchWithTimeout("https://api.linkedin.com/rest/posts", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -439,7 +440,7 @@ async function postToLinkedIn(
 
     console.log("📋 UGC Post payload:", JSON.stringify(ugcPayload, null, 2).substring(0, 700));
 
-    response = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    response = await fetchWithTimeout("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,

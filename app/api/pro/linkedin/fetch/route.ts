@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { z } from "zod";
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
       memberUrn
     )})&count=${count}`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         Authorization: `Bearer ${connection.access_token}`,
         "X-Restli-Protocol-Version": "2.0.0",

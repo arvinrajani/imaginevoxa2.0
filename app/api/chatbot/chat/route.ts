@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -293,7 +294,7 @@ async function createEmbedding(text: string): Promise<number[]> {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/embeddings', {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -320,7 +321,7 @@ async function chatCompletion(
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${apiKey}`,

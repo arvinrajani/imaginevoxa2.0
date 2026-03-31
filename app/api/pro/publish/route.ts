@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -18,7 +19,7 @@ async function fetchWithRetry(url: string, init: RequestInit, retries = 3) {
   let attempt = 0;
   let lastResponse: Response | null = null;
   while (attempt < retries) {
-    const response = await fetch(url, init);
+    const response = await fetchWithTimeout(url, init);
     lastResponse = response;
     if (response.ok) return response;
     const shouldRetry = response.status === 429 || response.status >= 500;

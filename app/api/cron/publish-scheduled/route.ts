@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 120;
 
@@ -25,7 +26,7 @@ function computeNextRetry(attempt: number) {
 }
 
 async function publishViaApprove(baseUrl: string, secret: string, postId: string) {
-  const publishResponse = await fetch(`${baseUrl}/api/approve`, {
+  const publishResponse = await fetchWithTimeout(`${baseUrl}/api/approve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 120;
 
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     const imageProfile = imageProfileRes.data;
 
     // PHASE 1: Generate base image with gpt-image-1
-    const phase1Response = await fetch(
+    const phase1Response = await fetchWithTimeout(
       `${request.nextUrl.origin}/api/pro/image/generate-base`,
       {
         method: 'POST',
@@ -99,7 +100,8 @@ export async function POST(request: NextRequest) {
           prompt: imagePrompt || headline,
           userPrompt: headline,
         }),
-      }
+      },
+      55000
     );
 
     if (!phase1Response.ok) {
@@ -168,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     if (brandKit?.logo_assets?.[0] && moodBoard?.id && imageProfile?.id && baseAssetId) {
       try {
-        const phase2Response = await fetch(
+        const phase2Response = await fetchWithTimeout(
           `${request.nextUrl.origin}/api/pro/image/compose`,
           {
             method: 'POST',
@@ -187,7 +189,8 @@ export async function POST(request: NextRequest) {
               logoPlacement: 'bottom-right',
               logoScale: 0.8,
             }),
-          }
+          },
+          55000
         );
 
         if (phase2Response.ok) {
@@ -217,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     // Visual QA checks (logo safety, collisions, readability heuristics)
     try {
-      const qaResponse = await fetch(
+      const qaResponse = await fetchWithTimeout(
         `${request.nextUrl.origin}/api/pro/image/qa`,
         {
           method: 'POST',
@@ -241,7 +244,8 @@ export async function POST(request: NextRequest) {
             ],
             overlayOpacity: 0.2,
           }),
-        }
+        },
+        55000
       );
 
       if (qaResponse.ok) {
@@ -267,7 +271,7 @@ export async function POST(request: NextRequest) {
 
     // Run compliance checks
     try {
-      await fetch(
+      await fetchWithTimeout(
         `${request.nextUrl.origin}/api/pro/compliance/check`,
         {
           method: 'POST',
@@ -276,7 +280,8 @@ export async function POST(request: NextRequest) {
             'cookie': request.headers.get('cookie') || '',
           },
           body: JSON.stringify({ postId: post.id }),
-        }
+        },
+        55000
       );
     } catch (error) {
       console.error('Compliance check failed (non-critical):', error);

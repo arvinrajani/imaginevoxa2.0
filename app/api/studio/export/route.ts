@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -38,7 +39,7 @@ async function fetchBuffer(url: string) {
     return Buffer.from(url.slice(idx + 1), 'base64');
   }
 
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}`);
   }

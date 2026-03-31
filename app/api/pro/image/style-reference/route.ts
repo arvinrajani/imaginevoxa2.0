@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { z } from "zod";
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     const model = process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4o-2024-08-06";
-    const response = await fetch(`${OPENAI_API_BASE}/responses`, {
+    const response = await fetchWithTimeout(`${OPENAI_API_BASE}/responses`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${getApiKey()}`,

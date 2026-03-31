@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -28,7 +29,7 @@ type EngagementStats = {
 const safeNumber = (value: unknown) => Number(value || 0);
 
 async function fetchLinkedIn(url: string, accessToken: string) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "X-Restli-Protocol-Version": "2.0.0",

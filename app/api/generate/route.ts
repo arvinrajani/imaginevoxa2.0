@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 
@@ -89,7 +90,7 @@ async function summarizeUploadedImagesForPost(files: File[], imageContext: strin
   }
 
   const model = process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4o-mini";
-  const response = await fetch(`${OPENAI_API_BASE}/responses`, {
+  const response = await fetchWithTimeout(`${OPENAI_API_BASE}/responses`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${getApiKey()}`,

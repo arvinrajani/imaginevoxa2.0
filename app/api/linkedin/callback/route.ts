@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { cookies } from "next/headers";
@@ -113,7 +114,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+  const tokenRes = await fetchWithTimeout("https://www.linkedin.com/oauth/v2/accessToken", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -158,7 +159,7 @@ export async function GET(request: Request) {
   
   // First, try the userinfo endpoint (OpenID Connect)
   try {
-    const userinfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    const userinfoRes = await fetchWithTimeout("https://api.linkedin.com/v2/userinfo", {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
       },
@@ -177,7 +178,7 @@ export async function GET(request: Request) {
   // If userinfo didn't work, try the legacy /me endpoint
   if (!memberUrn) {
     try {
-      const profileRes = await fetch("https://api.linkedin.com/v2/me", {
+      const profileRes = await fetchWithTimeout("https://api.linkedin.com/v2/me", {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
           "X-Restli-Protocol-Version": "2.0.0",
@@ -234,7 +235,7 @@ export async function GET(request: Request) {
     console.log("ðŸ¢ Fetching LinkedIn organizations...");
     
     // Method 1: Try organizationalEntityAcls (for pages you admin)
-    const orgAclRes = await fetch(
+    const orgAclRes = await fetchWithTimeout(
       "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
       {
         headers: {
@@ -257,7 +258,7 @@ export async function GET(request: Request) {
         const ids = orgUrns.map((urn) => urn.replace("urn:li:organization:", ""));
         console.log("Fetching org details for IDs:", ids);
         
-        const detailsRes = await fetch(
+        const detailsRes = await fetchWithTimeout(
           `https://api.linkedin.com/v2/organizations?ids=List(${ids.join(",")})`,
           {
             headers: {

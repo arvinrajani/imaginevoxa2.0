@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
 
   const text = post.post_content;
 
-  const linkedInResponse = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+  const linkedInResponse = await fetchWithTimeout("https://api.linkedin.com/v2/ugcPosts", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

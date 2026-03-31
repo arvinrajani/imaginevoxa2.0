@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
 import { cookies } from "next/headers";
@@ -67,7 +68,7 @@ function parseScopes(value: string | null | undefined): string[] {
 }
 
 async function fetchMetaJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetchWithTimeout(url, { method: "GET" });
   const text = await response.text();
   let json: unknown = {};
   try {
