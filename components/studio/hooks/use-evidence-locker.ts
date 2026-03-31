@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { EvidenceAsset } from '@/lib/studio/types';
+import { renderPdfPagesToImages } from '@/lib/client-pdf-renderer';
 
 type UploadEvidenceOptions = {
   title?: string;
@@ -186,6 +187,61 @@ function upsertEvidenceAsset(list: EvidenceAsset[], asset: EvidenceAsset) {
     return rightTime - leftTime;
   });
   return next;
+}
+
+/**
+ * Client-side fallback: render PDF pages in the browser and upload as images.
+ * Called when server-side extraction fails (e.g. @napi-rs/canvas unavailable on Vercel).
+ */
+async function clientSideExtractAndUpload(
+  file: File,
+  brandId: string,
+  parentTitle: string,
+  parentEvidenceId: string | null
+): Promise<UploadEvidencePayload[]> {
+  let rendered;
+  try {
+    rendered = await renderPdfPagesToImages(file, { maxPages: 30, maxWidth: 1400 });
+  } catch (renderError) {
+    console.error('[client-pdf-fallback] Rendering failed:', renderError);
+    return [];
+  }
+
+  if (rendered.length === 0) return [];
+
+  const results: UploadEvidencePayload[] = [];
+  for (const page of rendered) {
+    try {
+      const imageFile = new File(
+        [page.blob],
+        `${parentTitle.replace(/\.[^.]+$/, '')}-page-${page.pageNumber}.png`,
+        { type: 'image/png' }
+      );
+
+      const form = new FormData();
+      form.set('brandId', brandId);
+      form.set('file', imageFile);
+      form.set('title', `${parentTitle} - Page ${page.pageNumber} visual`);
+      form.set('description', `Rendered page ${page.pageNumber} from PDF "${parentTitle}" (${page.width}x${page.height}px). Client-side extraction.`);
+      const tags = ['pdf-extracted', 'pdf-rendered-page', `pdf-page-${page.pageNumber}`];
+      if (parentEvidenceId) tags.push(`pdf-source-${parentEvidenceId}`);
+      form.set('tags', JSON.stringify(tags));
+
+      const res = await fetch('/api/studio/evidence/upload', {
+        method: 'POST',
+        body: form,
+      });
+
+      if (res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as UploadEvidencePayload;
+        results.push(payload);
+      }
+    } catch (uploadError) {
+      console.warn(`[client-pdf-fallback] Failed to upload page ${page.pageNumber}:`, uploadError);
+    }
+  }
+
+  return results;
 }
 
 export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResult {
@@ -380,9 +436,37 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
         if (imgExtraction) {
           const extractionStatus = imgExtraction.status || '';
           if (extractionStatus === 'extract_failed' || extractionStatus === 'none_found') {
-            toast.warning('No images could be extracted from this PDF', {
-              description: imgExtraction.detail || 'The PDF may not contain extractable images, or the extraction engine encountered an error.',
-            });
+            // Client-side fallback: render PDF pages in the browser
+            const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+            if (isPdf && brandId) {
+              toast.info('Extracting images client-side...', { description: 'Server extraction failed, rendering PDF pages in your browser.' });
+              const fallbackPayloads = await clientSideExtractAndUpload(
+                file,
+                brandId,
+                file.name,
+                uploadedEvidenceId
+              );
+              const fallbackAssets = fallbackPayloads
+                .map((p) => normalizeEvidenceAsset(p.evidence, { brandId, fileName: file.name, options }))
+                .filter((a): a is EvidenceAsset => Boolean(a));
+              if (fallbackAssets.length > 0) {
+                setEvidence((prev) =>
+                  fallbackAssets.reduce((next, asset) => upsertEvidenceAsset(next, asset), prev)
+                );
+                await refresh();
+                toast.success(`${fallbackAssets.length} page image${fallbackAssets.length === 1 ? '' : 's'} extracted from PDF`, {
+                  description: 'Rendered in your browser and uploaded successfully.',
+                });
+              } else {
+                toast.warning('No images could be extracted from this PDF', {
+                  description: 'Both server and client-side extraction found no usable images.',
+                });
+              }
+            } else {
+              toast.warning('No images could be extracted from this PDF', {
+                description: imgExtraction.detail || 'The PDF may not contain extractable images, or the extraction engine encountered an error.',
+              });
+            }
           }
         }
       } catch (error) {
@@ -475,10 +559,35 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
 
             extractedImageCount += payload.knowledge_sync?.image_extraction?.saved_count ?? 0;
 
-            // Track extraction failures for batch summary
+            // Client-side fallback when server extraction fails
             const batchImgStatus = payload.knowledge_sync?.image_extraction?.status || '';
             if (batchImgStatus === 'extract_failed' || batchImgStatus === 'none_found') {
-              failures.push(`${file.name}: No images could be extracted`);
+              const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+              if (isPdf && brandId) {
+                try {
+                  const fallbackPayloads = await clientSideExtractAndUpload(
+                    file,
+                    brandId,
+                    file.name,
+                    uploadedEvidenceId
+                  );
+                  const fallbackAssets = fallbackPayloads
+                    .map((p) => normalizeEvidenceAsset(p.evidence, { brandId, fileName: file.name, options }))
+                    .filter((a): a is EvidenceAsset => Boolean(a));
+                  if (fallbackAssets.length > 0) {
+                    setEvidence((prev) =>
+                      fallbackAssets.reduce((next, asset) => upsertEvidenceAsset(next, asset), prev)
+                    );
+                    extractedImageCount += fallbackAssets.length;
+                  } else {
+                    failures.push(`${file.name}: No images could be extracted`);
+                  }
+                } catch {
+                  failures.push(`${file.name}: No images could be extracted`);
+                }
+              } else {
+                failures.push(`${file.name}: No images could be extracted`);
+              }
             }
 
             if (payload.storage_warning) {
