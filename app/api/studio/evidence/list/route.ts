@@ -52,6 +52,10 @@ export async function GET(request: Request) {
           .from(EVIDENCE_STORAGE_BUCKET)
           .createSignedUrl(item.file_path, 60 * 60);
 
+        if (signed.error) {
+          console.warn(`[evidence-list] Failed to create signed URL for ${item.file_path}: ${signed.error.message}`);
+        }
+
         return {
           ...item,
           signed_url: signed.error ? null : signed.data?.signedUrl || null,

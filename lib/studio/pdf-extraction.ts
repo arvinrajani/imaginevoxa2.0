@@ -339,14 +339,36 @@ export async function extractPdfImagesIntoEvidence(
   const logPrefix = `[pdf-extraction] "${params.parentTitle}"`;
   console.log(`${logPrefix} Starting extraction (buffer: ${params.fileBuffer.byteLength} bytes)`);
 
-  const embeddedParsed = await parsePdfEmbeddedImages(params.fileBuffer);
+  let embeddedParsed: Awaited<ReturnType<typeof parsePdfEmbeddedImages>>;
+  try {
+    embeddedParsed = await parsePdfEmbeddedImages(params.fileBuffer);
+  } catch (embeddedError) {
+    console.error(`${logPrefix} Embedded image extraction crashed:`, embeddedError instanceof Error ? embeddedError.message : embeddedError);
+    embeddedParsed = {
+      status: 'extract_failed' as const,
+      detail: embeddedError instanceof Error ? embeddedError.message : 'Embedded image extraction crashed.',
+      images: [] as ParsedPdfImage[],
+      foundCount: 0,
+    };
+  }
   const embeddedImages =
     embeddedParsed.status === 'ok' ? embeddedParsed.images : ([] as ParsedPdfImage[]);
   console.log(`${logPrefix} Embedded images: status=${embeddedParsed.status}, found=${embeddedParsed.foundCount}, extracted=${embeddedImages.length}${embeddedParsed.detail ? `, detail=${embeddedParsed.detail}` : ''}`);
 
-  const screenshotParsed = await parsePdfPageScreenshots(params.fileBuffer, {
-    maxImages: Math.max(0, MAX_EXTRACTED_IMAGES_PER_PDF - embeddedImages.length),
-  });
+  let screenshotParsed: Awaited<ReturnType<typeof parsePdfPageScreenshots>>;
+  try {
+    screenshotParsed = await parsePdfPageScreenshots(params.fileBuffer, {
+      maxImages: Math.max(0, MAX_EXTRACTED_IMAGES_PER_PDF - embeddedImages.length),
+    });
+  } catch (screenshotError) {
+    console.error(`${logPrefix} Page screenshot extraction crashed:`, screenshotError instanceof Error ? screenshotError.message : screenshotError);
+    screenshotParsed = {
+      status: 'extract_failed' as const,
+      detail: screenshotError instanceof Error ? screenshotError.message : 'Page screenshot extraction crashed.',
+      images: [] as ParsedPdfImage[],
+      foundCount: 0,
+    };
+  }
   console.log(`${logPrefix} Page screenshots: status=${screenshotParsed.status}, found=${screenshotParsed.foundCount}, extracted=${screenshotParsed.status === 'ok' ? screenshotParsed.images.length : 0}${screenshotParsed.detail ? `, detail=${screenshotParsed.detail}` : ''}`);
 
   const parsedImages: ParsedPdfImage[] = [];

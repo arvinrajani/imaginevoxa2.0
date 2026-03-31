@@ -21,6 +21,7 @@ import {
 import { createPdfParser } from '@/lib/pdf-parse-config';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 const MAX_PDF_CONTENT_CHARS = 120_000;
 

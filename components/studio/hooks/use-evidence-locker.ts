@@ -374,6 +374,17 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             description: payload.storage_warning,
           });
         }
+
+        // Surface image extraction failures so the user knows
+        const imgExtraction = payload.knowledge_sync?.image_extraction;
+        if (imgExtraction) {
+          const extractionStatus = imgExtraction.status || '';
+          if (extractionStatus === 'extract_failed' || extractionStatus === 'none_found') {
+            toast.warning('No images could be extracted from this PDF', {
+              description: imgExtraction.detail || 'The PDF may not contain extractable images, or the extraction engine encountered an error.',
+            });
+          }
+        }
       } catch (error) {
         toast.error('Upload failed', {
           description: error instanceof Error ? error.message : 'Please try again.',
@@ -463,6 +474,12 @@ export function useEvidenceLocker(brandId: string | null): UseEvidenceLockerResu
             }
 
             extractedImageCount += payload.knowledge_sync?.image_extraction?.saved_count ?? 0;
+
+            // Track extraction failures for batch summary
+            const batchImgStatus = payload.knowledge_sync?.image_extraction?.status || '';
+            if (batchImgStatus === 'extract_failed' || batchImgStatus === 'none_found') {
+              failures.push(`${file.name}: No images could be extracted`);
+            }
 
             if (payload.storage_warning) {
               storageWarningCount += 1;

@@ -3865,12 +3865,36 @@ export function ImageCreator({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setUploadedLogo(reader.result as string);
+    // Resize logo to max 512x512 before encoding as data URI
+    // to keep request body small and ensure clean PNG format
+    const img = new Image();
+    img.onload = () => {
+      const MAX_LOGO_DIM = 512;
+      let { width, height } = img;
+      if (width > MAX_LOGO_DIM || height > MAX_LOGO_DIM) {
+        const scale = Math.min(MAX_LOGO_DIM / width, MAX_LOGO_DIM / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        setUploadedLogo(canvas.toDataURL('image/png'));
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => setUploadedLogo(reader.result as string);
+        reader.readAsDataURL(file);
+      }
       toast.success('Logo uploaded!');
+      URL.revokeObjectURL(img.src);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      toast.error('Failed to load logo image');
+    };
+    img.src = URL.createObjectURL(file);
   }, []);
 
   const handlePartnerLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4481,6 +4505,10 @@ export function ImageCreator({
         }
 
         const data = await res.json();
+
+        if (data.logoWarning) {
+          toast.warning('Logo issue', { description: data.logoWarning, duration: 8000 });
+        }
 
         if (data.url) {
           const rawImageUrl = (typeof data.baseUrl === 'string' && data.baseUrl.trim()) || data.url;

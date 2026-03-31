@@ -9,6 +9,8 @@ import { applyThemeBrandFinisher } from '@/lib/studio/theme-finisher';
 import { resolveServerScene } from '@/lib/studio/industry-scenes';
 import { buildVoxaPromptPackage } from '@/lib/studio/voxa-prompt-spec';
 
+export const maxDuration = 60;
+
 type CreateImageRequest = {
   brandId?: string;
   brandName?: string;
@@ -1172,14 +1174,23 @@ function sanitizeDisplayText(text: string | null | undefined, maxLength: number)
 }
 
 function decodeDataUriToBuffer(dataUri: string): Buffer | null {
-  if (dataUri.length > MAX_DATA_URI_LENGTH) return null;
+  if (dataUri.length > MAX_DATA_URI_LENGTH) {
+    console.error(`[image-create] Data URI too large: ${dataUri.length} chars (max ${MAX_DATA_URI_LENGTH})`);
+    return null;
+  }
 
   const match = dataUri.match(/^data:([^;,]+)?((?:;[^,]*)*?),([\s\S]*)$/);
-  if (!match) return null;
+  if (!match) {
+    console.error('[image-create] Data URI format invalid — could not parse');
+    return null;
+  }
 
   // Validate content-type is image
   const mimeType = (match[1] || '').toLowerCase();
-  if (mimeType && !mimeType.startsWith('image/')) return null;
+  if (mimeType && !mimeType.startsWith('image/')) {
+    console.error(`[image-create] Data URI MIME type is not image: ${mimeType}`);
+    return null;
+  }
 
   const meta = match[2] || '';
   const payload = match[3] || '';
@@ -1191,9 +1202,13 @@ function decodeDataUriToBuffer(dataUri: string): Buffer | null {
     } else {
       buf = Buffer.from(decodeURIComponent(payload), 'utf8');
     }
-    if (buf.length > MAX_IMAGE_BYTES) return null;
+    if (buf.length > MAX_IMAGE_BYTES) {
+      console.error(`[image-create] Decoded image too large: ${buf.length} bytes (max ${MAX_IMAGE_BYTES})`);
+      return null;
+    }
     return buf;
-  } catch {
+  } catch (err) {
+    console.error('[image-create] Failed to decode data URI:', err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -1203,7 +1218,9 @@ async function resolveImageBufferFromSource(source: string): Promise<Buffer | nu
   if (!trimmed) return null;
 
   if (trimmed.startsWith('data:')) {
-    return decodeDataUriToBuffer(trimmed);
+    const buf = decodeDataUriToBuffer(trimmed);
+    if (!buf) console.error('[image-create] Failed to decode data URI logo (length:', trimmed.length, ')');
+    return buf;
   }
 
   // SSRF protection: only allow safe HTTPS URLs
@@ -1219,21 +1236,34 @@ async function resolveImageBufferFromSource(source: string): Promise<Buffer | nu
     const response = await fetch(trimmed, { signal: controller.signal });
     clearTimeout(timer);
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`[image-create] Logo fetch failed: HTTP ${response.status} for ${trimmed.slice(0, 120)}`);
+      return null;
+    }
 
-    // Validate content-type is image
+    // Validate content-type is image (allow octet-stream and empty as fallback)
     const contentType = response.headers.get('content-type') || '';
-    if (!contentType.startsWith('image/')) return null;
+    if (contentType && !contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
+      console.error(`[image-create] Logo fetch returned non-image content-type: ${contentType}`);
+      return null;
+    }
 
     // Check content-length before buffering when available
     const contentLength = Number(response.headers.get('content-length') || '0');
-    if (contentLength > MAX_IMAGE_BYTES) return null;
+    if (contentLength > MAX_IMAGE_BYTES) {
+      console.error(`[image-create] Logo too large: ${contentLength} bytes`);
+      return null;
+    }
 
     const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) return null;
+    if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) {
+      console.error(`[image-create] Logo buffer too large: ${arrayBuffer.byteLength} bytes`);
+      return null;
+    }
 
     return Buffer.from(arrayBuffer);
-  } catch {
+  } catch (err) {
+    console.error('[image-create] Logo fetch error:', err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -1768,7 +1798,7 @@ ${themeSelectionGuidance ? `SELECTED VISUAL ASSETS:\n${themeSelectionGuidance}\n
 ${safeBrandName || effectiveBrandColors.length ? `═══════════════════════════════════════════════════
 BRAND IDENTITY
 ═══════════════════════════════════════════════════
-${safeBrandName ? (hasLogo && effectiveLogoPlacement !== 'none' ? `BRAND: "${safeBrandName}" — represented by the uploaded logo image (LARGE, PROMINENT, at least 20-28% canvas width). Do NOT render brand name as separate text. The logo MUST be clearly visible, sharp, and one of the FIRST things a viewer notices. It is the single most important brand element.` : `BRAND: "${safeBrandName}" — spell exactly, never invent alternate names.`) : ''}
+${safeBrandName ? (hasLogo && effectiveLogoPlacement !== 'none' ? `BRAND: "${safeBrandName}" — represented by the uploaded logo image (VERY LARGE, DOMINANT, at least 25-35% canvas width). Do NOT render brand name as separate text. The logo MUST be clearly visible, sharp, and THE FIRST thing a viewer notices. It is the single most important brand element — treat it as the hero of the design.` : `BRAND: "${safeBrandName}" — spell exactly, never invent alternate names.`) : ''}
 ${effectiveBrandColors.length ? `BRAND COLORS (MANDATORY): ${effectiveBrandColors.join(', ')}
 - 60%+ of the canvas must use these colors in backgrounds, panels, gradients.
 - Dark palette → dark cinematic scene. Warm palette → warm energetic scene.
@@ -1832,7 +1862,7 @@ PROHIBITIONS:
 - Misspelled text or garbled letters
 ${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
 - Sticker-like floating logos — integrate them into the design
-- Tiny logos under 14% of canvas width — logos must be large and clearly readable
+- Tiny logos under 25% of canvas width — logos must be LARGE, DOMINANT, and clearly readable
 - Ecommerce "Shop Now" styling unless it's a hiring theme` : ''}
 `.trim();
 
@@ -1886,8 +1916,94 @@ ${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
 
     // ── Resolve reference images (logo + optional URL reference) ──
     const referenceImages: Array<{ buffer: Buffer; filename: string; role: string }> = [];
-    const primaryLogoBuffer =
+    let primaryLogoBuffer =
       hasLogo ? await resolveImageBufferFromSource(effectiveLogoUrl) : null;
+
+    // Fallback: if logo resolution failed, try downloading directly from Supabase storage
+    if (hasLogo && !primaryLogoBuffer) {
+      console.error(`[image-create] LOGO FAILED TO RESOLVE! logoUrl type=${effectiveLogoUrl.startsWith('data:') ? 'data-uri' : 'url'}, length=${effectiveLogoUrl.length}. Attempting storage fallback...`);
+
+      // Fallback 1: If effectiveLogoUrl is a Supabase URL, extract the storage path and download via admin API
+      const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim() || 'brand-assets';
+      const supabaseUrlMarker = `/storage/v1/object/public/${bucket}/`;
+      const urlToTry = effectiveLogoUrl || brandKitLogoUrl || '';
+      const markerIdx = urlToTry.indexOf(supabaseUrlMarker);
+      if (markerIdx >= 0) {
+        const storagePath = urlToTry.slice(markerIdx + supabaseUrlMarker.length);
+        if (storagePath) {
+          try {
+            const { data: dlData, error: dlError } = await db.storage.from(bucket).download(storagePath);
+            if (!dlError && dlData) {
+              primaryLogoBuffer = Buffer.from(await dlData.arrayBuffer());
+              console.log(`[image-create] Logo storage fallback succeeded: ${storagePath} (${primaryLogoBuffer.length} bytes)`);
+            } else {
+              console.error(`[image-create] Logo storage fallback failed:`, dlError?.message);
+            }
+          } catch (e) {
+            console.error(`[image-create] Logo storage fallback error:`, e instanceof Error ? e.message : e);
+          }
+        }
+      }
+
+      // Fallback 2: If brandKitLogoUrl differs from effectiveLogoUrl, try resolving it too
+      if (!primaryLogoBuffer && brandKitLogoUrl && brandKitLogoUrl !== effectiveLogoUrl) {
+        primaryLogoBuffer = await resolveImageBufferFromSource(brandKitLogoUrl);
+        if (primaryLogoBuffer) {
+          console.log(`[image-create] Logo fallback via brandKitLogoUrl succeeded (${primaryLogoBuffer.length} bytes)`);
+        }
+      }
+
+      // Fallback 3: query image_assets directly for the latest logo file_url
+      if (!primaryLogoBuffer && brandId) {
+        try {
+          const { data: latestAsset } = await db
+            .from('image_assets')
+            .select('file_url, metadata')
+            .eq('brand_id', brandId)
+            .eq('asset_type', 'logo')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const assetUrl = asTrimmedString(latestAsset?.file_url);
+          if (assetUrl && assetUrl !== effectiveLogoUrl && assetUrl !== brandKitLogoUrl) {
+            primaryLogoBuffer = await resolveImageBufferFromSource(assetUrl);
+            if (primaryLogoBuffer) {
+              console.log(`[image-create] Logo fallback via image_assets succeeded (${primaryLogoBuffer.length} bytes)`);
+            }
+          }
+          // Try storage path from asset metadata
+          if (!primaryLogoBuffer) {
+            const assetMeta = latestAsset?.metadata as Record<string, unknown> | null;
+            const storagePath = asTrimmedString(assetMeta?.storage_path);
+            if (storagePath) {
+              try {
+                const { data: dlData, error: dlError } = await db.storage.from(bucket).download(storagePath);
+                if (!dlError && dlData) {
+                  primaryLogoBuffer = Buffer.from(await dlData.arrayBuffer());
+                  console.log(`[image-create] Logo fallback via asset storage_path succeeded (${primaryLogoBuffer.length} bytes)`);
+                }
+              } catch (_) { /* already logged above */ }
+            }
+          }
+        } catch (e) {
+          console.error(`[image-create] Logo image_assets fallback error:`, e instanceof Error ? e.message : e);
+        }
+      }
+
+      if (!primaryLogoBuffer) {
+        console.error(`[image-create] ALL logo fallbacks exhausted. Aborting generation — user expects their logo in the image.`);
+        return NextResponse.json(
+          {
+            error: 'Logo could not be loaded',
+            details: [
+              'Your logo image could not be downloaded or decoded.',
+              'Please try re-uploading your logo in the Brand Kit or via the logo upload button, then generate again.',
+            ],
+          },
+          { status: 422 }
+        );
+      }
+    }
     const posterSecondaryLogoBuffers = isAlliancePoster
       ? (
           await Promise.all(
@@ -2033,7 +2149,7 @@ ${aiOwnsFullPoster ? `- Ignoring uploaded logos or reference images
 
       // Build an explicit manifest so the AI knows exactly what each uploaded image is
       const imageManifest = referenceImages.map((r) => {
-        if (r.role === 'logo') return `- "${r.filename}": PRIMARY BRAND LOGO — reproduce this EXACTLY, LARGE and clearly visible (20-28% of canvas width) in the header/brand zone. This is THE most important visual element.`;
+        if (r.role === 'logo') return `- "${r.filename}": PRIMARY BRAND LOGO — reproduce this EXACTLY, VERY LARGE and clearly dominant (25-35% of canvas width) in the header/brand zone. This is THE #1 most important visual element. IT MUST BE IMPOSSIBLE TO MISS.`;
         if (r.role.startsWith('partner-logo')) return `- "${r.filename}": PARTNER/SECONDARY LOGO — reproduce this EXACTLY in the top-right partner zone`;
         if (r.role === 'reference') return `- "${r.filename}": HERO PRODUCT/SCENE IMAGE — use as the main visual hero of the poster`;
         if (r.role.startsWith('reference-extra')) return `- "${r.filename}": ADDITIONAL REFERENCE IMAGE — incorporate this product/scene/element visibly in the poster composition`;
@@ -2055,14 +2171,14 @@ You have been given the brand's EXACT logo as a reference image (logo.png). This
 
 LOGO RULES:
 1. PIXEL-PERFECT: Copy the logo EXACTLY — same shape, colors, proportions, letterforms, internal details. Do not redraw, simplify, or reinterpret it.
-2. PROMINENT SIZE: The logo MUST be LARGE and clearly visible — at least 20-28% of canvas width. It should be immediately recognizable at LinkedIn feed size (552px wide). Never make it small or subtle. BIGGER IS BETTER.
+2. PROMINENT SIZE: The logo MUST be VERY LARGE and clearly dominant — at least 25-35% of canvas width. It should be immediately recognizable at LinkedIn feed size (552px wide). Never make it small or subtle. BIGGER IS ALWAYS BETTER. If in doubt, make the logo even LARGER.
 3. PROMINENT PLACEMENT: Place it in the theme's designated logo zone (usually top-left header). Give it 3-4% breathing room on all sides. It must be THE FIRST thing a viewer notices.
 4. INFUSE MODE: The logo is a commanding hero brand element — large, bold, and prominent. It anchors the brand identity of the entire poster.
 5. CLEAN CONTRAST: Place on a surface with strong contrast — dark logo on light panel or light logo on dark panel. Give it a dedicated brand zone (header fascia, glass strip, metal plate, or clean background area).
 6. CRISP RENDERING: Clean edges, no blurriness, no softening, no color bleeding. Sharp at every pixel.
 7. NO TEXT SUBSTITUTION: The logo.png IS the brand identity. Do NOT write the brand name as separate text anywhere. Do NOT add text labels, text badges, or typographic renderings of the brand name. The logo image alone represents the brand.
 
-DO NOT: Replace the logo with text • Draw a different version • Make it tiny or subtle • Turn it into a watermark • Blur or degrade it • Change its colors • Write the brand name as text alongside the logo • Hide it in a corner • Make it smaller than 20% of canvas width`
+DO NOT: Replace the logo with text • Draw a different version • Make it tiny or subtle • Turn it into a watermark • Blur or degrade it • Change its colors • Write the brand name as text alongside the logo • Hide it in a corner • Make it smaller than 25% of canvas width. The logo must DOMINATE the brand zone.`
         : '';
 
       const partnerLogoInstruction = hasPartnerLogoRefs
@@ -2096,11 +2212,12 @@ Build the composition around the user's selected product/scene images. They are 
 Incorporate the user's selected product/scene prominently. Match colors, materials, style, and characteristics faithfully.`
         : '';
 
-      // Build the final edit prompt — user's selections are the #1 priority
+      // Build the final edit prompt — logo instruction at the TOP so truncation never cuts it
       editPrompt =
+        logoInstruction +
+        '\n\n' +
         finalImagePrompt +
         manifestBlock +
-        logoInstruction +
         partnerLogoInstruction +
         refInstruction +
         (aiOwnsFullPoster
@@ -2108,7 +2225,7 @@ Incorporate the user's selected product/scene prominently. Match colors, materia
 FINAL PRIORITY ORDER (READ THIS LAST — IT OVERRIDES CONFLICTS):
 ═══════════════════════════════════════════════════
 1) USE EVERY UPLOADED IMAGE: ALL uploaded logos and reference images MUST appear in the final poster. None may be omitted.
-2) PRIMARY LOGO (logo.png): This is THE highest priority element. Reproduce EXACTLY in the top-left header zone with clean contrast. Make it LARGE (20-28% canvas width), sharp, and impossible to miss. The logo must be clearly readable at LinkedIn feed thumbnail size.
+2) PRIMARY LOGO (logo.png): This is THE highest priority element. Reproduce EXACTLY in the top-left header zone with clean contrast. Make it VERY LARGE (25-35% canvas width), sharp, and absolutely impossible to miss. The logo must be clearly readable at LinkedIn feed thumbnail size.
 ${hasPartnerLogoRefs ? `3) PARTNER LOGOS (partner-logo-*.png): Reproduce EXACTLY in the top-right partner zone.
 4) HERO IMAGE: The selected product/scene must be the visual hero of the poster.
 5) THEME STRUCTURE: Follow the layout coordinates from the theme direction.
@@ -2436,6 +2553,7 @@ ${hasPartnerLogoRefs ? `3) PARTNER LOGOS (partner-logo-*.png): Reproduce EXACTLY
       assetId,
       logoApplied,
       logoUrlUsed: effectiveLogoUrl || null,
+      logoWarning: null,
       generationNonceUsed: generationNonce,
       generated: true,
       voxaPreflight: voxaPromptPackage.preflight.supported

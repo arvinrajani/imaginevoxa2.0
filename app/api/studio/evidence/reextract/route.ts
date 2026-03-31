@@ -10,6 +10,7 @@ import {
 } from '@/lib/studio/pdf-extraction';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 type EvidenceRow = {
   id: string;
