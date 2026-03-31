@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const maxDuration = 60;
 import { createServerSupabase } from '@/lib/supabase/server';
 
 // Image Profile Templates - System-level layouts

@@ -1,4 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
     }
 
-    // Return the FULL brand kit — colors, style, tone, imagery, content strategy
+    // Return the FULL brand kit â€” colors, style, tone, imagery, content strategy
     const { data: kit } = await admin
       .from('brand_kits')
       .select('*')

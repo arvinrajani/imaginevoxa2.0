@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+
+export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { EVIDENCE_STORAGE_BUCKET } from '@/lib/studio/evidence-helpers';

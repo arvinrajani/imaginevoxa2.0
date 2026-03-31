@@ -1,4 +1,6 @@
 // TEMPORARY DEV ENDPOINT - Disabled in production!
+
+export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 

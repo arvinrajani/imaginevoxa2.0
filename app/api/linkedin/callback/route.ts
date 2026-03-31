@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -229,7 +231,7 @@ export async function GET(request: Request) {
   // Try to get organizations, but don't fail if we can't
   let orgs: { id: string; urn: string; name: string }[] = [];
   try {
-    console.log("🏢 Fetching LinkedIn organizations...");
+    console.log("ðŸ¢ Fetching LinkedIn organizations...");
     
     // Method 1: Try organizationalEntityAcls (for pages you admin)
     const orgAclRes = await fetch(
@@ -294,9 +296,9 @@ export async function GET(request: Request) {
       console.warn("organizationalEntityAcls fetch failed:", orgAclRes.status, errorText.substring(0, 300));
     }
 
-    console.log("✅ Final orgs array:", JSON.stringify(orgs));
+    console.log("âœ… Final orgs array:", JSON.stringify(orgs));
   } catch (error) {
-    console.error("❌ Failed to fetch organizations:", error);
+    console.error("âŒ Failed to fetch organizations:", error);
     // Continue anyway - orgs will be empty
   }
 

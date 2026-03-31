@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { DEFAULT_IMAGE_PROFILES } from "@/lib/studio/image-profiles";

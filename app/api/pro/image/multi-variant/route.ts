@@ -1,4 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 import { generateImageBase, createStructuredChatCompletion } from '@/lib/ai/openai';
 

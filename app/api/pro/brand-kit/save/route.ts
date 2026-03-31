@@ -1,4 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
@@ -48,7 +50,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Brand not found or access denied' }, { status: 403 });
     }
 
-    // Check if a brand kit already exists for this brand — update instead of insert
+    // Check if a brand kit already exists for this brand â€” update instead of insert
     const { data: existing } = await admin
       .from('brand_kits')
       .select('id')

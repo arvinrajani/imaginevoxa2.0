@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+
+export const maxDuration = 60;
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createServerSupabase } from '@/lib/supabase/server';
 
@@ -13,7 +15,7 @@ function getAdminIds(): Set<string> {
 // Deletes duplicate 'My Brand' entries for ALL users, keeping the oldest per user.
 export async function GET() {
     try {
-        // Auth check — must be a signed-in admin user
+        // Auth check â€” must be a signed-in admin user
         const supabase = await createServerSupabase();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) {
@@ -21,7 +23,7 @@ export async function GET() {
         }
         const adminIds = getAdminIds();
         if (adminIds.size > 0 && !adminIds.has(user.id)) {
-            return NextResponse.json({ error: 'Forbidden — admin access required' }, { status: 403 });
+            return NextResponse.json({ error: 'Forbidden â€” admin access required' }, { status: 403 });
         }
 
         const admin = createAdminClient();

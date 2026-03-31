@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+
+export const maxDuration = 60;
 import { requireOwnedRun, requireStudioAuth, studioErrorResponse } from '@/lib/studio/server-auth';
 
 export async function POST(request: Request) {

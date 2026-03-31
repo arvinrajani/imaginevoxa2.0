@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+
+export const maxDuration = 60;
 import { requireOwnedBrand, requireStudioAuth, studioErrorResponse } from '@/lib/studio/server-auth';
 
 function normalizeTags(input: unknown): string[] {

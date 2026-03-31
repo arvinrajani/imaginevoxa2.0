@@ -1,4 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const maxDuration = 60;
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { generateImageBase } from '@/lib/ai/openai';
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     // Use admin client (service role, bypasses RLS) when cookie auth is unavailable
-    // Always use admin client — avoids RLS recursion on brand_members
+    // Always use admin client â€” avoids RLS recursion on brand_members
     const db = createAdminClient();
 
     const colorPalette = brandColors?.length 
@@ -46,10 +48,10 @@ ${brandContext}
 
 DESIGN BRIEF:
 - Create a single, memorable logo mark that works at any size (favicon to billboard).
-- Modern, sophisticated, and timeless — think Nike swoosh, Apple logo, or Airbnb symbol level of simplicity and recognition.
+- Modern, sophisticated, and timeless â€” think Nike swoosh, Apple logo, or Airbnb symbol level of simplicity and recognition.
 - The logo should feel premium and trustworthy.
 - Use clean geometric forms, balanced proportions, and intentional negative space.
-- Transparent or white background. NO text, NO taglines — just the symbol.
+- Transparent or white background. NO text, NO taglines â€” just the symbol.
 - The design should be immediately recognizable and unique.
 ${prompt ? `\nAdditional direction: ${prompt}` : ''}
 
@@ -66,7 +68,7 @@ CREATIVE DIRECTION:
 - Use one of these approaches: professional photography with dramatic lighting, high-end 3D renders with realistic materials, or cinematic illustration.
 - Include conceptual visual metaphors that make the viewer pause and think.
 - Strong composition: rule of thirds, leading lines, depth of field, or dynamic symmetry.
-- Premium color grading — think movie poster or luxury brand campaign.
+- Premium color grading â€” think movie poster or luxury brand campaign.
 - The image should dominate a LinkedIn feed and earn clicks.
 
 TECHNICAL QUALITY:
@@ -86,7 +88,7 @@ DESIGN BRIEF:
 - Should tile perfectly in all directions with no visible seams.
 - Subtle enough to work as a background but interesting enough to add visual texture.
 - Think luxury packaging, premium stationery, or high-end website backgrounds.
-- NO text, NO logos — purely decorative pattern.
+- NO text, NO logos â€” purely decorative pattern.
 ${prompt ? `\nAdditional direction: ${prompt}` : ''}`,
 
       icon: `You are a UI/UX icon designer. Create a clean, professional icon/symbol.
@@ -96,8 +98,8 @@ ${brandContext}
 DESIGN BRIEF:
 - Simple, pixel-perfect icon that works at small sizes (32px to 256px).
 - Flat design with clean geometric lines and consistent stroke width.
-- Single color (or two-tone max) — must work in monochrome.
-- Transparent background — suitable for watermarks, UI elements, and brand stamps.
+- Single color (or two-tone max) â€” must work in monochrome.
+- Transparent background â€” suitable for watermarks, UI elements, and brand stamps.
 - Think Material Design or SF Symbols level of precision and clarity.
 ${prompt ? `\nAdditional direction: ${prompt}` : ''}`,
     };
