@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 export const maxDuration = 60;
 
@@ -502,7 +503,7 @@ export async function POST(request: Request) {
     const cronHeader = request.headers.get("x-cron-secret")?.trim();
     const isCron = Boolean(cronSecret && cronHeader &&
       cronSecret.length === cronHeader.length &&
-      require('crypto').timingSafeEqual(Buffer.from(cronHeader), Buffer.from(cronSecret)));
+      crypto.timingSafeEqual(Buffer.from(cronHeader), Buffer.from(cronSecret)));
 
     const supabase = isCron ? createAdminClient() : await createServerSupabase();
     const userResult = isCron ? { data: { user: null }, error: null } : await supabase.auth.getUser();

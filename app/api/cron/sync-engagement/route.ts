@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { fetchWithTimeout, safeJson } from '@/lib/fetch-timeout';
 
 export const maxDuration = 60;
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     const secret = process.env.CRON_SECRET?.trim();
     const header = request.headers.get("x-cron-secret")?.trim();
     if (!secret || !header || secret.length !== header.length ||
-        !require('crypto').timingSafeEqual(Buffer.from(header), Buffer.from(secret))) {
+        !crypto.timingSafeEqual(Buffer.from(header), Buffer.from(secret))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
