@@ -1483,7 +1483,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const input = inputSchema.parse(body);
 
-    const desiredCount = clamp(input.count ?? 3, 1, 5);
+    const desiredCount = clamp(input.count ?? 1, 1, 5);
     const tone: ToneId = input.tone ?? "professional";
     const length: LengthId = input.length ?? "long";
     const structureStyle: StructureStyle = input.structureStyle ?? "natural";
