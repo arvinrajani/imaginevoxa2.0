@@ -42,21 +42,26 @@ create index if not exists idx_brand_knowledge_chunks_brand_created
 create index if not exists idx_brand_knowledge_chunks_brand_source
   on public.brand_knowledge_chunks (brand_id, source_type, created_at desc);
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and indexname = 'idx_brand_knowledge_chunks_embedding'
-  ) then
-    create index idx_brand_knowledge_chunks_embedding
-      on public.brand_knowledge_chunks
-      using ivfflat (embedding vector_cosine_ops)
-      with (lists = 100);
-  end if;
-end
-$$;
+-- IVFFlat index for similarity search.
+-- Skipped by default: Supabase Free tier (32 MB maintenance_work_mem) cannot
+-- build an IVFFlat index on 1536-dim vectors.  The match_brand_knowledge RPC
+-- still works via sequential scan, which is fine for typical knowledge bases.
+-- On a paid plan with more memory, uncomment the block below:
+--
+-- do $$
+-- begin
+--   if not exists (
+--     select 1 from pg_indexes
+--     where schemaname = 'public'
+--       and indexname = 'idx_brand_knowledge_chunks_embedding'
+--   ) then
+--     create index idx_brand_knowledge_chunks_embedding
+--       on public.brand_knowledge_chunks
+--       using ivfflat (embedding vector_cosine_ops)
+--       with (lists = 100);
+--   end if;
+-- end
+-- $$;
 
 -- ---------------------------------------------------------------------------
 -- Public chatbot sessions
@@ -98,6 +103,10 @@ execute function public.chatbot_set_updated_at();
 -- ---------------------------------------------------------------------------
 -- Similarity search RPC used by /api/chatbot/chat
 -- ---------------------------------------------------------------------------
+
+-- Drop first in case return type changed from a previous migration
+drop function if exists public.match_brand_knowledge(vector, uuid, float, int);
+drop function if exists public.match_brand_knowledge(vector, uuid, double precision, integer);
 
 create or replace function public.match_brand_knowledge(
   query_embedding vector(1536),

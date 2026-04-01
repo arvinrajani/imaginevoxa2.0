@@ -14,7 +14,7 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.supabase.co https://media.licdn.com https://media-exp1.licdn.com https://*.openai.com https://oaidalleapiprodscus.blob.core.windows.net https://images.unsplash.com",
+      "img-src 'self' data: blob: https: http:",
       "font-src 'self' data:",
       "connect-src 'self' https://*.supabase.co https://api.openai.com https://api.linkedin.com",
       "frame-ancestors 'none'",

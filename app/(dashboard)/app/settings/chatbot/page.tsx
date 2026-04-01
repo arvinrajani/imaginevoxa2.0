@@ -159,6 +159,9 @@ export default function ChatbotSettingsPage() {
     const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
     const [legacyPdfMetaById, setLegacyPdfMetaById] = useState<Record<string, LegacyPdfSourceMeta>>({});
 
+    // Migration state – true when chatbot columns exist on the brands table
+    const [chatbotMigrated, setChatbotMigrated] = useState(true);
+
     // Conversations
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [viewingSession, setViewingSession] = useState<ChatSession | null>(null);
@@ -207,13 +210,35 @@ export default function ChatbotSettingsPage() {
                 return;
             }
 
-            const { data } = await supabase
+            // Try loading with chatbot columns first
+            const { data, error } = await supabase
                 .from('brands')
                 .select('id, name, website, chatbot_enabled, chatbot_slug, chatbot_welcome_message')
                 .eq('owner_user_id', user.id)
                 .order('name');
 
-            const brandList = (data ?? []) as Brand[];
+            let brandList: Brand[];
+
+            if (error && (error.message?.includes('does not exist') || error.code === 'PGRST204' || error.code === '42703')) {
+                // Chatbot columns missing – fall back to basic columns
+                setChatbotMigrated(false);
+                const { data: basicData } = await supabase
+                    .from('brands')
+                    .select('id, name, website')
+                    .eq('owner_user_id', user.id)
+                    .order('name');
+
+                brandList = ((basicData ?? []) as { id: string; name: string; website: string | null }[]).map((b) => ({
+                    ...b,
+                    chatbot_enabled: null,
+                    chatbot_slug: null,
+                    chatbot_welcome_message: null,
+                }));
+            } else {
+                setChatbotMigrated(true);
+                brandList = (data ?? []) as Brand[];
+            }
+
             setBrands(brandList);
             if (brandList.length > 0 && !selectedBrandId) {
                 const preferredId = workspaceBrand?.id && brandList.find((b) => b.id === workspaceBrand.id)
@@ -273,6 +298,15 @@ export default function ChatbotSettingsPage() {
                     .eq('brand_id', brandId)
                     .order('created_at', { ascending: false });
 
+                // brand_knowledge_chunks table also missing – fresh DB, nothing to load
+                if (legacyError && isMissingRelationError(legacyError, 'brand_knowledge_chunks')) {
+                    setPdfAssets([]);
+                    setChunkCounts({});
+                    setLegacyPdfMetaById({});
+                    setTotalChunks(0);
+                    return;
+                }
+
                 if (legacyError) {
                     throw legacyError;
                 }
@@ -331,6 +365,19 @@ export default function ChatbotSettingsPage() {
 
             // Get chunk counts per evidence asset
             const counts: Record<string, number> = {};
+            // Only query brand_knowledge_chunks if the table exists
+            const { count: probeCount, error: probeError } = await supabase
+                .from('brand_knowledge_chunks')
+                .select('id', { count: 'exact', head: true })
+                .eq('brand_id', brandId);
+
+            if (probeError && isMissingRelationError(probeError, 'brand_knowledge_chunks')) {
+                // Table doesn't exist yet on this database
+                setChunkCounts({});
+                setTotalChunks(0);
+                return;
+            }
+
             for (const pdf of pdfList) {
                 const { count } = await supabase
                     .from('brand_knowledge_chunks')
@@ -341,13 +388,7 @@ export default function ChatbotSettingsPage() {
             }
             setChunkCounts(counts);
 
-            // Total chunk count
-            const { count: total } = await supabase
-                .from('brand_knowledge_chunks')
-                .select('id', { count: 'exact', head: true })
-                .eq('brand_id', brandId);
-
-            setTotalChunks(total ?? 0);
+            setTotalChunks(probeCount ?? 0);
         },
         [supabase]
     );
@@ -355,12 +396,18 @@ export default function ChatbotSettingsPage() {
     // ---- Sessions loader ----
     const loadSessions = useCallback(
         async (brandId: string) => {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('chatbot_sessions')
                 .select('id, brand_id, session_token, messages, created_at')
                 .eq('brand_id', brandId)
                 .order('created_at', { ascending: false })
                 .limit(10);
+
+            // Gracefully handle missing chatbot_sessions table on fresh databases
+            if (error && isMissingRelationError(error, 'chatbot_sessions')) {
+                setSessions([]);
+                return;
+            }
 
             setSessions((data ?? []) as ChatSession[]);
         },
@@ -371,6 +418,13 @@ export default function ChatbotSettingsPage() {
     const saveSettings = async () => {
         if (!selectedBrandId) return;
 
+        if (!chatbotMigrated) {
+            toast.error('Database migration required', {
+                description: 'Run supabase/chatbot.sql in the Supabase SQL Editor before saving chatbot settings.',
+            });
+            return;
+        }
+
         if (!validateSlug(chatbotSlug)) {
             toast.error('Invalid slug', {
                 description: 'Slug must be at least 3 characters, lowercase letters, numbers, and hyphens only.',
@@ -380,16 +434,51 @@ export default function ChatbotSettingsPage() {
 
         setSavingSettings(true);
         try {
-            const { error } = await supabase
+            // Check if slug is already taken by another brand
+            const { data: existing } = await supabase
+                .from('brands')
+                .select('id')
+                .eq('chatbot_slug', chatbotSlug)
+                .neq('id', selectedBrandId)
+                .maybeSingle();
+
+            if (existing) {
+                toast.error('Slug already taken', {
+                    description: `The chatbot URL "${chatbotSlug}" is already in use by another brand. Please choose a different slug.`,
+                });
+                setSavingSettings(false);
+                return;
+            }
+
+            const { error, count } = await supabase
                 .from('brands')
                 .update({
                     chatbot_enabled: true,
                     chatbot_slug: chatbotSlug,
                     chatbot_welcome_message: welcomeMessage,
                 })
-                .eq('id', selectedBrandId);
+                .eq('id', selectedBrandId)
+                .select('id', { count: 'exact', head: true });
 
-            if (error) throw error;
+            if (error) {
+                // Friendly message for unique constraint violations
+                if (error.code === '23505' || error.message?.includes('unique')) {
+                    throw new Error(`The slug "${chatbotSlug}" is already taken. Please choose a different one.`);
+                }
+                // Friendly message for missing columns (migration not run)
+                if (error.code === '42703' || error.message?.includes('does not exist')) {
+                    throw new Error('Chatbot columns are missing from the database. Please run the chatbot migration (supabase/chatbot.sql) in the Supabase SQL Editor.');
+                }
+                throw error;
+            }
+
+            // If no rows were updated, RLS may have blocked the update (e.g. different owner)
+            if (count === 0) {
+                throw new Error(
+                    'No brand was updated. This can happen if your account does not own this brand. ' +
+                    'Make sure you are logged in with the same account that created the brand.'
+                );
+            }
 
             // Update local brand cache
             setBrands((prev) =>
@@ -724,6 +813,18 @@ export default function ChatbotSettingsPage() {
 
     return (
         <div className="space-y-8">
+            {/* Migration Banner */}
+            {!chatbotMigrated && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-50/10 p-5">
+                    <h3 className="text-sm font-semibold text-amber-600">Database Migration Required</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Chatbot columns are missing from the database. Run{' '}
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">supabase/chatbot.sql</code>{' '}
+                        in the Supabase SQL Editor, then refresh this page.
+                    </p>
+                </div>
+            )}
+
             {/* Page Header */}
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">AI Chatbot</h1>
