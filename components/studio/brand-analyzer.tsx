@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload,
   Sparkles,
@@ -53,6 +53,7 @@ interface LinkedInAnalysis {
 interface BrandAnalyzerProps {
   onAnalysisComplete: (analysis: LinkedInAnalysis) => void;
   brandId: string;
+  initialLinkedinUrl?: string;
   brandContext?: {
     name?: string;
     description?: string;
@@ -86,9 +87,9 @@ function parseJsonStringArray(value: string) {
   }
 }
 
-export function BrandAnalyzer({ onAnalysisComplete, brandId, brandContext }: BrandAnalyzerProps) {
+export function BrandAnalyzer({ onAnalysisComplete, brandId, initialLinkedinUrl, brandContext }: BrandAnalyzerProps) {
   const [analyzing, setAnalyzing] = useState(false);
-  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState(initialLinkedinUrl || '');
   const [manualBrief, setManualBrief] = useState('');
   const [tab, setTab] = useState<'linkedin' | 'manual' | 'upload'>('linkedin');
   const [analysis, setAnalysis] = useState<LinkedInAnalysis | null>(null);
@@ -149,6 +150,21 @@ export function BrandAnalyzer({ onAnalysisComplete, brandId, brandContext }: Bra
     setContextOfferings(incomingContext.offerings.join(', '));
     setContextAudience(incomingContext.targetAudience);
   }, [incomingContextFingerprint, incomingContext]);
+
+  // Auto-start analysis when initialLinkedinUrl is provided (e.g. from brand creation)
+  const autoAnalyzeRef = useRef(false);
+  useEffect(() => {
+    if (initialLinkedinUrl && !autoAnalyzeRef.current && !analysis) {
+      autoAnalyzeRef.current = true;
+      setTab('linkedin');
+      // Defer to next tick so analyzeLinkedIn is defined
+      setTimeout(() => {
+        const btn = document.querySelector<HTMLButtonElement>('[data-analyze-linkedin-btn]');
+        if (btn) btn.click();
+      }, 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLinkedinUrl]);
 
   const contextPayload = useMemo(
     () => ({
@@ -553,6 +569,7 @@ export function BrandAnalyzer({ onAnalysisComplete, brandId, brandContext }: Bra
             </div>
 
             <Button
+              data-analyze-linkedin-btn
               onClick={analyzeLinkedIn}
               disabled={!linkedinUrl || analyzing}
               size="lg"

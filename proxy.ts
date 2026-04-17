@@ -37,6 +37,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/linkedin/callback',
   '/api/meta/callback',
   '/api/cron/',
+  '/api/admin/backgrounds/list',
 ];
 
 function isPublicRoute(pathname: string): boolean {

@@ -65,7 +65,7 @@ import { BrandAnalyzer } from '@/components/studio/brand-analyzer';
 import { VisualStyleWizard } from '@/components/studio/visual-style-wizard';
 import { AssetManager } from '@/components/studio/asset-manager';
 import { PostGenerator } from '@/components/studio/post-generator';
-import { ImageCreator } from '@/components/studio/image-creator';
+import { ImageGenerator } from '@/components/image/ImageGenerator';
 import { ImageEditor } from '@/components/studio/image-editor';
 import { PreviewPublish } from '@/components/studio/preview-publish';
 import { EvidenceModal } from '@/components/studio/evidence-modal';
@@ -403,7 +403,7 @@ const PIPELINE_STEPS = [
 export default function StudioPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { selectedBrand: workspaceBrand, setSelectedBrand: setWorkspaceBrand } = useWorkspace();
+  const { selectedBrand: workspaceBrand, setSelectedBrand: setWorkspaceBrand, brands: workspaceBrands, loadWorkspace } = useWorkspace();
 
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -425,6 +425,10 @@ export default function StudioPage() {
     website: '',
   });
   const selectedBrandIdRef = useRef<string | null>(null);
+  // Track whether URL params (direct, linkedinUrl, postId) have been consumed on the
+  // initial brand effect run.  Subsequent brand switches via the dropdown should NOT
+  // re-read stale URL params — they should always do a clean reset + reload.
+  const urlParamsConsumedRef = useRef(false);
 
   const {
     evidence,
@@ -1011,18 +1015,43 @@ export default function StudioPage() {
     // On mount / brand list load: if there is a workspace brand set elsewhere, prefer it.
     if (!workspaceBrand || brands.length === 0) return;
     if (workspaceBrand.id === selectedBrand?.id) return; // already in sync
-    const match = brands.find((b) => b.id === workspaceBrand.id);
+
+    // Try local brands first; if the brand was created after Studio loaded,
+    // fall back to workspace brands list (which is always up-to-date).
+    let match = brands.find((b) => b.id === workspaceBrand.id);
+    if (!match) {
+      const wb = workspaceBrands.find((b) => b.id === workspaceBrand.id);
+      if (wb) {
+        match = {
+          id: wb.id,
+          name: wb.name,
+          owner_user_id: '',
+          description: wb.description ?? null,
+          industry: wb.industry ?? null,
+          website: wb.website ?? null,
+        };
+        // Also add to local brands list so selectors reflect it
+        setBrands((prev) => prev.some((b) => b.id === wb.id) ? prev : [...prev, match!]);
+      }
+    }
     if (match) {
       lastSyncedBrandIdRef.current = match.id; // mark so the next effect won't re-fire
       setSelectedBrand(match);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceBrand?.id, brands]);
+  }, [workspaceBrand?.id, brands, workspaceBrands]);
 
   useEffect(() => {
     if (!selectedBrand) {
-      lastSyncedBrandIdRef.current = null;
-      setWorkspaceBrand(null);
+      // Don't clear workspace brand while still loading — loadBrands hasn't
+      // resolved yet and the workspace context may hold the brand the user
+      // just selected on the Brands page.  Clearing it now would wipe
+      // localStorage before loadBrands can read it, causing it to fall back
+      // to the first brand instead of the intended one.
+      if (!loading) {
+        lastSyncedBrandIdRef.current = null;
+        setWorkspaceBrand(null);
+      }
       return;
     }
     if (lastSyncedBrandIdRef.current === selectedBrand.id) return; // originated from workspace, skip
@@ -1034,7 +1063,7 @@ export default function StudioPage() {
       industry: selectedBrand.industry ?? null,
       website: selectedBrand.website ?? null,
     });
-  }, [selectedBrand, setWorkspaceBrand]);
+  }, [selectedBrand, setWorkspaceBrand, loading]);
 
   // --- Data Loading ---
 
@@ -1127,8 +1156,10 @@ export default function StudioPage() {
   }, [supabase]);
 
   useEffect(() => {
+    // Refresh workspace brands (picks up brands created on other pages)
+    void loadWorkspace();
     void loadBrands();
-  }, [loadBrands]);
+  }, [loadBrands, loadWorkspace]);
 
   useEffect(() => {
     if (loading) return;
@@ -1140,7 +1171,7 @@ export default function StudioPage() {
     selectedBrandIdRef.current = selectedBrand?.id ?? null;
   }, [selectedBrand?.id]);
 
-  const loadBrandIntelligence = useCallback(async (brandId: string) => {
+  const loadBrandIntelligence = useCallback(async (brandId: string, signal?: AbortSignal) => {
     try {
       const { data, error } = await supabase
         .from('marketing_dna')
@@ -1151,11 +1182,13 @@ export default function StudioPage() {
         .maybeSingle();
 
       if (error || !data) {
-        if (selectedBrandIdRef.current === brandId) {
+        if (!signal?.aborted && selectedBrandIdRef.current === brandId) {
           setBrandIntelligence(null);
         }
         return;
       }
+
+      if (signal?.aborted) return;
 
       const evidence = (data.evidence || {}) as Record<string, unknown>;
       const colorNames =
@@ -1182,7 +1215,7 @@ export default function StudioPage() {
         colorNames,
       };
 
-      if (selectedBrandIdRef.current === brandId) {
+      if (!signal?.aborted && selectedBrandIdRef.current === brandId) {
         setBrandIntelligence(nextIntelligence);
 
         const analyzedPalette = flattenBrandColorsForStudio({
@@ -1211,7 +1244,7 @@ export default function StudioPage() {
         setBrandColorNames(nextIntelligence.colorNames);
       }
     } catch {
-      if (selectedBrandIdRef.current === brandId) {
+      if (!signal?.aborted && selectedBrandIdRef.current === brandId) {
         setBrandIntelligence(null);
       }
     }
@@ -1319,12 +1352,12 @@ export default function StudioPage() {
     }
   };
 
-  const checkBrandSetup = useCallback(async (brandId: string) => {
+  const checkBrandSetup = useCallback(async (brandId: string, signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/pro/brand-kit/status?brandId=${brandId}`);
+      const res = await fetch(`/api/pro/brand-kit/status?brandId=${brandId}`, { signal });
       if (!res.ok) return;
       const data = await res.json();
-      if (selectedBrandIdRef.current !== brandId) return;
+      if (signal?.aborted || selectedBrandIdRef.current !== brandId) return;
       if (data.setupComplete) {
         setBrandSetupComplete(true);
 
@@ -1363,22 +1396,38 @@ export default function StudioPage() {
   useEffect(() => {
     if (!selectedBrand?.id) return;
 
-    // If navigated with ?direct=true (e.g. from Brands page), skip setup and go straight to studio
-    const params = new URLSearchParams(window.location.search);
-    const isDirect = params.get('direct') === 'true';
-    const hasPostId = !!params.get('postId');
+    // AbortController cancels in-flight requests when the brand changes
+    const abort = new AbortController();
+
+    // Only read URL params on the FIRST brand effect run (initial navigation).
+    // Subsequent brand switches via the dropdown should not re-read stale params.
+    const isFirstRun = !urlParamsConsumedRef.current;
+    urlParamsConsumedRef.current = true;
+
+    let isDirect = false;
+    let hasPostId = false;
+    let hasLinkedinUrl = false;
+
+    if (isFirstRun) {
+      const params = new URLSearchParams(window.location.search);
+      isDirect = params.get('direct') === 'true';
+      hasPostId = !!params.get('postId');
+      hasLinkedinUrl = !!params.get('linkedinUrl');
+    }
 
     // When loading a saved draft, skip reset - the draft loader handles state
     if (hasPostId) {
       setBrandSetupComplete(true);
       void Promise.all([
-        checkBrandSetup(selectedBrand.id),
-        loadBrandIntelligence(selectedBrand.id),
+        checkBrandSetup(selectedBrand.id, abort.signal),
+        loadBrandIntelligence(selectedBrand.id, abort.signal),
       ]);
-      return;
+      return () => { abort.abort(); };
     }
 
-    setBrandSetupComplete(isDirect);
+    // On first load with ?direct=true, skip setup wizard; on brand switch, keep
+    // setup complete (user already went through setup with the first brand).
+    setBrandSetupComplete(isDirect || !isFirstRun);
     setBrandKit(null);
     brandKitSavedSignatureRef.current = '';
     if (brandKitAutosaveTimerRef.current) {
@@ -1389,15 +1438,28 @@ export default function StudioPage() {
     setBrandColors(['#0A66C2', '#0F172A', '#22D3EE']);
     setBrandColorNames({});
     setBrandIntelligence(null);
-    setSetupStep('welcome');
+    setSelectedProduct(null);
+    // Only jump to 'analyze' on the initial navigation with a LinkedIn URL;
+    // on subsequent brand switches, go to 'welcome' (or skip if setup already done).
+    if (isFirstRun && hasLinkedinUrl) {
+      setSetupStep('analyze');
+    } else if (!isFirstRun) {
+      // Brand switched via dropdown — don't show the wizard again
+      setSetupStep('welcome');
+    } else {
+      setSetupStep('welcome');
+    }
     setActiveStep(0);
     setConfirmedPost(null);
     setConfirmedImageUrl(null);
+    setDraftPostId(null);
 
     void Promise.all([
-      checkBrandSetup(selectedBrand.id),
-      loadBrandIntelligence(selectedBrand.id),
+      checkBrandSetup(selectedBrand.id, abort.signal),
+      loadBrandIntelligence(selectedBrand.id, abort.signal),
     ]);
+
+    return () => { abort.abort(); };
   }, [selectedBrand?.id, checkBrandSetup, loadBrandIntelligence]);
 
   // --- Setup Handlers ---
@@ -1664,7 +1726,13 @@ export default function StudioPage() {
                   const firstBrand = brands.find((b) => b.company_id === next.id)
                     || brands.find((b) => !b.company_id);
                   setSelectedBrand(firstBrand ?? null);
+                  // Clear stale intelligence so PostGenerator remounts with clean analysisProfile
+                  setBrandIntelligence(null);
                   setSelectedProduct(null);
+                  // Clear stale URL params so they don't affect the new brand
+                  if (window.location.search) {
+                    router.replace('/app/studio', { scroll: false });
+                  }
                 }}
               >
                 <SelectTrigger className="h-10 border-gray-200 bg-gray-100 text-gray-900">
@@ -1689,8 +1757,14 @@ export default function StudioPage() {
                   const next = filteredBrands.find((b) => b.id === brandId);
                   if (!next) return;
                   setSelectedBrand(next);
+                  // Clear stale intelligence so PostGenerator remounts with clean analysisProfile
+                  setBrandIntelligence(null);
                   // Reset product when brand changes
                   setSelectedProduct(null);
+                  // Clear stale URL params so they don't affect the new brand
+                  if (window.location.search) {
+                    router.replace('/app/studio', { scroll: false });
+                  }
                 }}
               >
                 <SelectTrigger className="h-10 border-gray-200 bg-gray-100 text-gray-900">
@@ -2154,6 +2228,7 @@ export default function StudioPage() {
                 ? nextBrands.find((brand) => brand.company_id === selectedCompany.id)
                 : nextBrands[0]) || null;
             setSelectedBrand(nextSelected);
+            setBrandIntelligence(null);
           }
           return nextBrands;
         });
@@ -2506,7 +2581,9 @@ export default function StudioPage() {
         {setupStep === 'analyze' && (
           <Card className="p-6">
             <BrandAnalyzer
+              key={selectedBrand.id}
               brandId={selectedBrand.id}
+              initialLinkedinUrl={searchParams.get('linkedinUrl') || undefined}
               brandContext={{
                 name: selectedBrand.name,
                 description: selectedBrand.description || undefined,
@@ -2518,12 +2595,23 @@ export default function StudioPage() {
               }}
               onAnalysisComplete={handleAnalysisComplete}
             />
+            <div className="mt-6 flex items-center justify-between border-t pt-4">
+              <p className="text-sm text-gray-500">You can always run analysis later from brand settings.</p>
+              <Button
+                variant="ghost"
+                onClick={() => setSetupStep('style')}
+              >
+                Skip for now
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
           </Card>
         )}
 
         {setupStep === 'style' && (
           <Card className="p-6">
             <VisualStyleWizard
+              key={selectedBrand.id}
               brandId={selectedBrand.id}
               onComplete={handleStyleComplete}
               analyzedColors={wizardSeedColors}
@@ -2535,6 +2623,7 @@ export default function StudioPage() {
         {setupStep === 'assets' && (
           <Card className="p-6">
             <AssetManager
+              key={selectedBrand.id}
               brandId={selectedBrand.id}
               brandName={selectedBrand.name}
               brandColors={brandColors}
@@ -2841,6 +2930,7 @@ export default function StudioPage() {
                 )}
               </div>
               <PostGenerator
+                key={selectedBrand.id}
                 brandId={selectedBrand.id}
                 productId={selectedProduct?.id}
                 productName={selectedProduct?.name}
@@ -2901,28 +2991,13 @@ export default function StudioPage() {
                   </div>
                 )}
               </div>
-              <ImageCreator
+              <ImageGenerator
+                key={selectedBrand.id}
                 brandId={selectedBrand.id}
-                brandName={effectiveBrandName}
-                productName={selectedProduct?.name}
-                brandColors={brandColors}
-                brandColorNames={brandColorNames}
-                logoUrl={logoUrl}
-                logoAssets={brandKit?.logoAssets}
-                industry={selectedBrand.industry}
-                analysisProfile={analysisProfile}
-                confirmedPostText={confirmedPost ? `${confirmedPost.headline}\n\n${confirmedPost.body}` : undefined}
-                confirmedPostHeadline={confirmedPost?.headline}
-                confirmedPostImagePrompt={confirmedPost?.imagePrompt}
+                brandIndustry={selectedBrand.industry || 'general'}
+                postText={confirmedPost ? `${confirmedPost.headline}\n\n${confirmedPost.body}` : ''}
                 onImageConfirmed={handleImageConfirmedFromCreator}
                 onImageGenerated={handleImageAutoSync}
-                onBrandColorsChange={handleStudioBrandColorsChange}
-                pdfImages={pdfEvidenceImages}
-                selectedPdfs={selectedPdfVisualStatus}
-                onRefreshEvidence={refreshEvidence}
-                onUploadPdfFiles={uploadFilesEvidence}
-                onReextractPdfs={reextractPdfEvidence}
-                onDeleteEvidenceIds={deleteEvidenceByIds}
               />
             </Card>
           )}
@@ -2948,6 +3023,7 @@ export default function StudioPage() {
                 </div>
               </div>
               <ImageEditor
+                key={selectedBrand.id}
                 baseImageUrl={confirmedImageUrl || undefined}
                 brandId={selectedBrand.id}
                 brandColors={brandColors}
@@ -2980,6 +3056,7 @@ export default function StudioPage() {
                 </div>
               </div>
               <PreviewPublish
+                key={selectedBrand.id}
                 confirmedPost={confirmedPost}
                 confirmedImageUrl={confirmedImageUrl}
                 brandName={effectiveBrandName}
@@ -3069,6 +3146,7 @@ export default function StudioPage() {
 
         {selectedBrand ? (
           <EvidenceModal
+            key={selectedBrand.id}
             open={evidenceModalOpen}
             onOpenChange={setEvidenceModalOpen}
             brandId={selectedBrand.id}

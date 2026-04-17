@@ -24,6 +24,9 @@ import {
     CheckCircle2,
     XCircle,
     MessageSquare,
+    Globe,
+    Mail,
+    Info,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useWorkspace } from '@/lib/context/workspace-context';
@@ -50,6 +53,14 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { LogoUpload } from '@/components/shared/LogoUpload';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -57,9 +68,22 @@ import { Textarea } from '@/components/ui/textarea';
 
 const companySchema = z.object({
     name: z.string().min(2, 'Company name must be at least 2 characters'),
+    website: z.string().optional(),
+    email: z.string().email('Invalid email').optional().or(z.literal('')),
+    industry: z.string().optional(),
 });
 
 type CompanyFormValues = z.infer<typeof companySchema>;
+
+const COMPANY_INDUSTRIES = [
+    { value: 'electrical', label: 'Electrical' },
+    { value: 'manufacturing', label: 'Manufacturing' },
+    { value: 'construction', label: 'Construction' },
+    { value: 'technology', label: 'Technology' },
+    { value: 'automotive', label: 'Automotive' },
+    { value: 'healthcare', label: 'Healthcare' },
+    { value: 'general', label: 'General' },
+];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,6 +94,9 @@ type Company = {
     owner_user_id: string;
     name: string;
     logo_url: string | null;
+    website: string | null;
+    email: string | null;
+    industry: string | null;
     created_at: string;
     updated_at: string;
 };
@@ -127,7 +154,7 @@ function CompanyRegistrationSection() {
 
             const { data, error } = await supabase
                 .from('companies')
-                .select('id, owner_user_id, name, logo_url, created_at, updated_at')
+                .select('id, owner_user_id, name, logo_url, website, email, industry, created_at, updated_at')
                 .eq('owner_user_id', user.id)
                 .order('updated_at', { ascending: false })
                 .limit(1);
@@ -139,8 +166,18 @@ function CompanyRegistrationSection() {
 
     const form = useForm<CompanyFormValues>({
         resolver: zodResolver(companySchema),
-        values: { name: companyQuery.data?.name ?? '' },
+        values: {
+            name: companyQuery.data?.name ?? '',
+            website: companyQuery.data?.website ?? '',
+            email: companyQuery.data?.email ?? '',
+            industry: companyQuery.data?.industry ?? 'general',
+        },
     });
+
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    // Keep logo in sync with query data
+    const companyLogoUrl = logoUrl ?? companyQuery.data?.logo_url ?? null;
+    const companyId = companyQuery.data?.id;
 
     const saveMutation = useMutation({
         mutationFn: async (values: CompanyFormValues) => {
@@ -160,6 +197,10 @@ function CompanyRegistrationSection() {
             const payload = {
                 owner_user_id: user.id,
                 name: values.name.trim(),
+                website: values.website?.trim() || null,
+                email: values.email?.trim() || null,
+                industry: values.industry || 'general',
+                logo_url: companyLogoUrl,
                 updated_at: new Date().toISOString(),
             };
 
@@ -221,8 +262,19 @@ function CompanyRegistrationSection() {
                     </div>
                 </div>
 
-                <form onSubmit={onSubmit} className="flex items-end gap-3 mt-4 max-w-lg">
-                    <div className="flex-1">
+                <form onSubmit={onSubmit} className="space-y-4 mt-4 max-w-lg">
+                    {/* Company Logo */}
+                    <LogoUpload
+                        label="Company Logo"
+                        description="This appears on the left side of every marketing banner"
+                        currentUrl={companyLogoUrl}
+                        bucket="company-logos"
+                        storagePath={companyId ? `${companyId}/logo` : `tmp-${Date.now()}/logo`}
+                        onUploaded={(url) => setLogoUrl(url)}
+                    />
+
+                    {/* Company Name */}
+                    <div>
                         <label
                             htmlFor="company-name"
                             className="block text-sm font-medium text-gray-700 mb-1.5"
@@ -241,9 +293,80 @@ function CompanyRegistrationSection() {
                             </p>
                         )}
                     </div>
+
+                    {/* Website */}
+                    <div>
+                        <label
+                            htmlFor="company-website"
+                            className="block text-sm font-medium text-gray-700 mb-1.5"
+                        >
+                            <Globe className="h-3.5 w-3.5 inline mr-1" />
+                            Website
+                        </label>
+                        <Input
+                            id="company-website"
+                            placeholder="www.yourcompany.com"
+                            className="h-11"
+                            {...form.register('website')}
+                        />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                        <label
+                            htmlFor="company-email"
+                            className="block text-sm font-medium text-gray-700 mb-1.5"
+                        >
+                            <Mail className="h-3.5 w-3.5 inline mr-1" />
+                            Contact Email
+                        </label>
+                        <Input
+                            id="company-email"
+                            type="email"
+                            placeholder="info@yourcompany.com"
+                            className="h-11"
+                            {...form.register('email')}
+                        />
+                        {form.formState.errors.email && (
+                            <p className="text-sm text-red-500 mt-1">
+                                {form.formState.errors.email.message}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Industry */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            Your Industry
+                        </label>
+                        <Select
+                            value={form.watch('industry') || 'general'}
+                            onValueChange={(v) => form.setValue('industry', v, { shouldDirty: true })}
+                        >
+                            <SelectTrigger className="h-11">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {COMPANY_INDUSTRIES.map((ind) => (
+                                    <SelectItem key={ind.value} value={ind.value}>
+                                        {ind.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Info banner */}
+                    <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                        <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-blue-700">
+                            Your logo and details are used automatically in all marketing banners — you only need to set this once.
+                        </p>
+                    </div>
+
                     <Button
                         type="submit"
-                        disabled={saveMutation.isPending || !form.formState.isDirty}
+                        disabled={saveMutation.isPending || (!form.formState.isDirty && !logoUrl)}
                         className="h-11 bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 hover:from-violet-700 hover:to-blue-700 text-white"
                     >
                         {saveMutation.isPending ? (
@@ -254,7 +377,7 @@ function CompanyRegistrationSection() {
                         ) : isNew ? (
                             'Register Company'
                         ) : (
-                            'Update Name'
+                            'Save Changes'
                         )}
                     </Button>
                 </form>
@@ -278,6 +401,8 @@ function BrandAssetManager({
 }) {
     const supabase = useMemo(() => createClient(), []);
     const queryClient = useQueryClient();
+    const router = useRouter();
+    const { setSelectedBrand } = useWorkspace();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [colorInput, setColorInput] = useState('');
@@ -347,10 +472,12 @@ function BrandAssetManager({
                 const { data: imgAsset, error: imgError } = await supabase
                     .from('image_assets')
                     .insert({
-                        owner_user_id: user.id,
+                        brand_id: brand.id,
+                        created_by: user.id,
+                        asset_type: 'logo',
                         file_url: urlData.publicUrl,
                         source: 'upload',
-                        label: `${brand.name} logo`,
+                        metadata: { label: `${brand.name} logo` },
                     })
                     .select('id')
                     .single();
@@ -365,13 +492,21 @@ function BrandAssetManager({
                 });
                 if (assetError) throw assetError;
 
+                // Also update brands.logo_url for backward compatibility
+                await supabase
+                    .from('brands')
+                    .update({ logo_url: urlData.publicUrl })
+                    .eq('id', brand.id);
+
                 toast.success('Logo uploaded successfully');
                 queryClient.invalidateQueries({ queryKey: ['brand-assets', brand.id] });
                 queryClient.invalidateQueries({ queryKey: ['company-brands'] });
-            } catch (err) {
-                toast.error('Upload failed', {
-                    description: err instanceof Error ? err.message : 'Try again.',
-                });
+            } catch (err: unknown) {
+                const msg = (err && typeof err === 'object' && 'message' in err)
+                    ? (err as { message: string }).message
+                    : JSON.stringify(err);
+                console.error('[brand-logo-upload] Failed:', err);
+                toast.error('Upload failed', { description: msg || 'Unknown error' });
             } finally {
                 setUploading(false);
                 if (fileInputRef.current) fileInputRef.current.value = '';
@@ -535,7 +670,25 @@ function BrandAssetManager({
                             <span>Website: {brand.website || '—'}</span>
                         </div>
                         <p className="mt-2 text-xs text-gray-500">
-                            Tip: Use the Brand Analyzer in Studio to auto-detect products, audience, and tone.
+                            Tip:{' '}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onOpenChange(false);
+                                    setSelectedBrand({
+                                        id: brand.id,
+                                        name: brand.name,
+                                        description: brand.description,
+                                        industry: brand.industry,
+                                        website: brand.website,
+                                    });
+                                    router.push('/app/studio');
+                                }}
+                                className="text-violet-600 hover:text-violet-700 underline underline-offset-2"
+                            >
+                                Open Brand Analyzer in Studio
+                            </button>{' '}
+                            to auto-detect products, audience, and tone.
                         </p>
                     </div>
                 </div>
@@ -729,7 +882,8 @@ function BrandCard({
 function BrandManagementSection() {
     const supabase = useMemo(() => createClient(), []);
     const queryClient = useQueryClient();
-    const { loadWorkspace } = useWorkspace();
+    const router = useRouter();
+    const { setSelectedBrand, loadWorkspace } = useWorkspace();
     const [deletingBrandId, setDeletingBrandId] = useState<string | null>(null);
     const [showAddBrand, setShowAddBrand] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
@@ -740,6 +894,18 @@ function BrandManagementSection() {
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
+    const [brandIndustryIcons, setBrandIndustryIcons] = useState<string[]>([]);
+
+    const ICON_OPTIONS = [
+        { value: 'datacenter', label: 'Data Centers' },
+        { value: 'manufacturing', label: 'Manufacturing' },
+        { value: 'hospital', label: 'Hospitals' },
+        { value: 'mining', label: 'Mining' },
+        { value: 'automotive', label: 'Automotive' },
+        { value: 'building', label: 'Buildings' },
+        { value: 'energy', label: 'Energy' },
+        { value: 'agriculture', label: 'Agriculture' },
+    ];
 
     const resetForm = () => {
         setBrandName('');
@@ -748,6 +914,7 @@ function BrandManagementSection() {
         setLinkedinUrl('');
         setLogoFile(null);
         setLogoPreview(null);
+        setBrandIndustryIcons([]);
         if (logoInputRef.current) logoInputRef.current.value = '';
     };
 
@@ -789,57 +956,50 @@ function BrandManagementSection() {
                     industry: brandIndustry.trim() || null,
                     description: targetAudience.trim() ? `Target audience: ${targetAudience.trim()}` : null,
                     company_id: companyId,
+                    industry_icons: brandIndustryIcons.length > 0 ? brandIndustryIcons : [],
                 })
-                .select('id')
+                .select('id, name, description, industry, website')
                 .single();
             if (brandError) throw brandError;
 
-            // 2. Upload logo if provided
+            // 2. Upload logo if provided — save directly to brands.logo_url
             if (logoFile && brand?.id) {
                 try {
                     const ext = logoFile.name.split('.').pop() || 'png';
-                    const path = `brand-logos/${brand.id}/${Date.now()}.${ext}`;
+                    const path = `${brand.id}/logo-${Date.now()}.${ext}`;
                     const { error: uploadError } = await supabase.storage
-                        .from('brand-assets')
+                        .from('brand-logos')
                         .upload(path, logoFile, { upsert: true });
                     if (!uploadError) {
-                        const { data: urlData } = supabase.storage.from('brand-assets').getPublicUrl(path);
-                        const { data: imgAsset } = await supabase
-                            .from('image_assets')
-                            .insert({ owner_user_id: user.id, file_url: urlData.publicUrl, source: 'upload', label: `${brandName.trim()} logo` })
-                            .select('id').single();
-                        if (imgAsset) {
-                            await supabase.from('brand_assets').insert({
-                                brand_id: brand.id, kind: 'logo', is_primary: true, image_asset_id: imgAsset.id,
-                            });
-                        }
+                        const { data: urlData } = supabase.storage.from('brand-logos').getPublicUrl(path);
+                        await supabase.from('brands').update({ logo_url: urlData.publicUrl }).eq('id', brand.id);
                     }
                 } catch { /* logo upload failure is non-fatal */ }
-            }
-
-            // 3. Kick off LinkedIn analysis in background if URL provided
-            if (linkedinUrl.trim() && brand?.id) {
-                fetch('/api/pro/marketing-dna', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        brandId: brand.id,
-                        linkedinUrl: linkedinUrl.trim(),
-                        analysisType: 'linkedin',
-                        brandContext: {
-                            name: brandName.trim(),
-                            industry: brandIndustry.trim() || undefined,
-                            targetAudience: targetAudience.trim() || undefined,
-                        },
-                    }),
-                }).catch(() => {/* non-fatal */});
             }
 
             toast.success('Brand created!', { description: brandName.trim() });
             setShowAddBrand(false);
             resetForm();
             queryClient.invalidateQueries({ queryKey: ['company-brands'] });
-            loadWorkspace();
+
+            // Set the newly created brand as active so Studio loads its data (not the previous brand's)
+            if (brand) {
+                setSelectedBrand({
+                    id: brand.id,
+                    name: (brand as any).name || brandName.trim(),
+                    description: (brand as any).description ?? null,
+                    industry: (brand as any).industry ?? null,
+                    website: (brand as any).website ?? null,
+                });
+            }
+
+            // Redirect to Studio — pass LinkedIn URL so the analyzer can run it there
+            const studioParams = new URLSearchParams();
+            if (linkedinUrl.trim()) {
+                studioParams.set('linkedinUrl', linkedinUrl.trim());
+            }
+            const studioQuery = studioParams.toString();
+            router.push(`/app/studio${studioQuery ? `?${studioQuery}` : ''}`);
         } catch (err) {
             toast.error('Failed to create brand', { description: err instanceof Error ? err.message : 'Please try again.' });
         } finally {
@@ -1079,7 +1239,11 @@ function BrandManagementSection() {
 
                             {/* Logo Upload */}
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700">Logo</label>
+                                <label className="text-sm font-medium text-gray-700">Brand / Partner Logo</label>
+                                <p className="text-xs text-gray-500">
+                                    The manufacturer or partner brand logo (e.g. CHNT, ABB, Schneider).
+                                    This appears on the right side of marketing banners.
+                                </p>
                                 <div
                                     className="flex items-center gap-4 rounded-xl border-2 border-dashed border-gray-200 p-4 cursor-pointer hover:border-violet-400 transition-colors"
                                     onClick={() => logoInputRef.current?.click()}
@@ -1120,6 +1284,36 @@ function BrandManagementSection() {
                                     placeholder="https://linkedin.com/company/your-brand"
                                     className="h-11"
                                 />
+                            </div>
+
+                            {/* Industry Sectors Served */}
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-gray-700">Industry Sectors Served</label>
+                                <p className="text-xs text-gray-500">These icons appear at the bottom of marketing banners</p>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                    {ICON_OPTIONS.map((opt) => {
+                                        const active = brandIndustryIcons.includes(opt.value);
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() =>
+                                                    setBrandIndustryIcons((prev) =>
+                                                        active
+                                                            ? prev.filter((v) => v !== opt.value)
+                                                            : [...prev, opt.value]
+                                                    )
+                                                }
+                                                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${active
+                                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                            >
+                                                {active ? '✓ ' : ''}{opt.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
 

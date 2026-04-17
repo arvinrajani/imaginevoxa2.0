@@ -187,6 +187,7 @@ type ImageEditOptions = {
   images: Array<{ buffer: Buffer; filename?: string }>;
   size?: string;
   quality?: "low" | "medium" | "high";
+  outputFormat?: string;
 };
 
 /**
@@ -201,6 +202,7 @@ export async function generateImageEdit({
   images,
   size = "1536x1024",
   quality = "high",
+  outputFormat = "png",
 }: ImageEditOptions): Promise<{ base64: string }> {
   const normalizedSize = normalizeSize(model, size);
 
@@ -210,6 +212,9 @@ export async function generateImageEdit({
   form.append("size", normalizedSize);
   form.append("quality", quality);
   form.append("n", "1");
+  if (model.startsWith("gpt-image")) {
+    form.append("output_format", outputFormat);
+  }
 
   for (const img of images) {
     const blob = new Blob([new Uint8Array(img.buffer)], { type: "image/png" });

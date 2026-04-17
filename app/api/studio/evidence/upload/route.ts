@@ -92,11 +92,36 @@ function isStoragePathConflictError(error: unknown): boolean {
   return message.includes('already exists') || message.includes('duplicate');
 }
 
+const BUCKET_ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+];
+
 async function ensureEvidenceBucket(
   admin: Awaited<ReturnType<typeof requireStudioAuth>>['admin']
 ) {
   const existing = await admin.storage.getBucket(EVIDENCE_STORAGE_BUCKET);
   if (!existing.error && existing.data) {
+    // Bucket exists — ensure allowed MIME types include image/png for extracted images
+    const currentMimes: string[] = Array.isArray(existing.data.allowed_mime_types)
+      ? existing.data.allowed_mime_types
+      : [];
+    const missingMimes = BUCKET_ALLOWED_MIME_TYPES.filter(
+      (m) => !currentMimes.includes(m)
+    );
+    if (missingMimes.length > 0) {
+      const merged = Array.from(new Set([...currentMimes, ...BUCKET_ALLOWED_MIME_TYPES]));
+      await admin.storage.updateBucket(EVIDENCE_STORAGE_BUCKET, {
+        public: existing.data.public ?? false,
+        allowedMimeTypes: merged,
+      }).catch(() => {
+        // Non-fatal: bucket update may fail on some Supabase tiers
+      });
+    }
     return;
   }
   if (existing.error && !isBucketMissingError(existing.error)) {
@@ -110,14 +135,7 @@ async function ensureEvidenceBucket(
 
   const created = await admin.storage.createBucket(EVIDENCE_STORAGE_BUCKET, {
     public: false,
-    allowedMimeTypes: [
-      'application/pdf',
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/gif',
-      'image/svg+xml',
-    ],
+    allowedMimeTypes: BUCKET_ALLOWED_MIME_TYPES,
   });
 
   if (

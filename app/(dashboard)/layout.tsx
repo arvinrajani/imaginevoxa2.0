@@ -25,7 +25,8 @@ import {
   Plus,
   MessageSquare,
   LayoutTemplate,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,7 @@ export default function AppLayout({
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const {
     data: billing,
     error: billingError,
@@ -65,7 +67,13 @@ export default function AppLayout({
   } = useBillingSnapshot();
   const previousBillingRef = useRef<BillingSnapshot | null>(null);
 
-  const navigation = useMemo(() => baseNavigation, []);
+  const navigation = useMemo(() => {
+    const items = [...baseNavigation];
+    if (isAdmin) {
+      items.push({ name: 'Admin', href: '/app/admin', icon: ShieldCheck });
+    }
+    return items;
+  }, [isAdmin]);
 
   const pageMeta = useMemo(() => {
     const metaMap: Array<{ match: string; title: string; subtitle: string }> = [
@@ -152,6 +160,13 @@ export default function AppLayout({
           redirectToLogin();
           return;
         }
+
+        // Check admin status
+        const adminId = process.env.NEXT_PUBLIC_ADMIN_USER_ID;
+        if (adminId && authUser.id === adminId) {
+          setIsAdmin(true);
+        }
+
         if (isUnauthorized) {
           redirectToLogin();
         }
